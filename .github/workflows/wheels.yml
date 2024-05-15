@@ -1,0 +1,73 @@
+name: Wheels
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macos-13 is an intel runner, macos-14 is apple silicon
+        os: [ubuntu-latest, macos-13, windows-latest]
+
+    env:
+      CIBW_SKIP: "cp36-* cp37-* cp-38* cp-39* cp-12* pp-* *-manylinux_i686 *-musllinux* *_ppc64le *_s390x *_universal2 *_arm64"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.18.0
+        if: matrix.os != 'windows-lastest'
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            autotools
+            patch
+            git
+            base-devel
+            mingw-w64-x86_64-toolchain
+        if: matrix.os == "windows-latest'
+                    
+      - shell: msys2 {0}
+        run: |
+           source ./citools/compile_win_wheels_msys2.sh
+        if: matrix.os == "windows-latest'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl
+            
+
+  upload_all:
+    name: Upload if release
+    needs: [build_wheels]
+    runs-on: ubuntu-latest
+#    if: github.event_name == 'release' && github.event.action == 'published'
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/pyoomph_preparation
+
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+
+    steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+        
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: cibw-*
+        path: dist
+        merge-multiple: true
+
+    - uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/

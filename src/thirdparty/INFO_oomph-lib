@@ -1,0 +1,59 @@
+In the subdirectory oomph-lib/include, you find a slightly modified copy of a part of oomph-lib by Andrew Hazel, Matthias Heil et al.
+
+See oomph-lib/LICENCE for the original licence of oomph-lib.
+
+The Makefiles in oomph-lib/ are NOT part of oomph-lib!
+
+oomph-lib is hosted at https://github.com/oomph-lib/oomph-lib
+
+##########################################################################
+Following changes were made with respect to the original oomph-lib files:
+These changes are indicated by a comment start with "//FOR PYOOMPH"
+##########################################################################
+1) Only a portion of the folder src/generic was copied (oomph-lib from 15th April 2024)
+2) Following files have been changed and the positions marked with "//FOR PYOOMPH"
+
+eigen_solver.cc (Changed on 15th April 2024):    
+Removed cfortran, arpack and lapack_qz dependencies and disabled functionality.
+Eigensolving is handled in another way in pyoomph.
+
+mesh.cc (Changed on 15th April 2024):    
+Removed elastic_problems.h to get rid of frontal_solver, HSL_MA42, etc
+Also removed SolidICProblem SolidMesh::Solid_IC_problem
+
+oomph_definitions.cc (Changed on 15th April 2024):    
+Included <sstream>
+
+problem.cc (Changed on 15th April 2024):    
+Do not call Triangle-dependent functions, i.e. wrap it by an #ifdef
+Suppressed some information written to stdout.
+Allows the global convergent Newton method to run with MPI but with only one process.
+Output the current arclength step on rejection.
+
+problem.h (Changed on 15th April 2024):    
+Made Problem::adapt(unsigned&, unsigned&) to a virtual method
+
+quadtree.h (Changed on 15th April 2024):
+Flag to allow to suppress some calls in the constructor of the QuadTreeForest.
+Made method check_all_neighbours, construct_north_equivalents and find_neighbours virtual and protected.
+
+quadtree.cc (Changed on 15th April 2024):    
+Flag to allow to suppress some calls in the constructor of the QuadTreeForest.
+
+linear_solver.cc (Changed on 15th April 2024):    
+Removed the memory statistics, cannot be done in pyoomph
+Replaced info "SuperLUSolver" by "LinearSolver", since it is not always superlu doing the job
+
+oomph_utilities.cc (Changed on 15th April 2024):
+Prevent a double call of MPI initialization. We also have to do it in python, so we don't want it twice,
+Suppressed some information written to stdout.
+More digits in time measurements output.
+
+double_vector.cc (Changed on 15th April 2024):
+Test residuals for NaN. If so, return a high number since it is otherwise zero, i.e. wrongly identified as converged.
+
+Vector.h (Changed on 15th April 2024):    
+Included <initializer_list> for clang compilation on Mac
+
+
+

@@ -1,0 +1,24 @@
+/* Align equation number at right center */
+.eqno {
+    float: right;
+    margin-top: 12px;
+}
+
+.downloadbutton {
+  margin: auto;
+  margin-bottom: 20px;  
+  width: 50%;
+  border: 2px solid rgb(165, 149, 224);
+  background-color: rgb(225, 221, 235);
+  text-align: center;
+  padding: 5px;  
+  border-radius: 7px;
+
+}
+
+.downloadbutton p {
+    margin-bottom: 0px;
+    line-height: 25px; 
+    font-weight: bold;
+
+}

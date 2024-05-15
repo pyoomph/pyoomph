@@ -1,7 +1,160 @@
+---------------------------------------------------------------------
+
+pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
+Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#########################################################################
+### SEE END OF THIS FILE FOR THE GNU General Public License, version 3  #
+#########################################################################
+
+
+#########################################################################
+The distribution of pyoomph contains (i.e. bundles) code taken from 
+other authors/projects:
+#########################################################################
+
+
+#########################################################################
+Library: oomph-lib 
+URL: http://www.oomph-lib.org
+License: LGPL v2.1 or later license 
+Usage in pyoomph:
+The main source files of oomph-lib necessary for pyoomph are located in 
+src/thirdparty/oomph-lib/include
+Minor modifications, mentioned in src/thirdparty/INFO_oomph-lib were made. 
+Furthermore, code parts of these oomph-lib files had been copied to 
+corresponding derived classes of pyoomph.
+#########################################################################
+
+
+
+#########################################################################
+Library: nanoflann
+URL: https://github.com/jlblancoc/nanoflann
+License: BSD license
+-----------------
+Software License Agreement (BSD License)
+
+Copyright 2008-2009  Marius Muja (mariusm@cs.ubc.ca). All rights reserved.
+Copyright 2008-2009  David G. Lowe (lowe@cs.ubc.ca). All rights reserved.
+Copyright 2011 Jose L. Blanco (joseluisblancoc@gmail.com). All rights reserved.
+
+THE BSD LICENSE
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-----------------
+Usage in pyoomph:
+A copy of the header-only library nanoflann is located in 
+src/thirdparty/nanoflann.hpp
+#########################################################################
+
+
+#########################################################################
+Library: delaunator-cpp
+URL: https://github.com/delfrrr/delaunator-cpp
+License: MIT license
+-----------------
+MIT License
+
+Copyright (c) 2018 Volodymyr Bilonenko
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-----------------
+Usage in pyoomph:
+A copy of the header-only library delaunator-cpp is located in 
+src/thirdparty/delaunator.hpp
+#########################################################################
+
+
+#########################################################################
+Library: GiNaC
+URL: https://www.ginac.de/
+License: GPL v2 or later license
+Usage in pyoomph:
+The file src/pyginacstruct.hpp is strongly based on the file structure.h 
+of GiNaC. Pyoomph furthermore links against the full GiNaC library.
+#########################################################################
+
+
+#########################################################################
+Library: Project Nayuki/smallest enslosing circle
+URL: https://www.nayuki.io/page/smallest-enclosing-circle
+License: LGPL v3 license or later
+Usage in pyoomph:
+A version with added type specifications is enclosed in 
+pyoomph/utils/smallest_circle.py
+#########################################################################
+
+
+#########################################################################
+Library: AIOMFAC
+URL: https://github.com/andizuend/AIOMFAC
+License: GPL v3 license
+Usage in pyoomph:
+The numerical coefficients of AIOMFAC were exacted from the source code.
+Please cite the relevant AIOMFAC publications if you use the AIOMFAC 
+activity model, see: https://aiomfac.lab.mcgill.ca/citation.html
+#########################################################################
+
+
+#########################################################################
+#########################################################################
+#########################################################################
+#########################################################################
+#########################################################################
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
- Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
  Everyone is permitted to copy and distribute verbatim copies
  of this license document, but changing it is not allowed.
 
@@ -645,7 +798,7 @@ the "copyright" line and a pointer to where the full notice is found.
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 Also add information on how to contact you by electronic and paper mail.
 
@@ -664,11 +817,12 @@ might be different; for a GUI interface, you would use an "about box".
   You should also get your employer (if you work as a programmer) or school,
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU GPL, see
-<https://www.gnu.org/licenses/>.
+<http://www.gnu.org/licenses/>.
 
   The GNU General Public License does not permit incorporating your program
 into proprietary programs.  If your program is a subroutine library, you
 may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
-<https://www.gnu.org/licenses/why-not-lgpl.html>.
+<http://www.gnu.org/philosophy/why-not-lgpl.html>.
+
