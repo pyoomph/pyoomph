@@ -19,10 +19,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build wheels
+        if: startsWith(matrix.os, 'windows') != true
         uses: pypa/cibuildwheel@v2.18.0
-        if: matrix.os != 'windows-lastest'
+        
 
       - uses: msys2/setup-msys2@v2
+        if: startsWith(matrix.os, 'windows')
         with:
           update: true
           install: >-
@@ -31,12 +33,13 @@ jobs:
             git
             base-devel
             mingw-w64-x86_64-toolchain
-        if: matrix.os == 'windows-latest'
+        
                     
       - shell: msys2 {0}
+        if: startsWith(matrix.os, 'windows')
         run: |
            source ./citools/compile_win_wheels_msys2.sh
-        if: matrix.os == 'windows-latest'
+        
 
       - uses: actions/upload-artifact@v4
         with:
