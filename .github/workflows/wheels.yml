@@ -52,7 +52,7 @@ jobs:
 
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/pyoomph_preparation
+      url: https://test.pypi.org/p/pyoomph
 
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
