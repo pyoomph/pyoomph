@@ -24,7 +24,7 @@ jobs:
       run: python -m pip install pytest meshio pygmsh numpy scipy matplotlib mkl more_itertools tccbox setuptools>=69.5.1
 
     - name: Apt install required libs
-      run: apt install libglu1-mesa libxcursor1 libopengl0
+      run: sudo apt install libglu1-mesa libxcursor1 libopengl0
       
     - name: Install pyoomph
       run: python -m pip install -i https://test.pypi.org/simple/ pyoomph --no-deps
