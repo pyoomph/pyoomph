@@ -19,12 +19,13 @@ jobs:
       uses: actions/setup-python@v5
       with: 
          python-version: "3.12"
-       
-    - name: Install pyoomph
-      run: python -m pip install -i https://test.pypi.org/simple/ pyoomph
+
+    - name: Install pytest and deps
+      run: python -m pip install pytest meshio pygmsh numpy scipy matplotlib mkl more_itertools tccbox setuptools>=69.5.1
       
-    - name: Install pytest
-      run: python -m pip install pytest
+    - name: Install pyoomph
+      run: python -m pip install -i https://test.pypi.org/simple/ pyoomph --no-deps
+      # TODO: Adjust the repository from testing and do not install deps before
 
     - name: Run Pytest
       run: cd tests/ && python -m pytest *.py
