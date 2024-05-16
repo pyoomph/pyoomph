@@ -13,20 +13,19 @@ jobs:
         os: [ubuntu-latest]
 
     steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with: 
+         python-version: "3.12"
+       
+    - name: Install pyoomph
+      run: python -m pip install -i https://test.pypi.org/simple/ pyoomph
+      
+    - name: Install pytest
+      run: python -m pip install pytest
 
-		- uses: actions/checkout@v4
-		
-		- name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"        
-          
-		- name: Install pyoomph
-		  run: python -m pip install -i https://test.pypi.org/simple/ pyoomph
-		  
-		- name: Install pytest
-		  run: python -m pip install pytest
-
-		- name: Run pytest
-		  run: python -m pytest tests/
+    - name: Run Pytest
+      run: python -m pytest tests/
 		 
