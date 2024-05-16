@@ -27,4 +27,4 @@ jobs:
       run: python -m pip install pytest
 
     - name: Run Pytest
-      run: python -m pytest tests/
+      run: cd tests/ && python -m pytest *.py

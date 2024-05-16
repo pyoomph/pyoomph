@@ -567,7 +567,7 @@ int LoadJITFiniteElementCode(std::string);
 #elif defined __WIN32__
 #define JIT_API __declspec(dllexport)
 #define PYOOMPH_AQUIRE_ARRAY(typ, varname, size) typ *varname = (typ *)_alloca(size * sizeof(typ));
-#define PYOOMPH_AQUIRE_TWO_D_ARRAY(typ, varname, size1,size2) typ **varname = (typ **)_alloca(size1 * sizeof(typ*)) { for (int _i=0;_i<size1;_i++) varname[i]=(typ *)_alloca(size2 * sizeof(typ)); }
+#define PYOOMPH_AQUIRE_TWO_D_ARRAY(typ, varname, size1,size2) typ **varname = (typ **)_alloca(size1 * sizeof(typ*)); { for (int _i=0;_i<size1;_i++) varname[_i]=(typ *)_alloca(size2 * sizeof(typ)); }
 #else
 #define JIT_API
 #define PYOOMPH_AQUIRE_ARRAY(typ, varname, size) typ varname[size];
@@ -582,7 +582,7 @@ int LoadJITFiniteElementCode(std::string);
 #if defined _MSC_VER
 #undef PYOOMPH_AQUIRE_ARRAY
 #define PYOOMPH_AQUIRE_ARRAY(typ, varname, size) typ *varname = (typ *)_alloca(size * sizeof(typ));
-#define PYOOMPH_AQUIRE_TWO_D_ARRAY(typ, varname, size1,size2) typ **varname = (typ **)_alloca(size1 * sizeof(typ*)) { for (int _i=0;_i<size1;_i++) varname[i]=(typ *)_alloca(size2 * sizeof(typ)); }
+#define PYOOMPH_AQUIRE_TWO_D_ARRAY(typ, varname, size1,size2) typ **varname = (typ **)_alloca(size1 * sizeof(typ*)); { for (int _i=0;_i<size1;_i++) varname[_i]=(typ *)_alloca(size2 * sizeof(typ)); }
 #ifndef JIT_API
 #undef JIT_API
 #endif

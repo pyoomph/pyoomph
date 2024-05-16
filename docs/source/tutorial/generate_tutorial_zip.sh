@@ -27,6 +27,7 @@ EOCAT
 
 (
 cd _GATHER_SCRIPTS
+rm -rf ../tutorial_example_scripts.zip
 zip -r  ../tutorial_example_scripts.zip pyoomph_tutorial_scripts
 )
 
