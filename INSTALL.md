@@ -1,6 +1,6 @@
 # Installation
 
-When you have `python 3.8` to `3.12` installed, 
+When you have python 3.8 to 3.12 installed, 
 
 > python -m pip install pyoomph
 
@@ -41,27 +41,27 @@ and test pyoomph via
 
 ### Linux
 
-First, you have to make sure to have installed all dependencies, including some development files (headers). On e.g. `Ubuntu`, you can do the following
+First, you have to make sure to have installed all dependencies, including some development files (headers). On e.g. Ubuntu, you can do the following
 
 > sudo apt-get install libopenmpi-dev pybind11-dev libginac-dev libcln-dev libgmp-dev ccache libmkl-rt 
 
 On other Linux distributions, other package manager like `yum` or `pacman` can be used to install the same libraries and headers.
-Afterwards, compile the required parts of `oomph-lib` by running 
+Afterwards, compile the required parts of oomph-lib by running 
 
 > bash ./prebuild.sh
 
-in your `pyoomph` directory. 
+in your pyoomph directory. 
 
-Install required and optional `python` modules via
+Install required and optional python modules via
 
 > python -m pip gmsh mkl mpi4py matplotlib numpy petsc4py pybind11 pygmsh scipy meshio pybind11-stubgen
 
-If you want to install `pyoomph` **for development**, it is best to install it via 
+If you want to install pyoomph **for development**, it is best to install it via 
 
 > bash ./build_for_develop.sh
 
-In that case, changes you make in the `python` untis of `pyoomph` will be used automatically.
-**Alternatively**, for a **system- or user-wide installation** by copying the files to your `python modules`, do
+In that case, changes you make in the python files of pyoomph will be used automatically.
+**Alternatively**, for a **system- or user-wide installation** by installing pyoomph, do
 
 > bash ./install.sh
 
@@ -72,14 +72,14 @@ Verify whether everything runs fine by
 > python -m pyoomph check all
 
 
-###Mac
+### Mac
 
 Besides XCode, you must install a few third-party tools. This can be done by e.g. [Homebrew](https://brew.sh):
 
 > brew install openmpi ccache ginac
 
 Restart your (Rosatta) terminal afterwards.
-Install required `python` modules via
+Install required python modules via
 
 > python3 -m pip install pybind11 gmsh commonmark six pyparsing pygments pillow numpy mpi4py kiwisolver fonttools cycler scipy rich python-dateutils packaging meshio matplotlib pygmsh pybind11-stubgen
 
@@ -91,18 +91,18 @@ Install required `python` modules via
 
 > python3 -m pip install mkl
 
-Then, compile the required parts of `oomph-lib`:
+Then, compile the required parts of oomph-lib:
 
 > bash ./prebuild.sh
 
-in your `pyoomph` directory. 
+in your pyoomph directory. 
 
-If you want to install `pyoomph` **for development**, it is best to install it via 
+If you want to install pyoomph **for development**, it is best to install it via 
 
 > bash ./build_for_develop.sh
 
-In that case, changes you make in the `python` untis of `pyoomph` will be used automatically.
-**Alternatively**, for a **system- or user-wide installation** by copying the files to your `python modules`, do
+In that case, changes you make in the python files of pyoomph will be used automatically.
+**Alternatively**, for a **system- or user-wide installation** by installing pyoomph, do
 
 > bash ./install.sh
 

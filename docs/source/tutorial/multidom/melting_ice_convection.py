@@ -127,6 +127,6 @@ class IceConvectionProblem(IceFrontProblem):
 
 if __name__=="__main__":
     with IceConvectionProblem() as problem:
-        problem.run(1000*second,outstep=True,startstep=1*second,maxstep=20*second,temporal_error=1)
+        problem.run(400*second,outstep=True,startstep=1*second,maxstep=20*second,temporal_error=1)
 
 

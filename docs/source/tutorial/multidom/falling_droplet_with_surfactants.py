@@ -54,6 +54,6 @@ if __name__ == "__main__":
         T=20*celsius
         problem.surface_tension=50*milli*newton/meter-gas_constant*T*var("Gamma")
 
-        problem.run(10*second,startstep=0.01*second,outstep=True)  # solve and output
+        problem.run(0.5*second,startstep=0.05*second,outstep=True)  # solve and output
 
 

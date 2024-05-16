@@ -1,0 +1,32 @@
+name: PyTest
+
+on:
+  workflow_dispatch:
+
+jobs:
+  PyTest:
+    name: PyTest on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macos-13 is an intel runner, macos-14 is apple silicon
+        os: [ubuntu-latest]
+
+    steps:
+
+		- uses: actions/checkout@v4
+		
+		- name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"        
+          
+		- name: Install pyoomph
+		  run: python -m pip install -i https://test.pypi.org/simple/ pyoomph
+		  
+		- name: Install pytest
+		  run: python -m pip install pytest
+
+		- name: Run pytest
+		  run: python -m pytest tests/
+		 

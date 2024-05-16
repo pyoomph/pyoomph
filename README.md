@@ -17,7 +17,8 @@ Alternatively, follow the [instructions in our tutorial](https://pyoomph.readthe
 
 ## Documentation and Examples
 
-Documentation of the API and tons of examples can be found at [pyoomph.readthedocs.io](https://pyoomph.readthedocs.io).
+Documentation of the API and tons of examples can be found at [pyoomph.readthedocs.io](https://pyoomph.readthedocs.io). 
+A [PDF version](https://pyoomph.readthedocs.io/_/downloads/en/latest/pdf/) of the tutorial is also available.
 
 ## License
 
@@ -31,7 +32,7 @@ The distribution of pyoomph **contains code** taken from **other authors/project
 - A copy of the header-only library [`nanoflann`](https://github.com/jlblancoc/nanoflann) is located in [`src/thirdparty/nanoflann.hpp`](src/thirdparty/nanoflann.hpp), ([BSD license](https://github.com/jlblancoc/nanoflann/blob/master/COPYING)).
 - A copy of the header-only library [`delaunator-cpp`](https://github.com/delfrrr/delaunator-cpp) is located in [`src/thirdparty/delaunator.hpp`](src/thirdparty/delaunator.hpp), ([MIT license](https://github.com/delfrrr/delaunator-cpp/blob/master/LICENSE)).
 - The file [src/pyginacstruct.hpp](src/pyginacstruct.hpp) is strongly based on the file [structure.h](https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=ginac/structure.h;hb=HEAD) of [GiNaC](https://www.ginac.de/) ([GPL v2 or later license](https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=COPYING;hb=HEAD)).
-- A copy of the library [Project Nayuki/smallest enslosing circle](https://www.nayuki.io/page/smallest-enclosing-circle) [LGPL v3 license or later](https://github.com/nayuki/Nayuki-web-published-code/blob/master/smallest-enclosing-circle/COPYING.LESSER.txt) is added (after adding type specifications) to [pyoomph/utils/smallest_circle.py](pyoomph/utils/smallest_circle.py).
+- A copy of the library [Project Nayuki/smallest enslosing circle](https://www.nayuki.io/page/smallest-enclosing-circle) ([LGPL v3 license or later](https://github.com/nayuki/Nayuki-web-published-code/blob/master/smallest-enclosing-circle/COPYING.LESSER.txt)) is added (after adding type specifications) to [pyoomph/utils/smallest_circle.py](pyoomph/utils/smallest_circle.py).
 - When using materials or the thermodynamic activity models AIOMFAC, original UNIFAC or modified UNIFAC (Dortmund), please [see below](#cite).
 
 The third-party licenses/acknowledgement files can be found in [src/thirdparty](src/thirdparty). In the provided python wheels, these requirements are statically included.
@@ -66,18 +67,18 @@ Beyond that, pyoomph makes use of the following libraries at runtime. During ins
 - [`pybind11-stubgen`](https://github.com/sizmailov/pybind11-stubgen), ([BSD 3-Clause license](https://github.com/sizmailov/pybind11-stubgen?tab=License-1-ov-file#readme)) is used to generate python stubs from the C++ core
 - [`tccbox`](https://github.com/metab0t/tccbox) used as wrapper for the [`TinyC`](https://bellard.org/tcc/) compiler
 
-
-
 Be aware that some of these libraries can have further dependencies.
 
-## Authors
+## Authors and acknowledgements
 
-`pyoomph` was founded in 2021 by [**Christian Diddens**](https://github.com/cdiddens). Later, [**Duarte Rocha**](https://github.com/duarterocha) joined the team.
+pyoomph was founded in 2021 by [**Christian Diddens**](https://github.com/cdiddens). Later, [**Duarte Rocha**](https://github.com/duarterocha) joined the team.
+
+The authors gratefully acknowledge financial support by the Industrial Partnership Programme `Fundamental Fluid Dynamics Challenges in Inkjet Printing` of the Netherlands Organisation for Scientific Research (NWO) & High Tech Systems and Materials (HTSM), co-financed by Canon Production Printing Netherlands B.V., IamFluidics B.V., TNO Holst Centre, University of Twente, Eindhoven University of Technology and Utrecht University.
 
 ## Contributing
 
 If you want to contribute by e.g. adding new equations, meshes, problems, materials or additional features, get in contact with us or send us a pull request.
-If you encounter a bug, please also let us know.
+If you encounter a bug, please also let us know at c.diddens@utwente.nl or d.rocha@utwente.nl.
 
 ## How to cite
 At the moment, just cite the following preprint for pyoomph:
@@ -93,7 +94,7 @@ Symb. Comput. **33**(1), 1-12, (2002), [doi:10.1006/jsco.2001.0494](https://dx.d
 
 
 ### <a id="cite"></a>Citing of material properties and activity models
-- `pyoomph` includes some parameters of the [AIOMFAC](http://www.aiomfac.caltech.edu/) activity model in [pyoomph/materials/UNIFAC/aiomfac.py](pyoomph/materials/UNIFAC/aiomfac.py). These are based on the source code of [AIOMFAC](https://github.com/andizuend/AIOMFAC) ([GPL v3 license](https://github.com/andizuend/AIOMFAC/blob/master/LICENSE)). Cite the [relevant scientific publications](https://aiomfac.lab.mcgill.ca/citation.html) when publishing results based on the AIOMFAC activity model.
+- pyoomph includes some parameters of the [AIOMFAC](http://www.aiomfac.caltech.edu/) activity model in [pyoomph/materials/UNIFAC/aiomfac.py](pyoomph/materials/UNIFAC/aiomfac.py). These are based on the source code of [AIOMFAC](https://github.com/andizuend/AIOMFAC) ([GPL v3 license](https://github.com/andizuend/AIOMFAC/blob/master/LICENSE)). Cite the [relevant scientific publications](https://aiomfac.lab.mcgill.ca/citation.html) when publishing results based on the AIOMFAC activity model.
 - Alternatively, you can choose the [original UNIFAC model](https://www.ddbst.com/published-parameters-unifac.html) or the [modified UNIFAC model (Dortmund)](https://www.ddbst.com/PublishedParametersUNIFACDO.html). In that case, cite the publications listed under these links if you use these models. 
 - For more accurate results, it is advised to obtain the updated parameters for the [UNIFAC Consortium](https://unifac.ddbst.com/unifac_.html). Such updated parameter sets can be implemented by hand following the templates for the free parameters in [pyoomph/materials/UNIFAC/](pyoomph/materials/UNIFAC/). The usage of such updated parameters of the UNIFAC Consortium are **restricted to the terms of use** of the UNIFAC Consortium.
 - When using the material properties from [pyoomph/materials/default_materials.py](pyoomph/materials/default_materials.py), please have a look at the comments in this file to cite the correct papers.

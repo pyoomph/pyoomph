@@ -126,7 +126,7 @@ This finally brings us the specification of the :py:class:`~pyoomph.generic.prob
    	with DoubleSlitProblem() as problem:
    		problem.c=3 # increase the wave speed
    		problem.omega=20 # and the wave frequency
-   		problem.run(20, outstep=True, startstep=0.01)
+   		problem.run(1, outstep=True, startstep=0.01)
 
 In the constructor, we have several parameters to allow for a custom wave and slit geometry. Since the problem itself is passed to the ``DoubleSlitMesh``, the latter parameters are used to construct a mesh based on these. We make use of the absorption (no reflection) boundary conditions and add the ``WaveEquationScreen`` as well as a :py:class:`~pyoomph.output.generic.TextFileOutput` to the interface ``"screen"``. Thereby, we get the results of the intensity on the screen written to a file.
 

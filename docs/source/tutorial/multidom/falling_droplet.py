@@ -176,7 +176,7 @@ class FallingDropletProblem(Problem):
 
 if __name__ == "__main__":
     with FallingDropletProblem() as problem:
-        problem.run(10*second,startstep=0.01*second,outstep=True)  # solve and output
+        problem.run(0.5*second,startstep=0.05*second,outstep=True)  # solve and output
 
 
 

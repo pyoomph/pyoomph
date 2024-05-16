@@ -90,7 +90,7 @@ if __name__ == "__main__":
         # Arclength continuation
         output_with_eigen()
         ds=0.001
-        while problem.param_gamma.value>0:
-            ds=problem.arclength_continuation(problem.param_gamma,ds,max_ds=0.001)
+        while problem.param_gamma.value>0.23:
+            ds=problem.arclength_continuation(problem.param_gamma,ds,max_ds=0.005)
             output_with_eigen()
 

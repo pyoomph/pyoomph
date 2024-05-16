@@ -128,9 +128,9 @@ First, let us investigate only the case :math:`\delta=0` for varying :math:`\gam
 
            # Arclength continuation
            output_with_eigen()
-           ds=0.001
-           while problem.param_gamma.value>0:
-               ds=problem.arclength_continuation(problem.param_gamma,ds,max_ds=0.001)
+		     while problem.param_gamma.value>0.23:
+		         ds=problem.arclength_continuation(problem.param_gamma,ds,max_ds=0.005)
+		         output_with_eigen()
 
 We use another eigensolver, provided by the PETSc/SLEPc package. This might not be available in Windows. Then, one can omit the import and the :py:meth:`~pyoomph.generic.problem.Problem.set_eigensolver` call to use the default ``scipy`` eigensolver. We then jump on the stationary solution by a stationary :py:meth:`~pyoomph.generic.problem.Problem.solve` command. However, before we step a bit in the direction with a transient solve command, since we might otherwise converge into the flat solution :math:`h=0`. We perform an :py:meth:`~pyoomph.generic.problem.Problem.arclength_continuation` along :math:`\gamma` and output the eigenvalue with the largest real part and the calculated rms to a text file. Based on the real part of the eigenvalue, we can determine whether the stationary solution is stable or not. The results are depicted in :numref:`figpdeksefold`, where we also include the flat solution, which stability has been investigate analytically before.
 

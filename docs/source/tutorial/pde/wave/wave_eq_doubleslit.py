@@ -127,4 +127,4 @@ if __name__ == "__main__":
 	with DoubleSlitProblem() as problem:
 		problem.c=3 # increase the wave speed
 		problem.omega=20 # and the wave frequency
-		problem.run(20, outstep=True, startstep=0.01)
+		problem.run(1, outstep=True, startstep=0.01)

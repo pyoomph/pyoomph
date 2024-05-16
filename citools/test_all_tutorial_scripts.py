@@ -18,7 +18,13 @@ basedir=Path(".").absolute()
 
 all_okay=True
 
+skips=sys.argv[1:]
+
 for d in glob.glob("./*/"):
+  if d in skips or d.strip("/").strip("./") in skips:
+    print("SKIPPING",d)
+    continue
+  
   folder_okay=True
   os.chdir(basedir/d)
   print("TESTING FOLDER",d )

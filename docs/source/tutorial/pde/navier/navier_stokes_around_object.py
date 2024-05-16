@@ -155,11 +155,7 @@ class TransientNonlinearStokesLawProblem(Problem):
 
 if __name__ == "__main__":
     with TransientNonlinearStokesLawProblem() as problem:
-        problem.run(10*second,startstep=0.01*second,outstep=True)  # solve and output
-
-        U_num = problem.get_ode("globals").get_value("UStokes")
-        U_ana = problem.get_theoretical_velocity()
-        print("NUMERICAL: ", U_num, "ANALYTICAL:", U_ana, "ERROR [%]:", abs(float((U_num - U_ana) / U_ana * 100)))
+        problem.run(0.5*second,startstep=0.05*second,outstep=True)  # solve and output
 
 
 

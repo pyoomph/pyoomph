@@ -61,7 +61,7 @@ Finally, the run code must be transient now:
 
    if __name__ == "__main__":
        with TransientNonlinearStokesLawProblem() as problem:
-           problem.run(10*second,startstep=0.01*second,outstep=True)  # solve and output
+           problem.run(0.5*second,startstep=0.05*second,outstep=True)  # solve and output
 
 As seen in :numref:`figpdetransientstokeslaw`, the final velocity field is not symmetric anymore and we see a transient dynamics of :math:`U(t)` is plotted.
 

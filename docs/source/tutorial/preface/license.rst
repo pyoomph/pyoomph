@@ -23,13 +23,13 @@ For pyoomph, the conditions of the `GNU General Public License 3 <https://www.gn
       You should have received a copy of the GNU General Public License
       along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-A copy of the license which can be found in distribution. Mind also the following licenses
+A `copy of the license <https://github.com/cdiddens/pyoomph/blob/main/COPYING>`__ can be found in distribution. Mind also the following licenses
 
 #. pyoomph contains code taken from other authors/projects:
 
-   -  In ``src/thirdparty/oomph-lib/include``, you find the necessary main files of `oomph-lib <http://www.oomph-lib.org>`__, `[LGPL v2.1 or later license] <https://github.com/oomph-lib/oomph-lib/blob/main/LICENCE>`__. Minor modifications as mentioned in ``src/thirdparty/INFO_oomph-lib`` had to be made. Furthermore, code parts of these oomph-lib files had been copied to corresponding derived classes of pyoomph.
+   -  In `src/thirdparty/oomph-lib/include <https://github.com/cdiddens/pyoomph/tree/main/src/thirdparty/oomph-lib/include>`__, you find the necessary main files of `oomph-lib <http://www.oomph-lib.org>`__, `[LGPL v2.1 or later license] <https://github.com/oomph-lib/oomph-lib/blob/main/LICENCE>`__. Minor modifications as mentioned in `src/thirdparty/INFO_oomph-lib <https://github.com/cdiddens/pyoomph/blob/main/src/thirdparty/INFO_oomph-lib>`__ had to be made. Furthermore, code parts of these oomph-lib files had been copied to corresponding derived classes of pyoomph.
 
-   -  A copy of the header-only library `nanoflann <https://github.com/jlblancoc/nanoflann>`__ is located in ``src/thirdparty/nanoflann.hpp``, `[BSD license] <https://github.com/jlblancoc/nanoflann/blob/master/COPYING>`__:
+   -  A copy of the header-only library `nanoflann <https://github.com/jlblancoc/nanoflann>`__ is located in `src/thirdparty/nanoflann.hpp <https://github.com/cdiddens/pyoomph/blob/main/src/thirdparty/nanoflann.hpp>`__, `[BSD license] <https://github.com/jlblancoc/nanoflann/blob/master/COPYING>`__:
 
       .. container:: licensebox
 
@@ -64,7 +64,7 @@ A copy of the license which can be found in distribution. Mind also the followin
             (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
             THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-   -  A copy of the header-only library `delaunator-cpp <https://github.com/delfrrr/delaunator-cpp>`__ is located in ``src/thirdparty/delaunator.hpp``, `[ <https://github.com/delfrrr/delaunator-cpp/blob/master/LICENSE>`__\ MIT license]:
+   -  A copy of the header-only library `delaunator-cpp <https://github.com/delfrrr/delaunator-cpp>`__ is located in `src/thirdparty/delaunator.hpp <https://github.com/cdiddens/pyoomph/blob/main/src/thirdparty/delaunator.hpp>`__, `[MIT license] <https://github.com/delfrrr/delaunator-cpp/blob/master/LICENSE>`__:
 
       .. container:: licensebox
 
@@ -92,25 +92,25 @@ A copy of the license which can be found in distribution. Mind also the followin
             OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
             SOFTWARE.
 
-   -  The file ``src/pyginacstruct.hpp`` is strongly based on the file `structure.h <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=ginac/structure.h;hb=HEAD>`__ of `GiNaC <https://www.ginac.de/>`__ `[GPL v2 or later license] <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=COPYING;hb=HEAD>`__.
+   -  The file `src/pyginacstruct.hpp <https://github.com/cdiddens/pyoomph/blob/main/src/pyginacstruct.hpp>`__ is strongly based on the file `structure.h <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=ginac/structure.h;hb=HEAD>`__ of `GiNaC <https://www.ginac.de/>`__, `[GPL v2 or later license] <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=COPYING;hb=HEAD>`__.
 
-   -  A copy of the library `Project Nayuki/smallest enslosing circle <https://www.nayuki.io/page/smallest-enclosing-circle>`__ `[LGPL v3 or later license] <https://github.com/nayuki/Nayuki-web-published-code/blob/master/smallest-enclosing-circle/COPYING.LESSER.txt>`__ is added (after adding type specifications) to ``pyoomph/utils/smallest_circle.py``.
+   -  A copy of the library `Project Nayuki/smallest enslosing circle <https://www.nayuki.io/page/smallest-enclosing-circle>`__, `[LGPL v3 or later license] <https://github.com/nayuki/Nayuki-web-published-code/blob/master/smallest-enclosing-circle/COPYING.LESSER.txt>`__ is added (after adding type specifications) to `pyoomph/utils/smallest_circle.py <https://github.com/cdiddens/pyoomph/blob/main/pyoomph/utils/smallest_circle.py>`__.
 
    -  Also, when using materials or the thermodynamic activity models AIOMFAC, original UNIFAC or modified UNIFAC (Dortmund), :ref:`please cite the relevant publications <secboxunifacinfo>`.
 
-   The third-party licenses/acknowledgement files can be found in ``src/thirdparty``.
+   The third-party licenses/acknowledgement files can be also found in `src/thirdparty <https://github.com/cdiddens/pyoomph/tree/main/src/thirdparty>`__.
 
 #. During compilation, pyoomph includes/links against or makes use of the following libraries:
 
-   -  `GiNaC <https://www.ginac.de/>`__, `[GPL v2 or later license] <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=COPYING;hb=HEAD>`__
+   -  `GiNaC <https://www.ginac.de/>`__, `[GPL v2 or later license] <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=COPYING;hb=HEAD>`__, also statically linked in the distribution as python wheels
 
-   -  `CLN <https://www.ginac.de/CLN>`__, `[GPL v2 or later license] <https://www.ginac.de/CLN/cln.git/?p=cln.git;a=blob_plain;f=COPYING;hb=HEAD>`__
+   -  `CLN <https://www.ginac.de/CLN>`__, `[GPL v2 or later license] <https://www.ginac.de/CLN/cln.git/?p=cln.git;a=blob_plain;f=COPYING;hb=HEAD>`__, also statically linked in the distribution as python wheels
 
-   -  MPI, depending on the system e.g. `OpenMPI <https://www.open-mpi.org>`__ `[3-clause BSD license] <https://www.open-mpi.org/community/license.php>`__, `MPICH <https://www.mpich.org/>`__ `[MPICH license] <https://github.com/pmodels/mpich/blob/main/COPYRIGHT>`__, `Microsoft MPI <https://github.com/Microsoft/Microsoft-MPI>`__ `[MIT license] <https://github.com/microsoft/Microsoft-MPI/blob/master/LICENSE.txt>`__
+   -  MPI, depending on the system e.g. `OpenMPI <https://www.open-mpi.org>`__ `[3-clause BSD license] <https://www.open-mpi.org/community/license.php>`__, `MPICH <https://www.mpich.org/>`__ `[MPICH license] <https://github.com/pmodels/mpich/blob/main/COPYRIGHT>`__, `Microsoft MPI <https://github.com/Microsoft/Microsoft-MPI>`__ `[MIT license] <https://github.com/microsoft/Microsoft-MPI/blob/master/LICENSE.txt>`__, note that MPI support is experimental and deactivated in the python wheels
 
-   -  `python3.8\ + <https://www.python.org/>`__, `[PSF license] <https://docs.python.org/3/license.html>`__
+   -  `python3.8\ + <https://www.python.org/>`__, `[PSF license] <https://docs.python.org/3/license.html>`__, also dynamically linked in the distribution as python wheels
 
-   -  `pybind11 <https://github.com/pybind/pybind11>`__, `[BSD-style license] <https://github.com/sizmailov/pybind11-stubgen/blob/master/LICENSE>`__
+   -  `pybind11 <https://github.com/pybind/pybind11>`__, `[BSD-style license] <https://github.com/sizmailov/pybind11-stubgen/blob/master/LICENSE>`__, also statically linked in the distribution as python wheels
 
    -  `pybind11-stubgen <https://github.com/sizmailov/pybind11-stubgen>`__, `[BSD-style license] <https://github.com/sizmailov/pybind11-stubgen/blob/master/LICENSE>`__
 
@@ -150,10 +150,15 @@ A copy of the license which can be found in distribution. Mind also the followin
    
    -  `cibuildwheel <https://cibuildwheel.pypa.io>`__, `[BSD 2-Clause license] <https://github.com/pypa/cibuildwheel?tab=License-1-ov-file#readme>`__ is used to compile the provided wheels   
    
-   -  `tccbox <https://github.com/metab0t/tccbox>`__ used to invoke [`TinyC`](https://bellard.org/tcc/) compiler
+   -  `tccbox <https://github.com/metab0t/tccbox>`__ used to invoke the `TinyC <https://bellard.org/tcc/>`__ compiler
    
    
    
 
    Be aware that some of these libraries can have further dependencies.
 
+
+Acknowledgements
+----------------
+
+The authors gratefully acknowledge financial support by the Industrial Partnership Programme Fundamental Fluid Dynamics Challenges in Inkjet Printing of the Netherlands Organisation for Scientific Research (NWO) & High Tech Systems and Materials (HTSM), co-financed by Canon Production Printing Netherlands B.V., IamFluidics B.V., TNO Holst Centre, University of Twente, Eindhoven University of Technology and Utrecht University.

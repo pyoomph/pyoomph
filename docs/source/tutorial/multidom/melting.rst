@@ -168,7 +168,7 @@ The code for execution is trivial:
 
    if __name__=="__main__":
        with IceConvectionProblem() as problem:
-           problem.run(1000*second,outstep=True,startstep=1*second,maxstep=20*second,temporal_error=1)
+           problem.run(400*second,outstep=True,startstep=1*second,maxstep=20*second,temporal_error=1)
 
 The corresponding results are shown in :numref:`figmultidomicecylinder`. Obviously, the interface indeed does not recede in a straight manner, but is deformed due to the natural convection. Based on the results, one can obviously simplify the problem by neglecting the ice phase, since it becomes isothermal at :math:`T_\text{eq}=0` very quickly. This would involve the modification of the ``IceFrontSpeed``, but since this chapter is on multi-domain problems, it will not be addressed here.
 

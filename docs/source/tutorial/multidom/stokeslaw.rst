@@ -43,7 +43,7 @@ In the :py:meth:`~pyoomph.generic.problem.Problem.define_problem` method, we rem
 
    if __name__ == "__main__":
        with FallingDropletProblem() as problem:
-           problem.run(10*second,startstep=0.01*second,outstep=True)  # solve and output
+           problem.run(0.5*second,startstep=0.05*second,outstep=True)  # solve and output
 
 
 .. only:: html
@@ -108,7 +108,7 @@ The only thing we have to do is adding this equation to the interface, setting a
            T=20*celsius
            problem.surface_tension=50*milli*newton/meter-gas_constant*T*var("Gamma")
 
-           problem.run(10*second,startstep=0.01*second,outstep=True)  # solve and output
+           problem.run(0.5*second,startstep=0.05*second,outstep=True)  # solve and output
 
 The surfactants get advected to the top of the droplet and hamper the flow in the droplet, cf. :numref:`figmultidomfallingdroplet`.
 

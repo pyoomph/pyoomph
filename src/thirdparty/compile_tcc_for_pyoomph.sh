@@ -1,3 +1,5 @@
+# You can include your own version of the TinyC compiler by putting it into a subfolder tinycc and compile with PYOOMPH_NO_TCC=false
+
 if [[ "$PYOOMPH_CONFIG_FILE" == "" ]]; then
  PYOOMPH_CONFIG_FILE=../../pyoomph_config.env
 else

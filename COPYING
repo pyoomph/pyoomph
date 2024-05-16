@@ -1,4 +1,7 @@
----------------------------------------------------------------------
+GNU GENERAL PUBLIC LICENSE Version 3
+and BSD/MIT Licenses
+
+-------------------------------------------------------------------------
 
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
 Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
