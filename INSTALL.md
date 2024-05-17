@@ -4,8 +4,8 @@ When you have python 3.8 to 3.12 installed,
 
 > python -m pip install pyoomph
 
-should install the basic framework. For the maximum performance, please refer to the sections below. 
-On Mac M1 processor systems, please execute it in a Rosetta2 terminal (see below).
+should install the basic framework. On Mac M1 processor systems, please execute it in a Rosetta2 terminal (see below).
+For the maximum performance and system-specific information, please refer to the sections below. 
 
 If you cannot manage to install it, refer to our [tutorial](https://pyoomph.readthedocs.io/). If this cannot help, you can ask for help c.diddens@utwente.nl
 
@@ -25,7 +25,9 @@ If you have installed via pip (see above), just make sure that you have the `gcc
 
 ## On Mac
 
-**If you have a recent Mac with an M1 chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up.
+**If you have a recent Mac with an M1 chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up. Also, please downgrade `mkl` by
+
+> python3 -m pip install mkl==2021.4.0
 
 Make sure to have the `XCode` developer tools, e.g. by installing them via
 
@@ -85,7 +87,7 @@ Install required python modules via
 
 **If you have a recent Mac with an M1 chip**, install 
 
-> python3 -m pip install mkl=2021.4.0
+> python3 -m pip install mkl==2021.4.0
 
 **otherwise**, you can install
 

@@ -7,11 +7,14 @@ The easiest method to get pyoomph installed on your system is using ``pip``, i.e
 
       python -m pip install pyoomph
 
-This will install pyoomph on your system. If you get errors, let us know (c.diddens@utwente.nl), and we see whether we can provide a suitable wheel for your system.
+This will install pyoomph on your system. However, please also read the system-specific steps below.
+
+If you get errors, let us know (c.diddens@utwente.nl), and we see whether we can provide a suitable wheel for your system.
 
 .. warning::
 
    If you are using a recent Mac with the M1 (arm64 architecture) processor, you must execute this command in a Rosetta terminal. At https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/ you can find instructions how to create such a Rosetta terminal. Also, please see below regarding the `mkl` module.
+
 
 Depending on your system, you have to do additional steps to obtain the full performance:
 
@@ -51,7 +54,7 @@ On Mac, ``clang`` will be used as high performance compiler. To get ``clang``, i
 
 .. warning::
 
-   If you are using a recent Mac with the M1 (arm64 architecture) processor, you must potentially downgrade the package ``mkl``.
+   If you are using a recent Mac with the M1 processor (arm64 architecture), you must potentially downgrade the package ``mkl``.
    To do so, enter in a Rosetta 2 terminal
    
    .. code:: bash
