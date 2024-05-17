@@ -54,17 +54,57 @@ if $PYOOMPH_MARCH_NATIVE; then
  export CPPFLAGS="$CPPFLAGS -march=native"
 fi
 
+echo
+echo
+echo
+echo "BUILDING CLN"
+echo 
+echo
 cd cln || exit 1
 ./autogen.sh || exit 1
+echo
+echo
+echo
+echo "BUILDING CLN  - AUTOGEN DONE"
+echo 
+echo
 ./configure --without-gmp $DEBUG_CONFIGURE --disable-shared --enable-static --with-pic=yes --prefix "$PREFIX" $PYOOMPH_GINAC_CONFIGURE_OPTIONS || exit 1
+echo
+echo
+echo
+echo "BUILDING CLN  - CONFIGURE DONE"
+echo 
+echo
 make  MAKEINFO=true install -j 4 || exit
 
 
 export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PYOOMPH_STATIC_GINAC_DIR/install/lib/pkgconfig
 
+
+echo
+echo
+echo
+echo "BUILDING GINAC"
+echo 
+echo
 cd ../ginac || exit 1
 autoreconf -i -f  || exit 1
+echo
+echo
+echo
+echo "BUILDING GINAC  - AUTORECONF DONE"
+echo 
+echo
 CLN_CFLAGS="-I$PREFIX/include" CLN_LIBS="-L$PREFIX/lib -l:libcln.a" ./configure --with-pic=yes $DEBUG_CONFIGURE --disable-shared --enable-static --prefix "$PREFIX" $PYOOMPH_GINAC_CONFIGURE_OPTIONS
+
+
 make  MAKEINFO=true install -C ginac -j 4 || exit
+
+echo
+echo
+echo
+echo "BUILDING GINAC DONE"
+echo 
+echo
 
 )
