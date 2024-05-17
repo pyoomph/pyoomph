@@ -1,5 +1,7 @@
 name: Wheels
 
+# BEFORE RUNNING: Adjust the version in pyproject.toml, otherwise it will fail at the upload stage
+
 on:
   workflow_dispatch:
 

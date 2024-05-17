@@ -3,7 +3,7 @@
 pyoomph is a object-oriented multi-physics finite element framework.
 It is mainly a custom high level python frontend for the main functionalities (but by far not all) of the powerful C++ library [`oomph-lib`](http://www.oomph-lib.org).
 
-For performance reasons, pyoomph uses [`GiNaC`](https://www.ginac.de/) and [`CLN`](https://www.ginac.de/CLN) to automatically generate C code for the equations you have entered in python. It automatically generates C code symbolically derived Jacobians, parameter derivatives and Hessians. These include the complicated derivatives with respect to the moving mesh coordinates. The generated code is compiled and linked back to the running python script, either with the [`TinyC`](https://bellard.org/tcc/) compiler (invoked by [`tccbox`](https://github.com/metab0t/tccbox)) or, when installed, with a more performant alternative as [`gcc`](https://gcc.gnu.org/), [`LLVM/clang`](https://clang.llvm.org/) or [`MSBuild`](https://docs.microsoft.com/visualstudio/msbuild/msbuild).
+For performance reasons, pyoomph uses [`GiNaC`](https://www.ginac.de/) and [`CLN`](https://www.ginac.de/CLN) to automatically generate C code for the equations you have entered in python. It automatically generates C code for symbolically derived Jacobian matrices, parameter derivatives and Hessians. These even include the complicated derivatives with respect to the moving mesh coordinates on a symbolical level. The generated code is compiled and linked back to the running python script, either with the [`TinyC`](https://bellard.org/tcc/) compiler (invoked by [`tccbox`](https://github.com/metab0t/tccbox)) or, when installed, with a more performant alternative as [`gcc`](https://gcc.gnu.org/), [`LLVM/clang`](https://clang.llvm.org/) or [`MSBuild`](https://docs.microsoft.com/visualstudio/msbuild/msbuild).
 
 If you want to use the full flexibility of oomph-lib, you are probably better suited using [`oomph-lib`](http://www.oomph-lib.org) directly. If your want to use python to solve equations on a single static mesh, you might want to check out [`FEniCS`](https://fenicsproject.org/) instead. Also, have a look at [`NGSolve`](https://ngsolve.org/) or [`nutils`](https://nutils.org/) which have similar and complementary features.
 If you are looking for a python framework for multi-physics problems formulated on (potentially multiple) moving meshes, including the possibility of (azimuthal) bifurcation tracking, pyoomph might be the right choice for you.
@@ -13,11 +13,11 @@ If you are looking for a python framework for multi-physics problems formulated 
 ## Installation
 
 Please consult the file [`INSTALL.md`](INSTALL.md) in the git repository for installation instructions.
-Alternatively, follow the [instructions in our tutorial](https://pyoomph.readthedocs.io).
+Alternatively, follow the [instructions in our tutorial](https://pyoomph.readthedocs.io/en/latest/tutorial/installation.html).
 
 ## Documentation and Examples
 
-Documentation of the API and tons of examples can be found at [pyoomph.readthedocs.io](https://pyoomph.readthedocs.io). 
+Documentation of the API and tons of examples can be found at [pyoomph.readthedocs.io](https://pyoomph.readthedocs.io/en/latest/tutorial.html). 
 A [PDF version](https://pyoomph.readthedocs.io/_/downloads/en/latest/pdf/) of the tutorial is also available.
 
 ## License
@@ -65,7 +65,7 @@ Beyond that, pyoomph makes use of the following libraries at runtime. During ins
 - [`setuptools`](https://github.com/pypa/setuptools) ([MIT license](https://github.com/pypa/setuptools?tab=MIT-1-ov-file#readme)) is used for installation, wheel generation and to invoke the system's C compiler
 - [`cibuildwheel`](https://cibuildwheel.pypa.io), ([BSD 2-Clause license](https://github.com/pypa/cibuildwheel?tab=License-1-ov-file#readme)) is used to compile the provided wheels
 - [`pybind11-stubgen`](https://github.com/sizmailov/pybind11-stubgen), ([BSD 3-Clause license](https://github.com/sizmailov/pybind11-stubgen?tab=License-1-ov-file#readme)) is used to generate python stubs from the C++ core
-- [`tccbox`](https://github.com/metab0t/tccbox) used as wrapper for the [`TinyC`](https://bellard.org/tcc/) compiler
+- [`tccbox`](https://github.com/metab0t/tccbox) used as wrapper for the [`TinyC`](https://bellard.org/tcc/) compiler, ([LPGL 2 or later license](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html))
 
 Be aware that some of these libraries can have further dependencies.
 
