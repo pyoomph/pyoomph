@@ -46,21 +46,19 @@ class Wedge15Cellblock(meshio.CellBlock):
 import xml.etree.ElementTree as ET
 
 
-def pretty_xml(element:ET.Element, indent:str, newline:str, level:int=0):  # Elemnt is passed in Elment class parameters for indentation indent, for wrapping NEWLINE
-    if element:  # Determine whether the element has child equations
-        if (element.text is None) or element.text.isspace():  # If there is no element of text content
+def pretty_xml(element:ET.Element, indent:str, newline:str, level:int=0):  
+    if element is not None:  
+        if (element.text is None) or element.text.isspace():  
             element.text = newline + indent * (level + 1)
         else:
             element.text = newline + indent * (level + 1) + element.text.strip() + newline + indent * (level + 1)
-            # Else: # here two lines if the Notes removed, Element will start a new line of text
-            # element.text = newline + indent * (level + 1) + element.text.strip() + newline + indent * level
-    temp = list(element)  # Element will turn into a list
+    temp = list(element)  
     for subelement in temp:
-        if temp.index(subelement) < (len(temp) - 1):  # If it is not the last element of the list, indicating that the next line is the starting level of the same equations, indentation should be consistent
+        if temp.index(subelement) < (len(temp) - 1):  
             subelement.tail = newline + indent * (level + 1)
-        else:  # If it is the last element of the list, indicating that the next line is the end of the parent element, a small indentation should
+        else: 
             subelement.tail = newline + indent * level
-        pretty_xml(subelement, indent, newline, level=level + 1)  # Sub-equations recursion
+        pretty_xml(subelement, indent, newline, level=level + 1) 
 
 
 class _MeshFileOutput(_BaseNumpyOutput):
