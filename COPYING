@@ -124,6 +124,17 @@ License: GPL v2 or later license
 Usage in pyoomph:
 The file src/pyginacstruct.hpp is strongly based on the file structure.h 
 of GiNaC. Pyoomph furthermore links against the full GiNaC library.
+In particular, GiNaC is statically linked in the distribution as wheels.
+#########################################################################
+
+
+#########################################################################
+Library: CLN
+URL: https://www.ginac.de/CLN/
+License: GPL v2 or later license
+Usage in pyoomph:
+As a requirement of GiNaC, pyoomph also requires CLN.
+In particular, CLN is statically linked in the distribution as wheels.
 #########################################################################
 
 

@@ -65,7 +65,7 @@ class KSEBifurcationProblem(Problem):
 
 
 # slepc eigensolver is more reliable here
-import pyoomph.solvers.petsc # might not work in Windows
+import pyoomph.solvers.petsc # Requires petsc4py, slepc4py. Might not work in Windows
 
 if __name__ == "__main__":
     with KSEBifurcationProblem() as problem:
