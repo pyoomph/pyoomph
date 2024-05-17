@@ -20,6 +20,8 @@ Alternatively, follow the [instructions in our tutorial](https://pyoomph.readthe
 Documentation of the API and tons of examples can be found at [pyoomph.readthedocs.io](https://pyoomph.readthedocs.io/en/latest/tutorial.html). 
 A [PDF version](https://pyoomph.readthedocs.io/_/downloads/en/latest/pdf/) of the tutorial is also available.
 
+Some more examples can be found in our repository [pyoomph_examples](https://www.github.com/cdiddens/pyoomph_examples).
+
 ## License
 
 pyoomph itself is distributed as combined work under the GPL v3 license. However, mind the third-party licences stated below, in particular when distributing derived work or redistributing pyoomph. The full license file can be found in [COPYING](COPYING).
