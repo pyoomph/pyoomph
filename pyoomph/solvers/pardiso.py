@@ -40,10 +40,22 @@ from pyoomph.generic.mpi import mpi_barrier,get_mpi_nproc,get_mpi_rank,get_mpi_w
 from ..typings import *
 import numpy
 
+from importlib import metadata
+
 if TYPE_CHECKING:
     from ..generic.problem import Problem
 
 def _try_to_find_lib(nam:Union[str,List[str]])->Optional[CDLL]:
+    # First try to find the library via the packages
+    try:
+        mkl_rt=[p for p in metadata.files('mkl') if 'mkl_rt' in str(p)]
+        if len(mkl_rt)==1:
+            mkl_rt=first(mkl_rt)
+            res=CDLL(mkl_rt.locate())
+            if res is not None:
+                return res
+    except:
+        pass
     if isinstance(nam,list):
         for l in nam:
             res=_try_to_find_lib(l)

@@ -29,6 +29,7 @@
 A module to compute the linear response of a system to a periodic driving force.
 """
  
+import scipy.linalg
 from .. import *
 from ..expressions import ExpressionNumOrNone, partial_t, pi
 import scipy
@@ -191,8 +192,9 @@ class PeriodicDrivingResponse():
             fullmat=scipy.sparse.bmat([[matJ,self.omega_param.value*matM,lambda_in_vr],[self.omega_param.value*matM,-matJ,None],[vr_in_lambda,None,None]]).copy()        
             fullmat=fullmat.tocsr()                        
             sol=rhs.copy()
-            self.problem.get_la_solver().solve_serial(1,fullmat.shape[0],fullmat.nnz,1,fullmat.data,fullmat.indices,fullmat.indptr,sol,0,0)        
-            self.problem.get_la_solver().solve_serial(2,fullmat.shape[0],fullmat.nnz,1,fullmat.data,fullmat.indptr,fullmat.indptr,sol,0,0)            
+
+            self.problem.get_la_solver().solve_serial(1,fullmat.shape[0],fullmat.nnz,1,fullmat.data,fullmat.indices,fullmat.indptr,sol,0,1)        
+            self.problem.get_la_solver().solve_serial(2,fullmat.shape[0],fullmat.nnz,1,fullmat.data,fullmat.indptr,fullmat.indptr,sol,0,1)            
             result=sol[:n]+sol[n:-2]*1j        
             result/=result[drivedofind]
             self.problem.invalidate_cached_mesh_data(only_eigens=True)

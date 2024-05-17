@@ -82,7 +82,7 @@ The general procedure is the same as before for a simple harmonic oscillator. Ho
            outfile.header("freq[Hz]",*["mode_"+str(i)+"[mm/(m/s^2)](f={:.4f})".format(reson_freqs[i]) for i in range(numbessel)])
 
            # Output the resonant undamped frequencies        
-           freqs=numpy.linspace(0,1000,1001) # Use frequencies f instead of omega
+           freqs=numpy.linspace(1,1000,1000) # Use frequencies f instead of omega
            for response in pdr.iterate_over_driving_frequencies(freqs=freqs,unit=hertz):        
                # Get the response as nondimensional data. The response is stored as eigenvector, so we split it in real and imaginary part
                nd_resp_real=problem.get_cached_mesh_data("drum",eigenmode="real",eigenvector=0,nondimensional=True)

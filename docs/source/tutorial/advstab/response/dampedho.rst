@@ -93,7 +93,7 @@ However, with the periodic driving response tool, you can scan the linear respon
         outfile=NumericalTextOutputFile(problem.get_output_directory("response.txt"))
         outfile.header("omega[1/s]","(A/F)_num[m/(m/s^2)]","phi_num","(A/F)_ana[m/(m/s^2)]")
 
-        omegas=numpy.linspace(0.0,3,301)
+        omegas=numpy.linspace(0.01,3,300)
         for response in pdr.iterate_over_driving_frequencies(omegas=omegas,unit=1/second):        
             response_ampl,phi=pdr.split_response_amplitude_and_phase() # nondimensional response amplitude and angle            
             omega=pdr.get_driving_omega() # current omega
