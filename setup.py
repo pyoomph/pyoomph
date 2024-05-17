@@ -55,7 +55,7 @@ else:
   if no_mpi_indicator_file.exists():    
      no_mpi_indicator_file.unlink()
      
-__version__ = '0.0.1'
+__version__ = '0.1.0'
 
 
 class get_pybind_include(object):

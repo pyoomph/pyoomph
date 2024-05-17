@@ -1,6 +1,7 @@
 name: Wheels
 
-# BEFORE RUNNING: Adjust the version in pyproject.toml, otherwise it will fail at the upload stage
+# BEFORE RUNNING: Adjust the version in pyproject.toml, setup.py, and docs/source/conf.py
+# otherwise it will fail at the upload stage
 
 on:
   workflow_dispatch:
@@ -54,10 +55,7 @@ jobs:
     needs: [build_wheels]
     runs-on: ubuntu-latest
 #    if: github.event_name == 'release' && github.event.action == 'published'
-
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/pyoomph
+    environment: release
 
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
@@ -74,5 +72,3 @@ jobs:
         merge-multiple: true
 
     - uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        repository-url: https://test.pypi.org/legacy/
