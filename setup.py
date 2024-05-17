@@ -217,8 +217,9 @@ class BuildExt(build_ext):
                     opts.append('-fvisibility=hidden')
                 
         if march_native:
-        	opts.append("-march=native")
-        	opts.append("-O3") 
+            if sys.platform=="linux":
+                opts.append("-march=native")
+            opts.append("-O3") 
         else:
          opts.append("-O2")       	
 
