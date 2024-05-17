@@ -27,7 +27,7 @@
 from os import path
 import re
 import _pyoomph
-from pyoomph.typings import Optional
+from ..typings import Optional
 
 from ..meshes.mesh import assert_spatial_mesh,InterfaceMesh,ODEStorageMesh
 from ..expressions import AxisymmetryBreakingCoordinateSystem, find_dominant_element_space, scale_factor, vector,matrix,evaluate_in_domain,testfunction,weak,var,nondim,Expression,rational_num

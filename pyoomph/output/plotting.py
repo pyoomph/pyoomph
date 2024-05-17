@@ -28,9 +28,9 @@ import os,json
 
 
 import matplotlib
-from pyoomph.generic.codegen import Equations
+from ..generic.codegen import Equations
 
-from pyoomph.meshes.mesh import AnySpatialMesh
+from ..meshes.mesh import AnySpatialMesh
 from ..expressions.generic import Expression, ExpressionNumOrNone, ExpressionOrNum
 from ..expressions.units import unit_to_string
 from ..meshes.meshdatacache import MeshDataCacheEntry
@@ -949,7 +949,8 @@ class MatplotlibTensorFieldEllipses(MatplotlibTriangulationBased):
                     smallest=1
 
                 if self.scalemode != "normalized":
-                    denom = 1.0 / lm
+                    raise RuntimeError("TODO: Non normalized mode")
+                    #denom = 1.0 / lm
                 else:
                     denom = 1.0
                 

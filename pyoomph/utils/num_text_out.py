@@ -24,7 +24,7 @@
 #
 # ========================================================================
  
-from pyoomph import Expression
+from .. import Expression
 import _pyoomph 
 import numpy
 from ..typings import *

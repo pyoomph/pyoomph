@@ -27,7 +27,7 @@
 
 import numpy
 
-from pyoomph.expressions.generic import ExpressionOrNum, Expression, scale_factor
+from ..expressions.generic import ExpressionOrNum, Expression, scale_factor
 from ..typings import *
 import scipy.interpolate #type:ignore
 from .cb import CustomMathExpression,CustomMultiReturnExpression

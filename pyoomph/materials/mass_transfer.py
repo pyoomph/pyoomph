@@ -24,10 +24,10 @@
 #
 # ========================================================================
  
-from pyoomph.expressions import Union
-from pyoomph.expressions.units import Union
-from pyoomph.materials.generic import MixtureGasProperties, MixtureLiquidProperties, PureGasProperties, PureLiquidProperties
-from pyoomph.typings import Union
+from ..expressions import Union
+from ..expressions.units import Union
+from .generic import MixtureGasProperties, MixtureLiquidProperties, PureGasProperties, PureLiquidProperties
+from ..typings import Union
 from ..generic import InterfaceEquations
 from ..expressions import * #Import grad et al
 from ..expressions.units import *

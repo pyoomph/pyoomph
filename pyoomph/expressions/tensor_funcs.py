@@ -24,8 +24,8 @@
 #
 # ========================================================================
  
-from pyoomph.expressions.generic import is_zero
-from pyoomph.equations.navier_stokes import *
+from ..expressions.generic import is_zero,subexpression
+import math
 from .cb import *
 from .coordsys import BaseCoordinateSystem,AxisymmetricCoordinateSystem,CartesianCoordinateSystem,AxisymmetryBreakingCoordinateSystem
 from ..typings import *

@@ -27,7 +27,7 @@
 import inspect
 import os.path
 
-from pyoomph.generic.mpi import mpi_barrier
+from ..generic.mpi import mpi_barrier
 
 from ..typings import *
 
@@ -36,8 +36,7 @@ import numpy
 
 import _pyoomph
 
-import pyoomph.expressions
-from pyoomph.expressions.generic import Expression, ExpressionOrNum
+from ..expressions.generic import Expression, ExpressionOrNum, is_zero, NameStrSequence
 
 
 
@@ -301,7 +300,7 @@ class BaseMesh:
         for k, v in res.items():
             if isinstance(v, numpy.ndarray):
                 for i, direct, compo in zip([0, 1, 2], ["x", "y", "z"], v):
-                    if not (pyoomph.expressions.is_zero(compo) and i >= self._codegen.get_nodal_dimension()):
+                    if not (is_zero(compo) and i >= self._codegen.get_nodal_dimension()):
                         newres[k+"_"+direct] = compo
 
             else:
@@ -1496,12 +1495,12 @@ class ODEStorageMesh(_pyoomph.ODEStorageMesh):
     def get_value(self, name: str, *, dimensional: bool=..., as_float: Literal[True]) -> float: ...
 
     @overload
-    def get_value(self, name: pyoomph.expressions.NameStrSequence, *,dimensional: bool=..., as_float: Literal[False]=...) -> Tuple[_pyoomph.Expression, ...]: ...
+    def get_value(self, name: NameStrSequence, *,dimensional: bool=..., as_float: Literal[False]=...) -> Tuple[_pyoomph.Expression, ...]: ...
     
     @overload
-    def get_value(self, name: pyoomph.expressions.NameStrSequence, *,dimensional: bool=..., as_float: Literal[True]) -> Tuple[float, ...]: ...
+    def get_value(self, name: NameStrSequence, *,dimensional: bool=..., as_float: Literal[True]) -> Tuple[float, ...]: ...
 
-    def get_value(self, name: Union[str, pyoomph.expressions.NameStrSequence], *, dimensional: bool = True, as_float: bool = False) -> Union[_pyoomph.Expression, float, Tuple[float, ...], Tuple[_pyoomph.Expression, ...]]:
+    def get_value(self, name: Union[str, NameStrSequence], *, dimensional: bool = True, as_float: bool = False) -> Union[_pyoomph.Expression, float, Tuple[float, ...], Tuple[_pyoomph.Expression, ...]]:
         """
         Get the value(s) associated with the given name(s) from the ODE.
 
@@ -1542,7 +1541,7 @@ class ODEStorageMesh(_pyoomph.ODEStorageMesh):
         else:
             return res  # type:ignore
 
-    def set_value(self, dimensional: bool = True, **namvals: pyoomph.expressions.ExpressionOrNum) -> None:
+    def set_value(self, dimensional: bool = True, **namvals: ExpressionOrNum) -> None:
         """
         Set the current values of ODE variables.
 

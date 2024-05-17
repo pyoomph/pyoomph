@@ -25,9 +25,9 @@
 # ========================================================================
  
 
-from pyoomph.expressions import ExpressionNumOrNone, ExpressionOrNum
 from ..generic import Equations,InterfaceEquations
 from ..expressions import * #Import grad et al
+from ..expressions.coordsys import AxisymmetricCoordinateSystem
 
 #Only works in axisymmetric and 2d cartesian
 class StreamFunctionFromVelocity(Equations):

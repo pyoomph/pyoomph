@@ -25,7 +25,7 @@
 # ========================================================================
  
  
-from pyoomph import *
+from .. import *
 from ..expressions import *
 
 

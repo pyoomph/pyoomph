@@ -114,7 +114,7 @@ def find_dominant_element_space(*spaces:FiniteElementSpaceEnum):
 	return res
 
 if TYPE_CHECKING:
-	from pyoomph.generic.codegen import FiniteElementCodeGenerator
+	from ..generic.codegen import FiniteElementCodeGenerator
 
 def substitute_in_expression(expr:ExpressionOrNum,field_subst:Dict[str,ExpressionOrNum],nondim_subst:Dict[str,ExpressionOrNum]={},global_param_subst:Dict[str,ExpressionOrNum]={})->Expression:
 	fs,nf,gp={},{},{}

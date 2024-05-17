@@ -26,12 +26,12 @@
  
 from _pyoomph import Expression
 import numpy
-from pyoomph.output.meshio import IntegralObservableOutput
-from pyoomph.typings import List
+from ..output.meshio import IntegralObservableOutput
+from ..typings import List
 from ..expressions import square_root,pi,asin,sin,cos,absolute,rational_num,weak,dot,testfunction,scale_factor,div,grad,vector,acos,ExpressionNumOrNone,ExpressionOrNum,cartesian,Expression,CustomMathExpression,subexpression,log,is_zero,atan2
 from ..expressions.interpol import InterpolateSpline1d
 from ..expressions.units import meter,milli,newton,kilogram,second,degree
-from pyoomph import Equations,Problem,var,var_and_test,GlobalLagrangeMultiplier,WeakContribution,LineMesh,InitialCondition,TestScaling,Scaling,DirichletBC,IntegralObservables,TextFileOutput
+from .. import Equations,Problem,var,var_and_test,GlobalLagrangeMultiplier,WeakContribution,LineMesh,InitialCondition,TestScaling,Scaling,DirichletBC,IntegralObservables,TextFileOutput
 from ..typings import *
 from scipy import integrate
 
@@ -263,7 +263,7 @@ class DropletEvaporationHelper:
             f_thetas.append([theta,add_term+4*integral[0]])
         f_thetasA:NPFloatArray=numpy.array(f_thetas) #type:ignore
 
-        from pyoomph.expressions.interpol import InterpolateSpline1d
+        from ..expressions.interpol import InterpolateSpline1d
         return InterpolateSpline1d(f_thetasA)
 
 

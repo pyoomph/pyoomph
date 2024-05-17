@@ -25,11 +25,10 @@
 # ========================================================================
  
  
-from pyoomph.expressions import ExpressionNumOrNone
-from pyoomph.expressions.generic import ExpressionOrNum
+
 from .. import var_and_test
 from ..generic.codegen import  InterfaceEquations,Equations,BaseEquations,ODEEquations,FiniteElementCodeGenerator
-from ..expressions.generic import ExpressionOrNum,FiniteElementSpaceEnum, grad,nondim, scale_factor,test_scale_factor,Expression,assert_valid_finite_element_space, testfunction
+from ..expressions.generic import ExpressionOrNum,ExpressionNumOrNone,FiniteElementSpaceEnum, grad,nondim, scale_factor,test_scale_factor,Expression,assert_valid_finite_element_space, testfunction,find_dominant_element_space
 
 #Connects one or multiple fields at both sides of the interfaces via Lagrange multipliers
 #i.e. it ensures the same Neumann flux on both sides, whereas the magnitude of this flux is given by the Lagrange multiplier
@@ -40,6 +39,8 @@ from ..typings import *
 if TYPE_CHECKING:
     from ..meshes.remesher import RemesherBase,RemesherPointEntry
     from ..expressions.coordsys import BaseCoordinateSystem
+    from ..meshes import AnyMesh
+    from ..generic.problem import Problem,EquationTree
     
 
 
@@ -716,8 +717,7 @@ class ElementSpace(Equations):
         super(ElementSpace, self).__init__()
         self.space=space
 
-    def define_fields(self):
-        from pyoomph.expressions.generic import find_dominant_element_space
+    def define_fields(self):        
         cg=self.get_current_code_generator()
         if self.space not in {"C2TB","C2","C1TB","C1"}:
             raise ValueError("Can only set the coordinate space to either C2TB, C2, C1TB or C1")

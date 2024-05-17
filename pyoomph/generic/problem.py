@@ -28,7 +28,7 @@ import glob
 
 import scipy.sparse
 
-from pyoomph.expressions.generic import is_zero #type:ignore
+from ..expressions.generic import is_zero #type:ignore
 
 #import pyoomph.generic
 from .mpi import *
@@ -57,7 +57,7 @@ from ..output.states import DumpFile
 from ..expressions import ExpressionOrNum,ExpressionNumOrNone
 from ..meshes.meshdatacache import MeshDataCacheStorage, MeshDataCacheOperatorBase, MeshDataEigenModes,MeshDataCacheEntry
 
-from .ccompiler import BaseCCompiler
+from .ccompiler import BaseCCompiler,SystemCCompiler
 
 import types 
 
@@ -342,8 +342,8 @@ class Problem(_pyoomph.Problem):
         Returns:
             tuple: A tuple containing the variable and test function associated with the degree of freedom.
         """            
-        from pyoomph.generic.codegen import GlobalLagrangeMultiplier,var,testfunction
-        from pyoomph.equations.generic import Scaling,TestScaling,InitialCondition
+        from ..generic.codegen import GlobalLagrangeMultiplier,var,testfunction
+        from ..equations.generic import Scaling,TestScaling,InitialCondition
         neweqs=GlobalLagrangeMultiplier(**{name:equation_contribution},only_for_stationary_solve=only_for_stationary_solve)
         if scaling is not None:
             neweqs+=Scaling(**{name:scaling})
@@ -3184,7 +3184,7 @@ class Problem(_pyoomph.Problem):
 
             # These are sets of strings, we must convert them into lists of equations. We reuse the same class as for the eigenproblem
             def dof_strings_to_global_equations(string_dof_set:Set[str]):
-                from pyoomph.solvers.generic import EigenMatrixSetDofsToZero
+                from ..solvers.generic import EigenMatrixSetDofsToZero
                 resolver=EigenMatrixSetDofsToZero(self,*string_dof_set)
                 zeromap:Set[int]=set()
                 for d in resolver.doflist:
@@ -3235,7 +3235,7 @@ class Problem(_pyoomph.Problem):
 
     # MUST BE CALLED FROM define_problem(), at best towards the end
     def define_problem_for_axial_symmetry_breaking_investigation(self):
-        from pyoomph.expressions.coordsys import AxisymmetryBreakingCoordinateSystem
+        from ..expressions.coordsys import AxisymmetryBreakingCoordinateSystem
         self._azimuthal_mode_param_m = self.get_global_parameter(self._azimuthal_stability.azimuthal_param_m_name)
         coordsys = AxisymmetryBreakingCoordinateSystem(self._azimuthal_mode_param_m.get_symbol())
         self.set_coordinate_system(coordsys)
@@ -3261,7 +3261,7 @@ class Problem(_pyoomph.Problem):
         to_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),m) 
         if len(to_zero_dofs) and _pyoomph.get_verbosity_flag()!=0:
             print("For the eigenvalues "+("" if m is None else "[azimuthal_m="+str(int(m))+"]")+" we set following fields to zero: "+str(to_zero_dofs))        
-        from pyoomph.solvers.generic import EigenMatrixSetDofsToZero
+        from ..solvers.generic import EigenMatrixSetDofsToZero
         esolve = self.get_eigen_solver()
         esolve.clear_matrix_manipulators()  # Flush the matrix manipulators
         if len(to_zero_dofs)>0:

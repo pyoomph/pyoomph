@@ -25,7 +25,7 @@
 # ========================================================================
  
  
-from pyoomph.meshes.mesh import AnyMesh
+from ..meshes.mesh import AnyMesh
 from ..generic import Equations
 from ..expressions import *  # Import grad et al
 from ..equations.navier_stokes import StokesEquations,NavierStokesEquations

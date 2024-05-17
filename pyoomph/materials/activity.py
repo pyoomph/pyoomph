@@ -27,7 +27,6 @@
 from abc import abstractmethod
 from token import OP
 
-from pyoomph.typings import List, NPFloatArray
 from ..typings import *
 from ..expressions.cb import CustomMultiReturnExpression,Expression
 from ..expressions.units import kelvin

@@ -36,7 +36,7 @@ import sys
 
 from more_itertools import first
 
-from pyoomph.generic.mpi import mpi_barrier,get_mpi_nproc,get_mpi_rank,get_mpi_world_comm
+from ..generic.mpi import mpi_barrier,get_mpi_nproc,get_mpi_rank,get_mpi_world_comm
 from ..typings import *
 import numpy
 

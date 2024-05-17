@@ -26,21 +26,20 @@
  
  
 import sympy #type:ignore
-import pyoomph.expressions
-from pyoomph.expressions import var,nondim,ExpressionOrNum
+from ..expressions import (cos,sin,log,exp,pi,var,nondim,ExpressionOrNum,Expression) 
 import _pyoomph
 import math
 
-from pyoomph.expressions.generic import Expression
+
 
 from ..typings import *
 _SympyType=Any
 
 __func_conversion_table:List[Tuple[str,_SympyType,Callable[...,Expression]]]=[
-    ("cos",sympy.cos,pyoomph.expressions.cos),
-    ("sin",sympy.sin,pyoomph.expressions.sin),
-    ("exp",sympy.exp,pyoomph.expressions.exp),
-    ("log",sympy.log,pyoomph.expressions.log),
+    ("cos",sympy.cos,cos),
+    ("sin",sympy.sin,sin),
+    ("exp",sympy.exp,exp),
+    ("log",sympy.log,log),
     ]
 
 __func_conversion_sympy2pyoomph={entry[1]:entry[2] for entry in __func_conversion_table}
@@ -71,9 +70,9 @@ def sympy_to_pyoomph(expr:_SympyType,use_nondim:bool=False,var_map:Dict[str,Expr
             raise RuntimeError("Sympy numeric "+str(expr)+" cannot be converted yet to pyoomph")
     elif isinstance(expr,sympy.NumberSymbol):
         if expr==sympy.pi: #type:ignore
-            return pyoomph.expressions.pi
+            return pi
         if expr == sympy.E: #type:ignore
-            return pyoomph.expressions.exp(1)
+            return exp(1)
         else:
             raise RuntimeError("Sympy number symbol "+str(expr)+" cannot be converted yet to pyoomph")
     elif isinstance(expr,sympy.Symbol):

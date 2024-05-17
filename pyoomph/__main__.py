@@ -101,8 +101,8 @@ elif arglist.command=="check":
    for check_type in check_types:
       if check_type=="solver":
 
-         from pyoomph.generic import Problem
-         from pyoomph.solvers.generic import GenericLinearSystemSolver
+         from .generic import Problem
+         from .solvers.generic import GenericLinearSystemSolver
          p=Problem()
                
          sublist={"pardiso","superlu"}
@@ -123,8 +123,8 @@ elif arglist.command=="check":
 
       elif check_type=="eigen":
 
-         from pyoomph.generic import Problem
-         from pyoomph.solvers.generic import GenericEigenSolver
+         from .generic import Problem
+         from .solvers.generic import GenericEigenSolver
          p=Problem()
                
          sublist={"pardiso","scipy"}
@@ -144,7 +144,7 @@ elif arglist.command=="check":
                print("","does not work: "+str(e.with_traceback(None)))
 
       elif check_type=="compiler":
-         from pyoomph.generic.ccompiler import BaseCCompiler
+         from .generic.ccompiler import BaseCCompiler
          compilers={"system"}
          if arglist.check_name=="all":
             checklist=list(compilers)

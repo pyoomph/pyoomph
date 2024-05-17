@@ -25,7 +25,7 @@
 # ========================================================================
  
  
-from pyoomph.typings import NPFloatArray
+from ..typings import NPFloatArray
 from ..equations.generic import SpatialErrorEstimator
 from ..expressions import CustomMultiReturnExpression, square_root, symbolic_diff, var_and_test,var,grad,dot,maximum,minimum,subexpression
 from ..expressions.generic import ExpressionNumOrNone, ExpressionOrNum, FiniteElementSpaceEnum, dyadic, evaluate_in_past, identity_matrix, material_derivative, partial_t, scale_factor, testfunction,weak

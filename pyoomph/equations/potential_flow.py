@@ -25,12 +25,10 @@
 # ========================================================================
  
  
-from pyoomph import *
-from pyoomph import ExpressionOrNum
-from pyoomph.expressions import *
-from pyoomph.expressions import ExpressionNumOrNone, ExpressionOrNum
-from pyoomph.meshes.mesh import AnyMesh
-from pyoomph.typings import *
+from .. import *
+from ..expressions import *
+from ..meshes.mesh import AnyMesh
+from ..typings import *
 
 class PotentialFlow(Equations):
     def __init__(self,potential_name:str="phi",space:FiniteElementSpaceEnum="C2",scale=scale_factor("velocity")*scale_factor("spatial"),velo_projection:Union[bool,FiniteElementSpaceEnum]=True,velocity_name:str="velocity",mass_density:ExpressionNumOrNone=None,dynamic_viscosity:ExpressionNumOrNone=None,pressure_projection:Union[bool,FiniteElementSpaceEnum]=True,pressure_name="pressure",bulk_force_potential:ExpressionOrNum=0):

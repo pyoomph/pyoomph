@@ -25,7 +25,7 @@
 #
 # ========================================================================
  
-from pyoomph.meshes.mesh import ODEStorageMesh
+from ..meshes.mesh import ODEStorageMesh
 from ..typings import *
 import numpy
 

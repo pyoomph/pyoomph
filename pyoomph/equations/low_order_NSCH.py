@@ -25,10 +25,9 @@
 # ========================================================================
  
  
-from pyoomph import *
-from pyoomph import Literal
-from pyoomph.expressions import *
-from pyoomph.materials import *
+from .. import *
+from ..expressions import *
+from ..materials import *
 
 
 # Piecewise potential to prevent overshooting
