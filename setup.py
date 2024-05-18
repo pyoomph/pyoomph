@@ -265,14 +265,6 @@ ParallelCompile("NPY_NUM_BUILD_JOBS",default=4).install()
 
 setup(
     name='pyoomph',
-    version=__version__,
-    author='Christian Diddens and Duarte Rocha',
-    author_email='c.diddens@utwente.nl',
-    url='https://gitlab.utwente.nl/pyoomph_group/pyoomph.git', 
-    description='pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC', 
-    long_description='pyoomph combines the main features of the C++ finite element library oomph-lib with symbolic differentiation and subsequent code generation powered by GiNaC. Thereby, you can formulate equations in python directly, while still having the full performance and most of the features native oomph-lib has to offer.',
-#		package_dir={'pyoomph':'src'},
-#		packages=find_packages('pyoomph'),
 		packages=create_package_list('pyoomph')+["_pyoomph-stubs"],
     ext_modules=ext_modules,
     setup_requires=['pybind11>=2.5.0'],
@@ -281,28 +273,5 @@ setup(
     install_requires=["meshio", "pygmsh","numpy","scipy","matplotlib","mkl","more_itertools"]+([] if no_mpi else ["mpi4py"])+([] if with_tcc else ["tccbox"]),
     package_data={'pyoomph.jitbridge': ['*.h']+(["libtcc1.a"] if with_tcc else []), 'pyoomph' : ["py.typed"]+(["NO_MPI"] if no_mpi else []), "_pyoomph-stubs" : ["py.typed","__init__.pyi"]},
     include_package_data=True,
-    license='GNU General Public License v3 (GPLv3)',
-    license_files=('COPYING',),
-    classifiers=[
-        'Development Status :: 3 - Alpha',
-        'Intended Audience :: Science/Research',
-        'Natural Language :: English',
-        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
-        'Operating System :: POSIX :: Linux',
-        'Operating System :: Unix',
-        'Operating System :: MacOS :: MacOS X',
-        'Operating System :: Microsoft :: Windows :: Windows 10',
-        'Operating System :: Microsoft :: Windows :: Windows 11',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Programming Language :: Python :: 3.11',
-        'Programming Language :: Python :: 3.12',        
-        'Topic :: Scientific/Engineering',
-        'Topic :: Scientific/Engineering :: Mathematics',
-        'Topic :: Scientific/Engineering :: Physics'
-    ],
     
 )
