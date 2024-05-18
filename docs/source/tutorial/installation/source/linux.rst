@@ -5,7 +5,7 @@ To obtain the code, clone the GitHub repository
 
 .. code:: bash
 
-      git clone https://www.github.com/cdiddens/pyoomph.git 
+      git clone https://www.github.com/pyoomph/pyoomph.git 
 
 
 Once you have cloned the repository with git, you first have to install a few packages. On a Debian/Ubuntu distribution, you habe to do e.g.

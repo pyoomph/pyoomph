@@ -16,7 +16,7 @@ By generating symbolically derived C code, the performance of pyoomph is on par 
 
 You can either browse the tutorial online or download a `PDF version <https://pyoomph.readthedocs.io/_/downloads/en/latest/pdf/>`__.
 
-The source code of pyoomph is hosted on `Github <https://github.com/cdiddens/pyoomph>`__.
+The source code of pyoomph is hosted on `Github <https://github.com/pyoomph/pyoomph>`__.
 
 
 Tutorial

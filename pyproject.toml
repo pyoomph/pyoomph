@@ -32,9 +32,9 @@ classifiers=[
 
 [project.urls]
 documentation = "https://pyoomph.readthedocs.io/en/latest/index.html"
-source = "https://github.com/cdiddens/pyoomph"
+source = "https://github.com/pyoomph/pyoomph"
 download = "https://pypi.org/project/pyoomph/"
-tracker = "https://github.com/cdiddens/pyoomph/issues"
+tracker = "https://github.com/pyoomph/pyoomph/issues"
 
 [build-system]
 requires = ["setuptools>=68.0","pybind11>=2.5.0"]

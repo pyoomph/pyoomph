@@ -21,7 +21,7 @@ gather plotting Plotting_Interface
 
 cat > _GATHER_SCRIPTS/pyoomph_tutorial_scripts/README.txt <<EOCAT
 Here, you find the python scripts used and explained throughout the tutorial of pyoomph.
-You can find pyoomph here: https://github.com/cdiddens/pyoomph
+You can find pyoomph here: https://github.com/pyoomph/pyoomph
 The tutorial is hosted here: https://pyoomph.readthedocs.io
 EOCAT
 

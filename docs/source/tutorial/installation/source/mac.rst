@@ -16,7 +16,7 @@ for a terminal. After that, you should have git so that you can clone the reposi
 
 .. code:: bash
 
-      git clone https://www.github.com/cdiddens/pyoomph.git 
+      git clone https://www.github.com/pyoomph/pyoomph.git 
 
 
 
