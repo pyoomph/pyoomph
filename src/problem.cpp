@@ -915,6 +915,8 @@ namespace pyoomph
 			Use_finite_differences_for_continuation_derivatives = (val > 0.5 ? true : false);
 		else if (nam == "Use_continuation_timestepper")
 			Use_continuation_timestepper = (val > 0.5 ? true : false);
+		else if (nam == "Desired_newton_iterations_ds")
+		   Desired_newton_iterations_ds=val;
 		else
 			throw_runtime_error("Unknown param to set " + nam);
 	}

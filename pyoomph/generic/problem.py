@@ -2669,7 +2669,7 @@ class Problem(_pyoomph.Problem):
             self._set_globally_convergent_newton_method(globally_convergent_newton)
         return old
 
-    def set_arc_length_parameter(self,desired_proportion_of_arc_length:Optional[float]=None,scale_arc_length:Optional[bool]=None,use_FD:Optional[bool]=None,use_continuation_timestepper:Optional[bool]=None):
+    def set_arc_length_parameter(self,desired_proportion_of_arc_length:Optional[float]=None,scale_arc_length:Optional[bool]=None,use_FD:Optional[bool]=None,use_continuation_timestepper:Optional[bool]=None,Desired_newton_iterations_ds:Optional[int]=None):
         if desired_proportion_of_arc_length is not None:
             self._set_arclength_parameter("Desired_proportion_of_arc_length",desired_proportion_of_arc_length)
         if scale_arc_length is not None:
@@ -2678,6 +2678,8 @@ class Problem(_pyoomph.Problem):
             self._set_arclength_parameter("Use_finite_differences_for_continuation_derivatives",1 if use_FD else 0)
         if use_continuation_timestepper is not None:
             self._set_arclength_parameter("Use_continuation_timestepper",1 if use_continuation_timestepper else 0)
+        if Desired_newton_iterations_ds is not None:
+            self._set_arclength_parameter("Desired_newton_iterations_ds",Desired_newton_iterations_ds)
 
     def arclength_continuation(self, parameter: Union[str, _pyoomph.GiNaC_GlobalParam], step: float, *,
                               spatial_adapt: int = 0, max_ds: Optional[float] = None,
