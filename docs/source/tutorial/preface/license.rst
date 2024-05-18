@@ -23,13 +23,13 @@ For pyoomph, the conditions of the `GNU General Public License 3 <https://www.gn
       You should have received a copy of the GNU General Public License
       along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-A `copy of the license <https://github.com/cdiddens/pyoomph/blob/main/COPYING>`__ can be found in distribution. Mind also the following licenses
+A `copy of the license <https://github.com/pyoomph/pyoomph/blob/main/COPYING>`__ can be found in distribution. Mind also the following licenses
 
 #. pyoomph contains code taken from other authors/projects:
 
-   -  In `src/thirdparty/oomph-lib/include <https://github.com/cdiddens/pyoomph/tree/main/src/thirdparty/oomph-lib/include>`__, you find the necessary main files of `oomph-lib <http://www.oomph-lib.org>`__, `[LGPL v2.1 or later license] <https://github.com/oomph-lib/oomph-lib/blob/main/LICENCE>`__. Minor modifications as mentioned in `src/thirdparty/INFO_oomph-lib <https://github.com/cdiddens/pyoomph/blob/main/src/thirdparty/INFO_oomph-lib>`__ had to be made. Furthermore, code parts of these oomph-lib files had been copied to corresponding derived classes of pyoomph.
+   -  In `src/thirdparty/oomph-lib/include <https://github.com/pyoomph/pyoomph/tree/main/src/thirdparty/oomph-lib/include>`__, you find the necessary main files of `oomph-lib <http://www.oomph-lib.org>`__, `[LGPL v2.1 or later license] <https://github.com/oomph-lib/oomph-lib/blob/main/LICENCE>`__. Minor modifications as mentioned in `src/thirdparty/INFO_oomph-lib <https://github.com/pyoomph/pyoomph/blob/main/src/thirdparty/INFO_oomph-lib>`__ had to be made. Furthermore, code parts of these oomph-lib files had been copied to corresponding derived classes of pyoomph.
 
-   -  A copy of the header-only library `nanoflann <https://github.com/jlblancoc/nanoflann>`__ is located in `src/thirdparty/nanoflann.hpp <https://github.com/cdiddens/pyoomph/blob/main/src/thirdparty/nanoflann.hpp>`__, `[BSD license] <https://github.com/jlblancoc/nanoflann/blob/master/COPYING>`__:
+   -  A copy of the header-only library `nanoflann <https://github.com/jlblancoc/nanoflann>`__ is located in `src/thirdparty/nanoflann.hpp <https://github.com/pyoomph/pyoomph/blob/main/src/thirdparty/nanoflann.hpp>`__, `[BSD license] <https://github.com/jlblancoc/nanoflann/blob/master/COPYING>`__:
 
       .. container:: licensebox
 
@@ -64,7 +64,7 @@ A `copy of the license <https://github.com/cdiddens/pyoomph/blob/main/COPYING>`_
             (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
             THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-   -  A copy of the header-only library `delaunator-cpp <https://github.com/delfrrr/delaunator-cpp>`__ is located in `src/thirdparty/delaunator.hpp <https://github.com/cdiddens/pyoomph/blob/main/src/thirdparty/delaunator.hpp>`__, `[MIT license] <https://github.com/delfrrr/delaunator-cpp/blob/master/LICENSE>`__:
+   -  A copy of the header-only library `delaunator-cpp <https://github.com/delfrrr/delaunator-cpp>`__ is located in `src/thirdparty/delaunator.hpp <https://github.com/pyoomph/pyoomph/blob/main/src/thirdparty/delaunator.hpp>`__, `[MIT license] <https://github.com/delfrrr/delaunator-cpp/blob/master/LICENSE>`__:
 
       .. container:: licensebox
 
@@ -92,13 +92,13 @@ A `copy of the license <https://github.com/cdiddens/pyoomph/blob/main/COPYING>`_
             OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
             SOFTWARE.
 
-   -  The file `src/pyginacstruct.hpp <https://github.com/cdiddens/pyoomph/blob/main/src/pyginacstruct.hpp>`__ is strongly based on the file `structure.h <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=ginac/structure.h;hb=HEAD>`__ of `GiNaC <https://www.ginac.de/>`__, `[GPL v2 or later license] <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=COPYING;hb=HEAD>`__.
+   -  The file `src/pyginacstruct.hpp <https://github.com/pyoomph/pyoomph/blob/main/src/pyginacstruct.hpp>`__ is strongly based on the file `structure.h <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=ginac/structure.h;hb=HEAD>`__ of `GiNaC <https://www.ginac.de/>`__, `[GPL v2 or later license] <https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=COPYING;hb=HEAD>`__.
 
-   -  A copy of the library `Project Nayuki/smallest enslosing circle <https://www.nayuki.io/page/smallest-enclosing-circle>`__, `[LGPL v3 or later license] <https://github.com/nayuki/Nayuki-web-published-code/blob/master/smallest-enclosing-circle/COPYING.LESSER.txt>`__ is added (after adding type specifications) to `pyoomph/utils/smallest_circle.py <https://github.com/cdiddens/pyoomph/blob/main/pyoomph/utils/smallest_circle.py>`__.
+   -  A copy of the library `Project Nayuki/smallest enslosing circle <https://www.nayuki.io/page/smallest-enclosing-circle>`__, `[LGPL v3 or later license] <https://github.com/nayuki/Nayuki-web-published-code/blob/master/smallest-enclosing-circle/COPYING.LESSER.txt>`__ is added (after adding type specifications) to `pyoomph/utils/smallest_circle.py <https://github.com/pyoomph/pyoomph/blob/main/pyoomph/utils/smallest_circle.py>`__.
 
    -  Also, when using materials or the thermodynamic activity models AIOMFAC, original UNIFAC or modified UNIFAC (Dortmund), :ref:`please cite the relevant publications <secboxunifacinfo>`.
 
-   The third-party licenses/acknowledgement files can be also found in `src/thirdparty <https://github.com/cdiddens/pyoomph/tree/main/src/thirdparty>`__.
+   The third-party licenses/acknowledgement files can be also found in `src/thirdparty <https://github.com/pyoomph/pyoomph/tree/main/src/thirdparty>`__.
 
 #. During compilation, pyoomph includes/links against or makes use of the following libraries:
 
