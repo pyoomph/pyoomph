@@ -593,13 +593,13 @@ void PyReg_Problem(py::module &m)
 			 if (suppress_writing)
 			 {
 				 std::ostringstream oss; //TODO Null stream instead
-				 if (!quiet) std::cout << "Generating element code, but do not write to any file"<< std::endl;
+				 if (!quiet) std::cout << "Generating equation C code, but do not write to any file"<< std::endl;
 				 my_element->write_code(oss);
 			 }
 			 else
 			 {
 				 std::ofstream ofs(code_trunk+".c");
-				 if (!quiet) std::cout << "Generating element code " << code_trunk << std::endl;
+				 if (!quiet) std::cout << "Generating equation C code: " << code_trunk << std::endl;
 				 my_element->write_code(ofs);
           }
 
@@ -616,7 +616,7 @@ void PyReg_Problem(py::module &m)
 
 			 if (!suppress_compilation)
 			 {
-				 if (!quiet) std::cout << "Compiling element code" << std::endl;
+				 if (!quiet) std::cout << "Compiling equation C code" << std::endl;
 				 compiler->compile(suppress_compilation,suppress_writing,quiet,extra_flags);
 			 }
 

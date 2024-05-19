@@ -2521,7 +2521,8 @@ class Problem(_pyoomph.Problem):
             azimuthal_stability (Optional[bool], optional): Flag indicating whether to set up azimuthal stability code. Defaults to None.
         """            
         if analytic_hessian:
-            self.set_analytic_hessian_products(True,use_hessian_symmetry)
+            # May not use symmetric Hessian for azimuthal stability
+            self.set_analytic_hessian_products(True,use_hessian_symmetry and not azimuthal_stability)
         else:
             self.set_analytic_hessian_products(False)
         #if azimuthal_stability:
@@ -3006,11 +3007,12 @@ class Problem(_pyoomph.Problem):
         
         last_tracking=self.get_bifurcation_tracking_mode()
         self._start_bifurcation_tracking("","",False,[],[],0.0,{})
-        self._bifurcation_tracking_parameter_name=None
+        self._bifurcation_tracking_parameter_name=None        
         if last_tracking=="azimuthal":
             self.actions_before_stationary_solve()
             self.reapply_boundary_conditions()
             self._last_bc_setting="normal"
+            self._azimuthal_mode_param_m.value=0
 
     # Assuming that Re(lambda)=0 is also stable, which is not exactly true
     def is_stable_solution(self)->bool:

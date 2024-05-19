@@ -1091,24 +1091,7 @@ namespace pyoomph
 		return res;
 	}
 
-	/*
-	void MeshTemplateElementCollection::set_element_class(BaseFiniteElementCode & cls)
-	{
-	 std::string code_trunk="./element_code";
-	 ofstream ofs(code_trunk+".c");
-	 std::cout << "Generating element code" << std::endl;
-	 cls.write_code(ofs,dim);
-	 std::cout << "Compiling element code" << std::endl;
-	 std::string lib=g_ccompiler.compile(code_trunk);
-	 std::cout << "Done" << std::endl;
-	 DynamicBulkElementCode * code=mesh_template->get_problem()->load_dynamic_bulk_element_code(lib);
-	 DynamicBulkElementInstance * code_instance=code->factory_instance();
-	// for (auto f : cls.get_elemental_to_global_field_map()) code_instance->bind_field(f.first,f.second);
-	 for (auto p : cls.get_elemental_to_global_parameter_map()) code_instance->bind_global_parameter(p.first,p.second);
-	 this->set_element_code(code_instance);
-	}
-
-	*/
+	
 	void MeshTemplateElementCollection::set_element_code(DynamicBulkElementInstance *code_inst)
 	{
 		code_instance = code_inst;

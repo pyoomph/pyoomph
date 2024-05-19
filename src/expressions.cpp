@@ -1991,7 +1991,7 @@ namespace pyoomph
 				{
 					GiNaC::GiNaCNormalSymbol se = GiNaC::ex_to<GiNaC::GiNaCNormalSymbol>(inp);
 					NormalSymbol sp = se.get_struct();
-					if (sp.expansion_mode == index)
+					if (sp.expansion_mode == index) //  || sp.is_eigenexpansion
 						return inp;
 					else
 					{

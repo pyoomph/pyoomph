@@ -258,7 +258,7 @@ namespace pyoomph
 			}
 		}
 		if (found == -1)
-			throw_runtime_error("Cannot link external data '" + name + "' since this is not required by the element code");
+			throw_runtime_error("Cannot link external data '" + name + "' since this is not required by the equation code");
 		linked_external_data[found] = ExternalDataLink(data, index);
 		linked_external_data.reindex_elemental_data();
 	}
@@ -479,70 +479,7 @@ namespace pyoomph
 		*/
 	}
 
-	/*
-	void DynamicBulkElementInstance::bind_global_parameter(const std::string & internal_name, const std::string & global_name)
-	{
 
-	 for (unsigned int i=0;i<dyn->functable->numglobal_params;i++)
-	 {
-	  if (!strcmp(internal_name.c_str(),dyn->functable->global_paramnames[i]))
-	  {
-		 const GlobalParameterDescriptor * desc=dyn->problem->assert_global_parameter(global_name);
-		 local_global_parameter_to_global_index[i]=desc->get_global_index();
-		 return;
-	  }
-	 }
-	 throw_runtime_error("Internal parameter "+internal_name+" not found in element code");
-	}
-	*/
-	/*
-	void DynamicBulkElementInstance::bind_field(const std::string & internal_name,const std::string & global_name)
-	{
-	 for (unsigned int i=0;i<dyn->functable->numfields_C1;i++)
-	 {
-	  if (!strcmp(internal_name.c_str(),dyn->functable->fieldnames_C1[i]))
-	  {
-	   bind_field_C1(i,global_name); return;
-	  }
-	 }
-	 for (unsigned int i=0;i<dyn->functable->numfields_C2;i++)
-	 {
-	  if (!strcmp(internal_name.c_str(),dyn->functable->fieldnames_C2[i]))
-	  {
-	   bind_field_C2(i,global_name); return;
-	  }
-	 }
-	 throw_runtime_error("Internal field "+internal_name+" not found in element code");
-	}
-
-	void DynamicBulkElementInstance::bind_field(unsigned int index,std::string name,FieldSpace space)
-	{
-	 const FieldDescriptor * desc=dyn->problem->assert_field(name,space);
-	 if (space==C1)
-	 {
-		 if (index>=dyn->functable->numfields_C1) throw_runtime_error("Element code does not support a C1 field at this index");
-		 local_field_to_global_field_index_C1[index]=desc->get_global_index();
-	 }
-	 else if (space==C2)
-	 {
-		 if (index>=dyn->functable->numfields_C2) throw_runtime_error("Element code does not support a C2 field at this index");
-		 local_field_to_global_field_index_C2[index]=desc->get_global_index();
-	 }
-	 else
-	 {
-	  throw_runtime_error("unknown finite element space");
-	 }
-	}
-	*/
-
-	///////////////////////////////////////////
-
-	/*
-	MeshTemplate* Problem::get_mesh_template()
-	{
-	 return meshtemplate;
-	}
-	*/
 
 	void CustomResJacInformation::set_custom_jacobian(const std::vector<double> &Jv, const std::vector<int> &col_index, const std::vector<int> &row_start)
 	{

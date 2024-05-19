@@ -796,17 +796,22 @@ namespace pyoomph
 	{
 		return lhs.get_code() < rhs.get_code();
 	}
-
+      
 	bool operator==(const NormalSymbol &lhs, const NormalSymbol &rhs)
 	{
 		return lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian;
 	}
 	bool operator<(const NormalSymbol &lhs, const NormalSymbol &rhs)
 	{
-		return lhs.get_code() < rhs.get_code() || (lhs.get_code() == rhs.get_code() && lhs.get_direction() < rhs.get_direction()) || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() < rhs.get_derived_direction()) ||
-			   (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() < rhs.get_derived_direction2()) || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion < rhs.is_eigenexpansion) || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode < rhs.expansion_mode) ||
-			   (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian < rhs.no_jacobian) ||
-			   (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian < rhs.no_hessian);
+		return lhs.get_code() < rhs.get_code() 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() < rhs.get_direction()) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() < rhs.get_derived_direction()) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() < rhs.get_derived_direction2()) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion < rhs.is_eigenexpansion) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode < rhs.expansion_mode) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian < rhs.no_jacobian) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian < rhs.no_hessian);
 	}
 
 	bool operator<(const SubExpression &lhs, const SubExpression &rhs)
@@ -7389,6 +7394,7 @@ namespace GiNaC
 			const auto &femprint = dynamic_cast<const print_csrc_FEM &>(c);
 			if (femprint.FEM_opts->for_code)
 			{
+			   c.s << "/* EIGEX: " << sp.is_eigenexpansion << " NOJA " << sp.no_jacobian << " NOHESS " << sp.no_hessian << "*/" << std::endl;
 				if (sp.is_eigenexpansion)
 				{
 					c.s << "NORMAL_EIGEN_EXPANSION_" + std::to_string(sp.get_direction()) + "_DERIVS_" + std::to_string(sp.get_derived_direction()) + "_" + std::to_string(sp.get_derived_direction2()) + "/*THIS SHOULD NOT HAPPEN*/";
@@ -7453,6 +7459,8 @@ namespace GiNaC
 
 			const pyoomph::NormalSymbol &sp = get_struct();
 
+//      std::cout << "ENTERING NORMAL DIFF " << sp.no_jacobian << " " << pyoomph::__derive_shapes_by_second_index <<  " " << sp.no_hessian << std::endl;
+//      std::cout << " BY WHAT " << s << std::endl;
 			if ((sp.no_jacobian && (!pyoomph::__derive_shapes_by_second_index)) || (sp.no_hessian && pyoomph::__derive_shapes_by_second_index))
 				return 0;
 
