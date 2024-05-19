@@ -614,7 +614,8 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         azimode = _pyoomph.Expression(1)
         rem_hessian_flag = _pyoomph.Expression(2)
         no_jacobian_entries_from_base_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(real_or_imag, zero,rem_jacobian_flag)
-        no_hessian_entries_from_azimuthal_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(no_jacobian_entries_from_base_mode, azimode,rem_hessian_flag)
+        #no_hessian_entries_from_azimuthal_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(no_jacobian_entries_from_base_mode, azimode,rem_hessian_flag)
+        no_hessian_entries_from_azimuthal_mode=no_jacobian_entries_from_base_mode
         return _pyoomph.GiNaC_collect_common_factors(no_hessian_entries_from_azimuthal_mode)
 
     def map_residual_on_angular_eigenproblem_real(self,residual:Expression)->Expression:

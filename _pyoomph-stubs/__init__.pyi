@@ -1599,7 +1599,7 @@ def GiNaC_double_dot(arg0: Expression, arg1: Expression) -> Expression:
     """
 def GiNaC_eval_at_expansion_mode(arg0: Expression, arg1: Expression) -> Expression:
     """
-    Expand vars and nondims in a particular domain
+    Set the mode index (base or azimuthal mode) for  vars and nondims
     """
 def GiNaC_eval_in_domain(arg0: Expression, arg1: FiniteElementCode, arg2: list[str]) -> Expression:
     """

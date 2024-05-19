@@ -980,7 +980,7 @@ void PyReg_Expressions(py::module &m)
 	m.def(
 		"GiNaC_eval_at_expansion_mode", [&](GiNaC::ex expr, GiNaC::ex index)
 		{ return 0 + pyoomph::expressions::eval_at_expansion_mode(expr, index); },
-		"Expand vars and nondims in a particular domain");
+		"Set the mode index (base or azimuthal mode) for  vars and nondims");
 
 	m.def(
 		"GiNaC_internal_function_with_element_arg", [](const std::string &id, const std::vector<GiNaC::ex> &args)
