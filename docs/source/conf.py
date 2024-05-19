@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath('../../pyoomph'))
 project = 'pyoomph'
 copyright = '2024, Christian Diddens & Duarte Rocha'
 author = 'Christian Diddens & Duarte Rocha'
-release = '0.1.0'
+release = '0.1.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
