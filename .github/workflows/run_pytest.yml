@@ -10,7 +10,8 @@ jobs:
     strategy:
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
-        os: [ubuntu-latest]
+        #os: [ubuntu-latest]
+        os: [macos-13]
 
     steps:
     - uses: actions/checkout@v4
@@ -23,8 +24,13 @@ jobs:
     - name: Install pytest and deps
       run: python -m pip install pyoomph pytest
 
-    - name: Apt install required libs
+    - name: Apt install required libs (Linux)
+      if: startsWith(matrix.os, 'ubuntu')
       run: sudo apt install libglu1-mesa libxcursor1 libopengl0
+
+    - name: Brew install required libs (Mac)
+      if: startsWith(matrix.os, 'macos')
+      run: brew install gmsh
 
     - name: Run Self test
       run: cd tests/ && python -m pyoomph check all    
