@@ -31,7 +31,7 @@ jobs:
       # TODO: Adjust the repository from testing and do not install deps before
 
     - name: Run Self test
-      run: python -m pyoomph check all    
+      run: cd tests/ && python -m pyoomph check all    
       
     - name: Run PyTest
-      run: cd tests/ && python -m pytest *.py
+      run: python -m pytest *.py
