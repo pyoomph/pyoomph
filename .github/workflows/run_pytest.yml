@@ -21,14 +21,10 @@ jobs:
          python-version: "3.12"
 
     - name: Install pytest and deps
-      run: python -m pip install pyoomph
+      run: python -m pip install pyoomph pytest
 
     - name: Apt install required libs
       run: sudo apt install libglu1-mesa libxcursor1 libopengl0
-      
-    - name: Install pyoomph
-      run: python -m pip install -i https://test.pypi.org/simple/ pyoomph --no-deps
-      # TODO: Adjust the repository from testing and do not install deps before
 
     - name: Run Self test
       run: cd tests/ && python -m pyoomph check all    
