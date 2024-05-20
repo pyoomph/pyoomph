@@ -34,5 +34,6 @@ jobs:
 #      run: brew install gmsh
 
     - name: Run Self test
+      shell: bash
       run: cd tests/ && python -m pyoomph check all && python -m pytest *.py
       
