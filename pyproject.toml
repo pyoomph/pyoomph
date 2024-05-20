@@ -1,8 +1,19 @@
 [project]
 name = "pyoomph"
-version = "0.1.1"
+version = "0.1.2"
 description = "pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC"
-dependencies = ['meshio>=5.3.4', 'pygmsh>=7.1.17', 'numpy>=1.24.4', 'scipy>=1.10.1', 'matplotlib>=3.7.5', 'mkl>=2021.4.0', 'more_itertools>=10.2.0','tccbox>=2024.3.18','setuptools>=69.5.1']
+dependencies = [
+'meshio>=5.3.4', 
+'pygmsh>=7.1.17', 
+'numpy>=1.24.4', 
+'scipy>=1.10.1', 
+'matplotlib>=3.7.5', 
+'more_itertools>=10.2.0',
+'tccbox>=2024.3.18',
+'setuptools>=69.5.1',
+'mkl>=2021.4.0; sys_platform != "darwin"',
+'mkl==2021.4.0; sys_platform == "darwin"'
+]
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [  { name="Christian Diddens", email="c.diddens@utwente.nl" },  { name="Duarte Rocha", email="d.rocha@utwente.nl" },  ]

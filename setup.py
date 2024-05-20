@@ -55,7 +55,7 @@ else:
   if no_mpi_indicator_file.exists():    
      no_mpi_indicator_file.unlink()
      
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 
 class get_pybind_include(object):
@@ -265,6 +265,7 @@ ParallelCompile("NPY_NUM_BUILD_JOBS",default=4).install()
 
 setup(
     name='pyoomph',
+    version=__version__,
 		packages=create_package_list('pyoomph')+["_pyoomph-stubs"],
     ext_modules=ext_modules,
     setup_requires=['pybind11>=2.5.0'],
