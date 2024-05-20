@@ -11,7 +11,8 @@ jobs:
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
         #os: [ubuntu-latest]
-        os: [macos-13]
+        #os: [macos-13]
+        os: [windows-latest]
 
     steps:
     - uses: actions/checkout@v4
@@ -31,10 +32,6 @@ jobs:
 #    - name: Brew install required libs (Mac)
 #      if: startsWith(matrix.os, 'macos')
 #      run: brew install gmsh
-
-    - name: Downgrade mkl
-      if: startsWith(matrix.os, 'macos')
-      run: python -m pip install mkl==2021.4.0
 
     - name: Run Self test
       run: cd tests/ && python -m pyoomph check all    
