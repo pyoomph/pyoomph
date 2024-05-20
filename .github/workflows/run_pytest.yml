@@ -28,9 +28,13 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu')
       run: sudo apt install libglu1-mesa libxcursor1 libopengl0
 
-    - name: Brew install required libs (Mac)
+#    - name: Brew install required libs (Mac)
+#      if: startsWith(matrix.os, 'macos')
+#      run: brew install gmsh
+
+    - name: Downgrade mkl
       if: startsWith(matrix.os, 'macos')
-      run: brew install gmsh
+      run: python -m pip install mkl==2021.4.0
 
     - name: Run Self test
       run: cd tests/ && python -m pyoomph check all    
