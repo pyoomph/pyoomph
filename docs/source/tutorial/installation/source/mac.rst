@@ -45,7 +45,7 @@ Before building pyoomph, we first have to make sure that additional python packa
 
 The ``python3`` command might be also ``python``, depending on the system. Be sure to use the more recent version of python.
 
-If your Mac has an M1 chip, do the following
+On Mac, make sure you have not upgraded your mkl package to the recent version, which actually crashes on Mac:
 
 .. code:: bash
 

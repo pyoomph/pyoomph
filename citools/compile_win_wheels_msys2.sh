@@ -94,7 +94,7 @@ export PYOOMPH_SHORTPYVERSION=$(echo $PYOOMPH_PYVERSION | cut -d . -f 1,2 | tr -
 export TAG=cp${PYOOMPH_SHORTPYVERSION}-win_amd64
 export WHEELTAG=cp${PYOOMPH_PYVERSION}-${TAG}
 CURRENT_PYTHON=$(readlink -f ./build/python.${PYOOMPH_PYVERSION}/tools/python.exe)
-$CURRENT_PYTHON  -m pip install wheel pybind11 setuptools
+$CURRENT_PYTHON  -m pip install wheel pybind11 setuptools --upgrade
 
 #if false; then ####TODO REMOVE####
 make -f citools/MakefileMSYS2

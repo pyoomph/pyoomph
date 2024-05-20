@@ -54,8 +54,7 @@ On Mac, ``clang`` will be used as high performance compiler. To get ``clang``, i
 
 .. warning::
 
-   If you are using a recent Mac with the M1 processor (arm64 architecture), you must potentially downgrade the package ``mkl``.
-   To do so, enter in a Rosetta 2 terminal
+   If you are using a recent Mac with the M1 processor (arm64 architecture), make sure to not upgrade the package ``mkl``. Also on Macs with an Intel processor, more recent versions can cause a crash. If you by accident upgrade your mkl package, reset it by entering (in a Rosetta 2 terminal for M1 chips):
    
    .. code:: bash
    
