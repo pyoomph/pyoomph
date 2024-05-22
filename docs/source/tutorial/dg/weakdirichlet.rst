@@ -8,29 +8,29 @@ We consider a simple Poisson equation, again implemented for both continuous and
 .. code:: python
 
    class PoissonEquations(Equations):
-   def __init__(self,f,space,alpha_DG=4):
-       super().__init__()
-       self.f=f
-       self.space=space
-       self.requires_interior_facet_terms=is_DG_space(self.space, allow_DL_and_D0=True)
-       self.alpha_DG=alpha_DG
+		def __init__(self,f,space,alpha_DG=4):
+		    super().__init__()
+		    self.f=f
+		    self.space=space
+		    self.requires_interior_facet_terms=is_DG_space(self.space, allow_DL_and_D0=True)
+		    self.alpha_DG=alpha_DG
 
-   def define_fields(self):
-        self.define_scalar_field("u",self.space)
+		def define_fields(self):
+		     self.define_scalar_field("u",self.space)
 
-   def define_residuals(self):
-       u,v=var_and_test("u")
-       # Both continuous and discontinuous spaces
-       self.add_residual(weak(grad(u),grad(v))-weak(self.f,v))
-       if is_DG_space(self.space, allow_DL_and_D0=True):
-         # Discontinuous penalization         
-         h_avg=avg(var("cartesian_element_length_h"))
-         n=var("normal") # will default to n^+ if used without any restriction in facets
+		def define_residuals(self):
+		    u,v=var_and_test("u")
+		    # Both continuous and discontinuous spaces
+		    self.add_residual(weak(grad(u),grad(v))-weak(self.f,v))
+		    if is_DG_space(self.space, allow_DL_and_D0=True):
+		      # Discontinuous penalization         
+		      h_avg=avg(var("cartesian_element_length_h"))
+		      n=var("normal") # will default to n^+ if used without any restriction in facets
 
-         facet_terms= weak(self.alpha_DG/h_avg*jump(u),jump(v)) 
-         facet_terms-=weak(jump(u)*n,avg(grad(v)))
-         facet_terms-=weak(avg(grad(u)),jump(v)*n)          
-         self.add_interior_facet_residual(facet_terms)
+		      facet_terms= weak(self.alpha_DG/h_avg*jump(u),jump(v)) 
+		      facet_terms-=weak(jump(u)*n,avg(grad(v)))
+		      facet_terms-=weak(avg(grad(u)),jump(v)*n)          
+		      self.add_interior_facet_residual(facet_terms)
 
 However, we now also add a special function which gives the correct weak terms for weakly imposed Dirichlet boundary conditions. This function must return the weak terms that are necessary to enforce some particular Dirichlet value. These are essentially the same as the facet terms, however, instead of :py:func:`~pyoomph.expressions.generic.jump`, we just take the current value on the boundary minus the prescribed value. The function :py:func:`~pyoomph.expressions.generic.avg` is just replaced by the evaluation of the variable on the boundary. In case we do not provide such a field or the field is continuous, we just return ``None``, advising the :py:class:`~pyoomph.meshes.bcs.DirichletBC` to impose the value strongy:
 

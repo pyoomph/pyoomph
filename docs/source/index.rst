@@ -9,6 +9,14 @@
 Welcome to pyoomph's documentation!
 ===================================
 
+.. only:: html
+	
+   .. image:: _static/pyoomph_logo_full.png
+      :width: 300
+      :alt: Pyoomph Logo
+      :align: center
+
+
 pyoomph is a python multi-physics finite element framework based on `oomph-lib <http://www.oomph-lib.org>`__ and `GiNaC <http://www.ginac.de>`__.
 
 pyoomph lets you assemble quite arbitrary multi-physics and multi-domain problems directly in python, including custom equations, constraints and moving meshes.
@@ -16,7 +24,7 @@ By generating symbolically derived C code, the performance of pyoomph is on par 
 
 You can either browse the tutorial online or download a `PDF version <https://pyoomph.readthedocs.io/_/downloads/en/latest/pdf/>`__.
 
-The source code of pyoomph is hosted on `Github <https://github.com/pyoomph/pyoomph>`__.
+The source code of pyoomph is hosted on `Github <https://github.com/pyoomph/pyoomph>`__ and you can find its homepage at `pyoomph.github.io <https://pyoomph.github.io>`__.
 
 
 Tutorial
