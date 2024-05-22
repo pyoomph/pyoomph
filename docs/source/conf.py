@@ -17,6 +17,8 @@ release = '0.1.2'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
+html_static_path = ["_static"]
+
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
@@ -29,8 +31,19 @@ extensions = [
     'sphinx.ext.todo',
     "sphinx.ext.autosectionlabel",
     'sphinxcontrib.bibtex',
+    'sphinx_favicon'
     # 'sphinx.ext.imgmath',
     ]
+
+favicons = [
+    {"href": "favicon.ico"},
+    {"href": "android-chrome-192x192.png"},      
+    {"href": "android-chrome-512x512.png"},
+    {
+        "rel": "apple-touch-icon",
+        "href": "apple-touch-icon.png",
+    },
+]
 
 if False:
 	extensions+=[    "sphinx_codeautolink"]
@@ -70,7 +83,7 @@ latex_documents = [ ('latex_tutorial', 'pyoomph_tutorial.tex', 'Pyoomph Tutorial
 latex_domain_indices = False
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
-#latex_logo = './_static/banner-large.png'
+latex_logo = './_static/pyoomph_logo_full.pdf'
 
 # For "manual" documents, if this is true, then toplevel headings are parts,
 # not chapters.
