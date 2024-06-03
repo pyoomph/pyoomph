@@ -28,6 +28,7 @@ import os,json
 
 
 import matplotlib
+import matplotlib.pyplot
 from ..generic.codegen import Equations
 
 from ..meshes.mesh import AnySpatialMesh
@@ -1457,7 +1458,7 @@ class MatplotLibColorbar(MatplotLibOverlayBase):
                     self._vmin=-self._vmax
 
     def discrete_cmap(self, N:Union[int,Sequence[float]], base_cmap:Optional[str]=None)->matplotlib.colors.LinearSegmentedColormap:
-        base = plt.cm.get_cmap(base_cmap) #type:ignore
+        base = matplotlib.pyplot.get_cmap(base_cmap) #type:ignore
         if isinstance(N,int):
             N=numpy.linspace(0, 1, N) #type:ignore
             cmap_name = base.name + str(N) #type:ignore
