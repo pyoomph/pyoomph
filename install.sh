@@ -44,7 +44,7 @@ cd $(readlink -f $(dirname $0))
 if which ccache &>/dev/null; then 
 NPY_NUM_BUILD_JOBS=4 CXX="$MPICCBINARY -pthread -g3 -shared -Wl,-O1 -Wl,-Bsymbolic-functions  -Wl,-z,relro" CC="ccache $MPICCBINARY $COLOR_OUTPUT" LDSHARED="$MPICCBINARY -g3 -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro"  python3 -m pip install  -v "$@"  .  $EDITABLE_MODE || exit 1
  else
- NPY_NUM_BUILD_JOBS=4 CXX="$MPICCBINARY -pthread -g3 -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro" CC="$MPICCBINARY $COLOR_OUTPUT" LDSHARED="$MPICCBINARY -g3 -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro"  python3 -m pip install  -v "$@"  $EDITABLE_MODE || exit 1
+ NPY_NUM_BUILD_JOBS=4 CXX="$MPICCBINARY -pthread -g3 -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro" CC="$MPICCBINARY $COLOR_OUTPUT" LDSHARED="$MPICCBINARY -g3 -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro"  python3 -m pip install  -v "$@" . $EDITABLE_MODE || exit 1
  fi
 else
  if which ccache &>/dev/null; then 
