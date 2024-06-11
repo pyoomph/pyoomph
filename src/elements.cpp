@@ -12163,7 +12163,7 @@ namespace pyoomph
 		  		   }
 		  		  }
 			  }
-			  if (space=="C1TB")
+			  else if (space=="C1TB")
 			  {
 				  psi.resize(father->get_eleminfo()->nnode_C1TB);
 		  		  father->shape_at_s_C1TB(sfather, psi);				 

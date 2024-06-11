@@ -1,7 +1,7 @@
 Discontinuous Galerkin methods
 ==============================
 
-So far, the considered solutions where always approximated by shape functions which are continuous in space. One exception are the Crouxeiz-Raviart elements in :numref:`secspatialcr`, where the pressure was allowed to discontinuously jump between two elements. However, in this particular case, the pressure is just an auxiliary field enforcing the incompressibility. 
+So far, the considered solutions were always approximated by shape functions which are continuous in space. One exception are the Crouxeiz-Raviart elements in :numref:`secspatialcr`, where the pressure was allowed to discontinuously jump between two elements. However, in this particular case, the pressure is just an auxiliary field enforcing the incompressibility. 
 
 In general, any field can be approximated by a discontinuous discretization, which is can be helpful if the solution itself become (close to) discontinuous, e.g., in the case of shock waves. In this case, the standard finite element method (*Continuous Galerkin method*, CG) is not well suited to capture the solution accurately. The *Discontinuous Galerkin* (DG) method is a generalization which allows for such discontinuous solutions. The idea is to consider the solution in each element separately and to allow for discontinuities at the element interfaces. The solution is then approximated by a piecewise polynomial function which is continuous in each element but can have jumps at the element interfaces. 
 
