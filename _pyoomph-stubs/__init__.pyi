@@ -262,10 +262,10 @@ class Expression:
     def __pow__(self, arg0: int) -> Expression:
         ...
     @typing.overload
-    def __pow__(self, arg0: Expression) -> Expression:
+    def __pow__(self: int, arg0: Expression) -> Expression:
         ...
     @typing.overload
-    def __pow__(self, arg0: Expression) -> Expression:
+    def __pow__(self: float, arg0: Expression) -> Expression:
         ...
     @typing.overload
     def __pow__(self, arg0: float) -> Expression:
@@ -769,7 +769,7 @@ class Mesh(OomphMesh):
         ...
     def setup_interior_boundary_elements(self, arg0: int) -> None:
         ...
-    def to_numpy(self, tesselate_tri: bool, nondimensional: bool, history_index: int = ..., discontinuous: bool = ...) -> tuple[numpy.typing.NDArray[numpy.float64], numpy.typing.NDArray[numpy.int32], numpy.typing.NDArray[numpy.int32], dict[str, int], numpy.typing.NDArray[numpy.float64], numpy.typing.NDArray[numpy.float64], dict[str, int]]:
+    def to_numpy(self, tesselate_tri: bool, nondimensional: bool, history_index: int = 0, discontinuous: bool = False) -> tuple[numpy.typing.NDArray[numpy.float64], numpy.typing.NDArray[numpy.int32], numpy.typing.NDArray[numpy.int32], dict[str, int], numpy.typing.NDArray[numpy.float64], numpy.typing.NDArray[numpy.float64], dict[str, int]]:
         ...
 class MeshTemplate:
     """
@@ -785,11 +785,11 @@ class MeshTemplate:
         """
         Adds a facet to a curved boundary so that e.g. additional nodes of refined meshes will be exactly on this curve
         """
-    def add_node(self, x: float, y: float = ..., z: float = ...) -> int:
+    def add_node(self, x: float, y: float = 0.0, z: float = 0.0) -> int:
         """
         Adds a node at the given position. Creates overlapping nodes, if there is already a node at this position.
         """
-    def add_node_unique(self, x: float, y: float = ..., z: float = ...) -> int:
+    def add_node_unique(self, x: float, y: float = 0.0, z: float = 0.0) -> int:
         """
         Adds a node at the given position. If there is already a node at this position,no new node is created
         """
@@ -943,7 +943,7 @@ class Node(OomphData):
         ...
     def get_coordinates_on_boundary(self, arg0: int) -> list[float]:
         ...
-    def is_hanging(self, index: int = ...) -> bool:
+    def is_hanging(self, index: int = -1) -> bool:
         ...
     @typing.overload
     def is_on_boundary(self) -> bool:
@@ -1067,7 +1067,7 @@ class OomphGeneralisedElement:
         ...
     def get_opposite_interface_element(self) -> OomphGeneralisedElement:
         ...
-    def get_outline(self, lagrangian: bool = ...) -> numpy.typing.NDArray[numpy.float64]:
+    def get_outline(self, lagrangian: bool = False) -> numpy.typing.NDArray[numpy.float64]:
         ...
     def get_quality_factor(self) -> float:
         ...
@@ -1285,7 +1285,7 @@ class Problem:
         """
         Returns the number of equations, i.e. degrees of freedom
         """
-    def newton_solve(self, max_adapt: int = ...) -> None:
+    def newton_solve(self, max_adapt: int = 0) -> None:
         """
         Perform a newton solve
         """
@@ -1293,7 +1293,7 @@ class Problem:
         ...
     def ntime_stepper(self) -> int:
         ...
-    def quiet(self, quiet: bool = ...) -> None:
+    def quiet(self, quiet: bool = True) -> None:
         """
         Deactivate output messages from the oomph-lib and pyoomph C++ core
         """
@@ -1305,7 +1305,7 @@ class Problem:
         ...
     def set_FD_step_used_in_get_hessian_vector_products(self, arg0: float) -> None:
         ...
-    def set_analytic_hessian_products(self, active: bool, use_symmetry: bool = ...) -> None:
+    def set_analytic_hessian_products(self, active: bool, use_symmetry: bool = False) -> None:
         ...
     def set_current_dofs(self, arg0: list[float]) -> None:
         ...
@@ -1319,13 +1319,13 @@ class Problem:
         ...
     def shift_time_values(self) -> None:
         ...
-    def steady_newton_solve(self, max_adapt: int = ...) -> None:
+    def steady_newton_solve(self, max_adapt: int = 0) -> None:
         """
         Perform a steady newton solve
         """
     def time_pt(self) -> Time:
         ...
-    def time_stepper_pt(self, i: int = ...) -> TimeStepper:
+    def time_stepper_pt(self, i: int = 0) -> TimeStepper:
         ...
     def unrefine_uniformly(self) -> int:
         ...
@@ -1385,7 +1385,7 @@ class TemplatedMeshBase1d(Mesh, OomphMesh):
         ...
     def refine_selected_elements(self, arg0: list[int]) -> None:
         ...
-    def refine_uniformly(self, num: int = ...) -> None:
+    def refine_uniformly(self, num: int = 1) -> None:
         ...
     def refinement_possible(self) -> bool:
         ...
@@ -1406,7 +1406,7 @@ class TemplatedMeshBase2d(Mesh, OomphMesh):
         ...
     def refine_selected_elements(self, arg0: list[int]) -> None:
         ...
-    def refine_uniformly(self, num: int = ...) -> None:
+    def refine_uniformly(self, num: int = 1) -> None:
         ...
     def refinement_possible(self) -> bool:
         ...
@@ -1427,7 +1427,7 @@ class TemplatedMeshBase3d(Mesh, OomphMesh):
         ...
     def refine_selected_elements(self, arg0: list[int]) -> None:
         ...
-    def refine_uniformly(self, num: int = ...) -> None:
+    def refine_uniformly(self, num: int = 1) -> None:
         ...
     def refinement_possible(self) -> bool:
         ...
@@ -1480,7 +1480,7 @@ class TracerCollection:
         ...
     def _set_transfer_interface(self, arg0: int, arg1: TracerCollection) -> None:
         ...
-    def add_tracer(self, position: list[float], tag: int = ...) -> None:
+    def add_tracer(self, position: list[float], tag: int = 0) -> None:
         ...
     def get_positions(self) -> numpy.typing.NDArray[numpy.float64]:
         ...
@@ -1505,7 +1505,7 @@ def GiNaC_EvalFlag(arg0: str) -> Expression:
     """
     Evaluate a flag at runtime (e.g. moving_mesh->0,1) or similar to activate or deactivate terms based on this
     """
-def GiNaC_FakeExponentialMode(mode: Expression, dual: bool = ...) -> Expression:
+def GiNaC_FakeExponentialMode(mode: Expression, dual: bool = False) -> Expression:
     ...
 def GiNaC_Matrix(arg0: int, arg1: list[Expression]) -> Expression:
     ...
