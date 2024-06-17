@@ -226,7 +226,7 @@ class EigenMatrixSetDofsToZero(EigenMatrixManipulatorBase):
 		# new value and its new rowindex
 		#print(rowind,rowpa,rowpb,values.shape,indxs.shape)
 		if rowpa>=len(values): #type:ignore
-			raise RuntimeError("Here is still something strange")
+			#raise RuntimeError("Here is still something strange")
 			values=values.copy()
 			indxs=indxs.copy()
 			print(rowpa,len(values))

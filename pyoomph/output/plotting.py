@@ -1085,6 +1085,7 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
     start_index=None
     end_index=None
     skip_index=None
+    ignore_range_contribution=False
 
 
     def __init__(self,plotter:"MatplotlibPlotter"):
@@ -1179,7 +1180,8 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
                 self._arrows.append((xA[i],yA[i],dxxA[i],dyyA[i],datasegsA[i])) #type:ignore
                 vma=max(vma,numpy.sqrt(dxxA[i]*dxxA[i]+dyyA[i]*dyyA[i])) #type:ignore
             assert self.arrowkey is not None
-            self.arrowkey.consider_range(vma)
+            if not self.ignore_range_contribution:
+                self.arrowkey.consider_range(vma)
 
 
     def add_to_plot(self):

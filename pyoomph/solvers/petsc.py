@@ -177,8 +177,8 @@ class SlepcEigenSolver(GenericEigenSolver):
             M=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Min.indptr, Min.indices, Min.data))
             J=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Jin.indptr, Jin.indices, Jin.data))
             
-        if self.imag_contribution is not None:
-            raise RuntimeError("Cannot have imaginary matrix contributions yet here")
+        #if self.imag_contribution is not None:
+        #    raise RuntimeError("Cannot have imaginary matrix contributions yet here")
 #        for manip in self.matrix_manipulators:
 #            raise RuntimeError("Cannot have MatrixManipulators yet here: "+str(manip))
             #J, M = manip.apply_on_J_and_M(self, J, M)
