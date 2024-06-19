@@ -1086,6 +1086,7 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
     end_index=None
     skip_index=None
     ignore_range_contribution=False
+    skip_outside=False
 
 
     def __init__(self,plotter:"MatplotlibPlotter"):
@@ -1177,6 +1178,8 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
 
             vma:float=0
             for i in range(len(xA)): #Each point
+                if self.skip_outside and (xA[i] < self.plotter.xmin or xA[i] > self.plotter.xmax or yA[i] < self.plotter.ymin or yA[i] > self.plotter.ymax):
+                    continue
                 self._arrows.append((xA[i],yA[i],dxxA[i],dyyA[i],datasegsA[i])) #type:ignore
                 vma=max(vma,numpy.sqrt(dxxA[i]*dxxA[i]+dyyA[i]*dyyA[i])) #type:ignore
             assert self.arrowkey is not None
@@ -1681,7 +1684,9 @@ class MatplotLibScaleBar(MatplotLibOverlayBase):
         if (not isinstance(ss,int)) and (not isinstance(ss,float)):
             #Assuming meter
             lstr = "{:.8g} m".format(reallength)
-            if reallength < 1e-4:
+            if reallength < 1e-6:
+                lstr = "{:.8g} nm".format(reallength * 1000 * 1000 * 1000)
+            elif reallength < 1e-4:
                 lstr = "{:.8g} um".format(reallength * 1000 * 1000)
             elif reallength < 1e-2:
                 lstr = "{:.8g} mm".format(reallength * 1000)
