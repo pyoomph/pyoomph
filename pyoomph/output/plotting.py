@@ -153,15 +153,16 @@ class PlotTransformShift(PlotTransform):
         self.offset:NPFloatArray=numpy.array([offset_x,offset_y]) #type:ignore
 
     def apply(self,coordinates:NPFloatArray,values:Optional[NPFloatArray])->Tuple[NPFloatArray,NPFloatArray]:
-        return numpy.transpose(numpy.transpose(numpy.array(coordinates))+self.offset),numpy.array(values), NPFloatArray #type:ignore
+        return numpy.transpose(numpy.transpose(numpy.array(coordinates))+self.offset),numpy.array(values) #type:ignore
 
 
 class PlotTransformMirror(PlotTransform):
-    def __init__(self,x:bool=False,y:bool=False,z:bool=False,tensor_transform:Optional[Callable[[NPFloatArray],NPFloatArray]]=None):
+    def __init__(self,x:bool=False,y:bool=False,z:bool=False,tensor_transform:Optional[Callable[[NPFloatArray],NPFloatArray]]=None,offset_x:Optional[float]=None,offset_y:Optional[float]=None):
         super(PlotTransformMirror, self).__init__()
         self.mirror_x=x
         self.mirror_y = y
         self.mirror_z = z
+        self.offset_x,self.offset_y=offset_x,offset_y
         self.tensor_transform=tensor_transform
 
     def get_mirror(self):
@@ -198,8 +199,11 @@ class PlotTransformMirror(PlotTransform):
                 else:
                     values=self.tensor_transform(values.copy())
             
-   
-        return numpy.array(cs),numpy.array(values) #type:ignore
+        if self.offset_x is not None or self.offset_y is not None:
+            offset=numpy.array([self.offset_x or 0,self.offset_y or 0])
+            return numpy.transpose(numpy.transpose(numpy.array(cs))+offset),numpy.array(values) #type:ignore
+        else:
+            return numpy.array(cs),numpy.array(values) #type:ignore
 
 class PlotTransformRotate90(PlotTransform):
     def __init__(self, mode:int=1,mirror_x:bool=False, mirror_y:bool=False, mirror_z:bool=False):
@@ -1085,6 +1089,8 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
     start_index=None
     end_index=None
     skip_index=None
+    ignore_range_contribution=False
+    skip_outside=False
 
 
     def __init__(self,plotter:"MatplotlibPlotter"):
@@ -1176,10 +1182,13 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
 
             vma:float=0
             for i in range(len(xA)): #Each point
+                if self.skip_outside and (xA[i] < self.plotter.xmin or xA[i] > self.plotter.xmax or yA[i] < self.plotter.ymin or yA[i] > self.plotter.ymax):
+                    continue
                 self._arrows.append((xA[i],yA[i],dxxA[i],dyyA[i],datasegsA[i])) #type:ignore
                 vma=max(vma,numpy.sqrt(dxxA[i]*dxxA[i]+dyyA[i]*dyyA[i])) #type:ignore
             assert self.arrowkey is not None
-            self.arrowkey.consider_range(vma)
+            if not self.ignore_range_contribution:
+                self.arrowkey.consider_range(vma)
 
 
     def add_to_plot(self):
@@ -1679,7 +1688,9 @@ class MatplotLibScaleBar(MatplotLibOverlayBase):
         if (not isinstance(ss,int)) and (not isinstance(ss,float)):
             #Assuming meter
             lstr = "{:.8g} m".format(reallength)
-            if reallength < 1e-4:
+            if reallength < 1e-6:
+                lstr = "{:.8g} nm".format(reallength * 1000 * 1000 * 1000)
+            elif reallength < 1e-4:
                 lstr = "{:.8g} um".format(reallength * 1000 * 1000)
             elif reallength < 1e-2:
                 lstr = "{:.8g} mm".format(reallength * 1000)

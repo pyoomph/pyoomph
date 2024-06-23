@@ -416,6 +416,8 @@ class AxisymmetryBC(DirichletBC):
         if cg._coordinates_as_dofs:
             if cg.get_nodal_dimension()==2:
                 vector_fields["mesh"] = ["mesh_x","mesh_y"]  # TODO: Also theta
+            elif cg.get_nodal_dimension()==1:
+                vector_fields["mesh"] = ["mesh_x"]
             else:
                 raise RuntimeError("TODO here")
             #raise RuntimeError("ALSO mesh_phi?")

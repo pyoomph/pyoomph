@@ -375,6 +375,19 @@ void PyReg_Expressions(py::module &m)
 			 { return lh + rh; }, py::is_operator())
 		.def("__isub__", [](const GiNaC::ex &lh, const GiNaC::GiNaCGlobalParameterWrapper &rh)
 			 { return lh - rh; }, py::is_operator())
+		.def("__round__",[](const GiNaC::ex &self)
+		{
+		  try 
+			   {
+			     double res=pyoomph::expressions::eval_to_double(self);
+			     return (long int)std::round(res);			     
+			   }
+			   catch (const std::exception &e) 
+			   {
+			     std::ostringstream oss; oss<<"Cannot convert " << self << " to double for rounding";
+			     throw_runtime_error(oss.str());
+			   } 
+		})
 		// Functionalities to use e.g. numpy.sqrt on GiNaC expressions. They will be GiNaC, though
 		.def("sqrt", [](const GiNaC::ex &lh)
 			 { return GiNaC::sqrt(lh); })

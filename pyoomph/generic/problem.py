@@ -2967,7 +2967,7 @@ class Problem(_pyoomph.Problem):
         if level<0:
             raise RuntimeError("Must be >=0")
         
-        def set_level_for_mesh(mesh:AnySpatialMesh,level):            
+        def set_level_for_mesh(mesh:AnySpatialMesh,level,do_adapt:bool=True):            
             assert isinstance(mesh,MeshFromTemplate2d)            
             mesh._templatemesh.get_template()._max_refinement_level=level            
             maxref=0
@@ -2981,7 +2981,7 @@ class Problem(_pyoomph.Problem):
             if not isinstance(m,ODEStorageMesh):
                 must_unref=max(must_unref, set_level_for_mesh(m,level))
         self.max_refinement_level=level
-        if must_unref>0:
+        if must_unref>0 and do_adapt:
             with self.custom_adapt():
                 for i in range(must_unref):
                     self.adapt()

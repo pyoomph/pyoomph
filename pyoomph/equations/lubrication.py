@@ -282,7 +282,7 @@ class LubricationBulkField(Equations):
    """
       Represents the evolution of a field in the bulk of the lubrication system, e.g. temperature, concentration, etc., given by:
 
-         dh/dt + div(-h**2 * c / (2*mu) * grad(sigma) + h**3 * c / (3*mu) * grad(p)) - D * h * div(grad(c)) = 0
+         d(hc)/dt + div(-h**2 * c / (2*mu) * grad(sigma) + h**3 * c / (3*mu) * grad(p)) - D * h * div(grad(c)) = 0
       
       where h is the height of the liquid, c is the field, p is the pressure, mu is the dynamic viscosity of the liquid, sigma is the surface tension of the liquid, and D is the diffusion coefficient of the field.
 

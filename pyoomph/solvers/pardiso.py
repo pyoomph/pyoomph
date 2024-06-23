@@ -278,9 +278,30 @@ class pardisoSolver(object):
 
         self.last_mem_used_in_kb:Optional[int]=None
 
-    def update_matrix_values(self, matA:Any):
-        pass
-        # TODO
+    def update_matrix_values(self, matA:Any,mtype:int=11):
+        if self.n != matA.shape[0]:
+            return False
+        if self.mtype != mtype:
+            return False
+        
+        if len(matA.data) != len(self.a):
+            return False
+        if len(matA.indptr) != len(self.ia):
+            return False
+        if len(matA.indices) != len(self.ja):  
+            return False
+        
+        if not matA.has_sorted_indices:
+            matA.sort_indices()
+
+        self.a[:] = matA.data[:]
+        self.ia[:]=matA.indptr[:]
+        self.ja[:]=matA.indices[:]
+        
+        self._MKL_a = self.a.ctypes.data_as(self.ctypes_dtype)
+        self._MKL_ia = self.ia.ctypes.data_as(POINTER(c_int))
+        self._MKL_ja = self.ja.ctypes.data_as(POINTER(c_int))
+        return True
 
     def clear(self):        
         self.run_pardiso(phase=-1)
@@ -290,6 +311,9 @@ class pardisoSolver(object):
 
     def factor(self):
         out = self.run_pardiso(phase=12) #type:ignore
+    
+    def refactor(self):
+        out = self.run_pardiso(phase=23) #type:ignore
 
     def solve(self, rhs:Union[NPFloatArray,NPComplexArray])->Union[NPFloatArray,NPComplexArray]:
         x = self.run_pardiso(phase=33, rhs=rhs)
@@ -351,6 +375,7 @@ class PardisoSolver(GenericLinearSystemSolver):
     def __init__(self, problem:"Problem"):
         super().__init__(problem)
         self._current_pardiso = None
+        self.try_to_reuse_solver=False
 
     def set_num_threads(self,nthreads:Optional[int]):
         if nthreads is None or nthreads==0:
@@ -382,11 +407,28 @@ class PardisoSolver(GenericLinearSystemSolver):
         if op_flag == 1:
 #            print("INFO",len(values),len(rowind),len(colptr))
             A = self.get_jacobian_matrix(n,values, rowind, colptr)  # That is not optimal, of course
-            if self._current_pardiso:
-                self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed
             mode = 11
-            self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
-            self._current_pardiso.factor()
+            if self.try_to_reuse_solver:
+                if self._current_pardiso is None:    
+                    self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                    print("CREATED NEW PARDISO AND FACTOR")
+                    self._current_pardiso.factor()
+                else:
+                    if not self._current_pardiso.update_matrix_values(A):
+                        self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
+                        self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                        print("CREATED NEW PARDISO AND FACTOR")
+                        self._current_pardiso.factor()
+                    else:
+                        print("REUSE PARDISO AND REFACTOR")
+                        self._current_pardiso.iparm[3] = 63
+                        self._current_pardiso.refactor()
+                        self._current_pardiso.iparm[3] = 0
+            else:
+                if self._current_pardiso:
+                    self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
+                self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                self._current_pardiso.factor()
         elif op_flag == 2:
             self.setup_solver()
             assert self._current_pardiso is not None
