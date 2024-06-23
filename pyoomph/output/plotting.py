@@ -153,15 +153,16 @@ class PlotTransformShift(PlotTransform):
         self.offset:NPFloatArray=numpy.array([offset_x,offset_y]) #type:ignore
 
     def apply(self,coordinates:NPFloatArray,values:Optional[NPFloatArray])->Tuple[NPFloatArray,NPFloatArray]:
-        return numpy.transpose(numpy.transpose(numpy.array(coordinates))+self.offset),numpy.array(values), NPFloatArray #type:ignore
+        return numpy.transpose(numpy.transpose(numpy.array(coordinates))+self.offset),numpy.array(values) #type:ignore
 
 
 class PlotTransformMirror(PlotTransform):
-    def __init__(self,x:bool=False,y:bool=False,z:bool=False,tensor_transform:Optional[Callable[[NPFloatArray],NPFloatArray]]=None):
+    def __init__(self,x:bool=False,y:bool=False,z:bool=False,tensor_transform:Optional[Callable[[NPFloatArray],NPFloatArray]]=None,offset_x:Optional[float]=None,offset_y:Optional[float]=None):
         super(PlotTransformMirror, self).__init__()
         self.mirror_x=x
         self.mirror_y = y
         self.mirror_z = z
+        self.offset_x,self.offset_y=offset_x,offset_y
         self.tensor_transform=tensor_transform
 
     def get_mirror(self):
@@ -198,8 +199,11 @@ class PlotTransformMirror(PlotTransform):
                 else:
                     values=self.tensor_transform(values.copy())
             
-   
-        return numpy.array(cs),numpy.array(values) #type:ignore
+        if self.offset_x is not None or self.offset_y is not None:
+            offset=numpy.array([self.offset_x or 0,self.offset_y or 0])
+            return numpy.transpose(numpy.transpose(numpy.array(cs))+offset),numpy.array(values) #type:ignore
+        else:
+            return numpy.array(cs),numpy.array(values) #type:ignore
 
 class PlotTransformRotate90(PlotTransform):
     def __init__(self, mode:int=1,mirror_x:bool=False, mirror_y:bool=False, mirror_z:bool=False):

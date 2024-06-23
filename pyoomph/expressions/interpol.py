@@ -25,8 +25,8 @@
 # ========================================================================
  
  
-from .cb import CustomMathExpression
-from scipy.interpolate import interp1d,InterpolatedUnivariateSpline,SmoothBivariateSpline,RectBivariateSpline #type:ignore
+from .cb import CustomMathExpression,CustomMultiReturnExpression
+from scipy.interpolate import interp1d,InterpolatedUnivariateSpline,SmoothBivariateSpline,RectBivariateSpline,PPoly, splrep #type:ignore
 import meshio
 from  matplotlib.tri import Triangulation,LinearTriInterpolator
 from .generic import Expression
@@ -175,3 +175,70 @@ class MeshFileInterpolation2d(CustomMathExpression):
 	def eval(self, arg_array: NPFloatArray) -> float:
 		x,y=arg_array[0],arg_array[1]
 		return self.interp(x,y)
+
+
+
+
+class CSplineInterpolator(CustomMultiReturnExpression):
+    def __init__(self,arr_or_fname:Union[NPFloatArray,str],xcol:int=0,ycol:int=1,k:int=3) -> None:
+        super().__init__()
+        if isinstance(arr_or_fname,str):
+            data=numpy.loadtxt(arr_or_fname,ndmin=2)
+            self.x=data[:,xcol]
+            self.y=data[:,ycol]
+        else:
+            arr_or_fname=numpy.array(arr_or_fname)
+            self.x=data[:,xcol]
+            self.y=data[:,ycol]
+        self.k=k
+        self.tck=splrep(self.x,self.y,k=k)
+        self.ppoly=PPoly.from_spline(self.tck)
+        self.deriv_poly=self.ppoly.derivative()
+        
+    def eval(self, flag: int, arg_list: NPFloatArray, result_list: NPFloatArray, derivative_matrix: NPFloatArray) -> None:
+        result_list[0]=self.ppoly(arg_list[0])
+        if flag:
+            derivative_matrix[0]=self.deriv_poly(arg_list[0])
+            
+    def generate_c_code(self) -> str:
+        res="const double x=arg_list[0];\n"        
+        res+="const double knots[]={"+",".join(map(str,self.ppoly.x))+"};\n"
+        for m,coeff_row in enumerate(self.ppoly.c):
+            res+="const double coeffs_"+str(m)+"[]={"+",".join(map(str,coeff_row))+"};\n"
+        
+        for m,coeff_row in enumerate(self.deriv_poly.c):
+            res+="const double dcoeffs_"+str(m)+"[]={"+",".join(map(str,coeff_row))+"};\n"
+        
+
+        res+="unsigned L=0;\n"
+        res+="unsigned R="+str(len(self.x)-1)+";\n"
+        res+="unsigned m;\n"
+        res+="while (L<R)\n{\n"
+        res+="  m=((L+R)/2);\n"
+        res+="  if (x<knots[m]) R=m;\n"
+        res+="  else if (x>=knots[m+1]) L=m+1;\n"
+        res+="  else break;\n"        
+        res+="}\n"       
+        res+="result_list[0]=" 
+        for i,coeff_row in enumerate(self.ppoly.c):
+            res+="coeffs_"+str(i)+"[m]*pow(x-knots[m],"+str(self.k-i)+")"
+            if i!=len(self.ppoly.c)-1:
+                res+="+"
+        
+        res+=";\n"
+        
+        res+="if (flag)\n{\n"
+        res+="  derivative_matrix[0]="
+        for i,coeff_row in enumerate(self.deriv_poly.c):
+            res+="dcoeffs_"+str(i)+"[m]*pow(x-knots[m],"+str(self.k-1-i)+")"
+            if i!=len(self.deriv_poly.c)-1:
+                res+="+"
+        res+=";\n"
+        res+="}\n"
+        
+        return res
+        
+    def get_num_returned_scalars(self, nargs: int) -> int:
+        if nargs!=1:
+            raise ValueError("Expected 1 argument")
+        return 1

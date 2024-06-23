@@ -338,6 +338,14 @@ class FieldSplitPETSCSolver(PETSCSolver):
                 sn="/".join(sp[0:-1])
                 tmesh = self.problem.get_mesh(sn, return_None_if_not_found=True)
                 if tmesh is None:
+                    if len(sp)==2 and self.problem._meshdict.get(sp[0], None) is not None:
+                        ode=self.problem.get_ode(sp[0])
+                        ode_elem = ode._get_ODE("ODE")                        
+                        inds=ode.get_code_gen()._code.get_elemental_field_indices()
+                        exit()
+                        print(ode_elem.get_code_instance().get_elemental_field_indices())
+                        exit()
+                        raise RuntimeError("GET ODE")
                     raise RuntimeError("Cannot perform a field split for the unknown field "+n)
                 if not (sn in meshblocks.keys()):
                     meshblocks[sn]={}

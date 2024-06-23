@@ -902,6 +902,7 @@ def vector(*args:Union[ExpressionOrNum,List[ExpressionOrNum]])->Expression:
 	else:
 		vlist:List[ExpressionOrNum]=[]
 		for a in args:
+			a=0+a
 			if not isinstance(a,(_pyoomph.Expression,float,int)):
 				raise RuntimeError("Strange vector component "+str(a))
 			vlist.append(a)	
