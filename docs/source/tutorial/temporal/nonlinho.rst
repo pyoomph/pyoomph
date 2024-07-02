@@ -7,7 +7,7 @@ So far, all considered equations were linear ODEs or linear ODE systems. However
 	
 	\partial_t^2 y-\mu\left(1-y^2\right)\partial_t y+y=0\,. 
 
-Here, the parameter :math:`\mu` controls the nonlinearity. Is is obvious that a positive value of :math:`\mu` will damp the oscillation whenever :math:`y^2>1` and enhance the amplitude whenever :math:`y^2<1`. The straightforward way of implementing this equation would be again to write an equation class:
+Here, the parameter :math:`\mu` controls the nonlinearity. It is obvious that a positive value of :math:`\mu` will damp the oscillation whenever :math:`y^2>1` and enhance the amplitude whenever :math:`y^2<1`. The straightforward way of implementing this equation would be again to write an equation class:
 
 .. code:: python
 
