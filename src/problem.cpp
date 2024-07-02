@@ -745,6 +745,19 @@ namespace pyoomph
 		this->set_dofs(dofs);
 	}
 
+	void Problem::set_history_dofs(unsigned t, const std::vector<double> &inp)
+	{
+		oomph::DoubleVector dofs;
+		dofs.build(this->dof_distribution_pt(), 0.0);
+		if (inp.size() != this->ndof())
+			throw_runtime_error("Mismatch in dof vector size");
+		if (t>=this->time_stepper_pt()->ntstorage()) 
+		        throw_runtime_error("Wrong history offset");
+		for (unsigned int i = 0; i < this->ndof(); i++)
+			dofs[i] = inp[i];
+		this->set_dofs(t, dofs);
+	}
+
 	std::vector<double> Problem::get_current_pinned_values(bool with_pos)
 	{
 		std::vector<double> res;
