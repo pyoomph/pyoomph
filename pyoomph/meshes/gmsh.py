@@ -261,7 +261,7 @@ def generate_mesh_to_file(geom:pygmsh.geo.Geometry, outdir:str, trunk:str, meshe
         
     if mesher:
         for n,v in mesher.gmsh_options.items():
-            print("SETTING",n,v,"FOR",mesher,"IN",mesher.gmsh_options,"IN",mesher.gmsh_options.items())
+            #print("SETTING",n,v,"FOR",mesher,"IN",mesher.gmsh_options,"IN",mesher.gmsh_options.items())
             gmsh.option.setNumber(n,v) #type:ignore
         
     gmsh.write(os.path.join(outdir, trunk + ".geo_unrolled")) #type:ignore

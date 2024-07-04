@@ -268,6 +268,7 @@ namespace pyoomph
     virtual std::vector<double> get_history_dofs(unsigned t);
     virtual std::vector<double> get_current_pinned_values(bool with_pos);
     virtual void set_current_dofs(const std::vector<double> &inp);
+    virtual void set_history_dofs(unsigned t, const std::vector<double> &inp);
     virtual void set_current_pinned_values(const std::vector<double> &inp,bool with_pos);
     virtual bool &always_take_one_newton_step() { return Always_take_one_newton_step; }
     virtual bool get_Keep_temporal_error_below_tolerance() { return Keep_temporal_error_below_tolerance; }

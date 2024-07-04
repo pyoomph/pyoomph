@@ -1150,8 +1150,8 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
                 interflengths:NPFloatArray = numpy.array(interflengthsL)  #type:ignore
                 splineorder = 2
                 if len(x) < splineorder:
-                    splineorder = len(x)
-                if not numpy.all(numpy.lib.diff(interflengths) > 0.0): #type:ignore
+                    splineorder = len(x)                
+                if not numpy.all(numpy.diff(interflengths) > 0.0): #type:ignore
                     for x,y,l in zip(x,y,interflengths):  #type:ignore
                         print(x,y,l)
                     raise ValueError('x must be strictly increasing')
