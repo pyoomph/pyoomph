@@ -71,6 +71,10 @@ class CustomAssemblyBase:
         raise RuntimeError("Must be implemented")
         pass
 
+    # Optionally: Return mass and jacobian matrices of the last step, can be used e.g. for Lyapunov exponent calculation
+    def get_last_mass_and_jacobian_matrices(self)->Tuple[Optional[csr_matrix],Optional[csr_matrix]]:
+        return None,None
+        
 
 
 class FixedMeshMaxQuadraticNonlinearAssembly(CustomAssemblyBase):
@@ -110,7 +114,8 @@ class FixedMeshMaxQuadraticNonlinearAssembly(CustomAssemblyBase):
         self._cache_at_fixed_parameters=cache_at_fixed_parameters
         self._param_values:Dict[str,float]={} # Parameter values at cache assembly 
         self._param_contribs:Dict[str,Tuple[NPFloatArray,csr_matrix,csr_matrix]] # Parameter contributions R,J,M
-
+        self._lastMatM:Optional[csr_matrix]=None
+        self._lastMatJ:Optional[csr_matrix]=None
 
     def invalidate_time_history(self)->None:
         """Since obtaining the history dofs takes some time, we store them in a ring buffer. This routine clears the buffer
@@ -335,4 +340,10 @@ class FixedMeshMaxQuadraticNonlinearAssembly(CustomAssemblyBase):
         else:                        
             matJ+=half_H_times_dof0 #type:ignore
             #t1=time.time(); print("Mat asm: "+str(t1-t0)); t0=t1
+            self._lastMatJ=matJ
+            self._lastMatM=matM
             return residual,matJ #type:ignore
+
+
+    def get_last_mass_and_jacobian_matrices(self)->Tuple[Optional[csr_matrix],Optional[csr_matrix]]:
+        return self._lastMatM,self._lastMatJ

@@ -1268,6 +1268,10 @@ class Problem(_pyoomph.Problem):
         else:
             self.use_custom_residual_jacobian=False
 
+    def get_custom_assembler(self) -> Optional["CustomAssemblyBase"]:
+        return self._custom_assembler
+    
+
     def get_custom_residuals_jacobian(self, info:_pyoomph.CustomResJacInfo) -> None:
         if self._custom_assembler is None:
             raise RuntimeError("If you set use_custom_residual_jacobian=True, you must specify a custom assembler or override get_custom_residuals_jacobian yourself")
@@ -1318,7 +1322,7 @@ class Problem(_pyoomph.Problem):
         return self.get_ccompiler()
 
 
-    def __iadd__(self,other:Union[MeshTemplate,EquationTree]):
+    def __iadd__(self,other:Union[MeshTemplate,EquationTree,GenericProblemHooks,"MatplotlibPlotter"]):
         from pyoomph.output.plotting import MatplotlibPlotter
         if self._initialised:
             raise RuntimeError("Cannot add anything to a problem once it is initialized!")

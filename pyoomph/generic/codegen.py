@@ -305,6 +305,7 @@ class BaseEquations(_pyoomph.Equations):
         if isinstance(b,str):
             b=testfunction(b)
         self.add_residual(weak(a,b,dimensional_dx=dimensional_dx,coordinate_system=coordinate_system,lagrangian=lagrangian),destination=destination)
+        return self
 
     def get_dx(self, use_scaling:bool=True, lagrangian:bool=False,coordsys:Optional[_pyoomph.CustomCoordinateSystem]=None)->"Expression":
         master = self._get_combined_element()  # TODO This does not allow for dx on individual coordinate systems
