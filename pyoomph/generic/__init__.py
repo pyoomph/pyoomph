@@ -24,9 +24,9 @@
 #
 # ========================================================================
  
-from .problem import Problem
+from .problem import Problem,GenericProblemHooks
 from .codegen import Equations,CombinedEquations,ODEEquations,ScalingException,InterfaceEquations,GlobalLagrangeMultiplier,WeakContribution,ScalarField,ForceZeroOnEigenSolve
 
-__all__ = ["Problem", "Equations",
+__all__ = ["Problem", "GenericProblemHooks","Equations",
            "CombinedEquations", "ScalingException",
            "ODEEquations","InterfaceEquations","GlobalLagrangeMultiplier","WeakContribution","ScalarField","ForceZeroOnEigenSolve"]

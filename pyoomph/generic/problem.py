@@ -102,6 +102,44 @@ class _AzimuthalStabilityInfo:
         self.azimuthal_param_m_name = "azimuthal_m"
 
 
+class GenericProblemHooks:
+    """
+    A class that can be attached to a problem to call additional functions after e.g. newton solves, etc.
+    """
+    def __init__(self):
+        self._problem:Optional["Problem"]=None
+        
+    def get_problem(self)->"Problem":
+        if self._problem is None:
+            raise RuntimeError("Problem not set")
+        return self._problem
+
+    def actions_after_remeshing(self):
+        pass 
+    
+    def actions_after_change_in_global_parameter(self,param:str):
+        pass
+    
+    def actions_before_remeshing(self,active_remeshers:List["RemesherBase"]):
+        pass
+
+    def actions_after_newton_solve(self):
+        pass
+    
+    def actions_before_newton_solve(self):
+        pass
+    
+    def before_assigning_equation_numbers(self,dof_selector:Optional["_DofSelector"],before_equation_system:bool):
+        pass
+    
+    def actions_after_parameter_increase(self,param:str):
+        pass
+    
+    def actions_after_initialise(self):
+        pass
+    
+
+
 #Problem with some automatic behaviour
 class Problem(_pyoomph.Problem):
     """A class representing a problem in the pyoomph library.
@@ -249,6 +287,8 @@ class Problem(_pyoomph.Problem):
         self._last_step_was_stationary=None
         self._already_set_ic = False
         self._resetting_first_step=False
+        
+        self._hooks:List[GenericProblemHooks]=[]
         
         #: Flag indicating whether to call remeshing when necessary. Can be set to ``False`` to disable remeshing, e.g. when tracking bifurcations, it is better to check it manually invoking the remeshing method :py:meth:`remesh_handler_during_continuation` after each solve.
         self.do_call_remeshing_when_necessary:bool=True
@@ -1228,6 +1268,10 @@ class Problem(_pyoomph.Problem):
         else:
             self.use_custom_residual_jacobian=False
 
+    def get_custom_assembler(self) -> Optional["CustomAssemblyBase"]:
+        return self._custom_assembler
+    
+
     def get_custom_residuals_jacobian(self, info:_pyoomph.CustomResJacInfo) -> None:
         if self._custom_assembler is None:
             raise RuntimeError("If you set use_custom_residual_jacobian=True, you must specify a custom assembler or override get_custom_residuals_jacobian yourself")
@@ -1278,13 +1322,27 @@ class Problem(_pyoomph.Problem):
         return self.get_ccompiler()
 
 
-    def __iadd__(self,other:Union[MeshTemplate,EquationTree]):
+    def __iadd__(self,other:Union[MeshTemplate,EquationTree,GenericProblemHooks,"MatplotlibPlotter"]):
+        from pyoomph.output.plotting import MatplotlibPlotter
         if self._initialised:
             raise RuntimeError("Cannot add anything to a problem once it is initialized!")
         if isinstance(other,MeshTemplate):
             self.add_mesh(other)
         elif isinstance(other,EquationTree):
             self.additional_equations+=other
+        elif isinstance(other,MatplotlibPlotter):
+            if self.plotter is None:
+                self.plotter=other
+            elif isinstance(self.plotter,list):
+                self.plotter.append(other)
+            else:
+                self.plotter=[self.plotter,other]
+        elif isinstance(other,GenericProblemHooks):
+            if other._problem is None:
+                other._problem=self
+            elif other._problem is not self:
+                raise RuntimeError("Cannot add a problem hook to a different problem")
+            self._hooks.append(other)
         else:
             addinfo=""
             if isinstance(other,BaseEquations):
@@ -1554,19 +1612,26 @@ class Problem(_pyoomph.Problem):
                     print("PARAMETER ", varname, "SET TO",newvalue)
 
     def before_assigning_equation_numbers(self,dof_selector:Optional["_DofSelector"]):
+        for hook in self._hooks:
+            hook.before_assigning_equation_numbers(dof_selector,True)
         self._equation_system._before_assigning_equations(dof_selector) 
+        for hook in self._hooks:
+            hook.before_assigning_equation_numbers(dof_selector,False)
 
 
     def actions_before_remeshing(self,active_remeshers:List["RemesherBase"]):
-        pass
+        for hook in self._hooks:
+            hook.actions_before_remeshing(active_remeshers)
 
 
 
     def actions_after_change_in_global_parameter(self,param:str):
-        pass
+        for hook in self._hooks:
+            hook.actions_after_change_in_global_parameter(param)
 
     def actions_after_parameter_increase(self,param:str):
-        pass
+        for hook in self._hooks:
+            hook.actions_after_parameter_increase(param)
 
     def actions_after_remeshing(self):
         self._equation_system._after_remeshing() 
@@ -1574,6 +1639,8 @@ class Problem(_pyoomph.Problem):
         self.invalidate_cached_mesh_data()
         if self._custom_assembler:
             self._custom_assembler.actions_after_remeshing()
+        for hook in self._hooks:
+            hook.actions_after_remeshing()
 
 
     def actions_before_newton_solve(self):
@@ -1584,6 +1651,8 @@ class Problem(_pyoomph.Problem):
                 #print("DIRCHLET UPDATE ",submesh,submesh.get_full_name())
                 submesh.setup_Dirichlet_conditions(True)
         self._equation_system._before_newton_solve() 
+        for hook in self._hooks:
+            hook.actions_before_newton_solve()
 
     def actions_after_newton_solve(self):
         last_res=self.get_last_residual_convergence()
@@ -1600,6 +1669,8 @@ class Problem(_pyoomph.Problem):
         self.invalidate_cached_mesh_data()
         if self._custom_assembler:
             self._custom_assembler.actions_after_succesfull_newton_solve()
+        for hook in self._hooks:
+            hook.actions_after_newton_solve()
 
     def remeshing_necessary(self):        
         """
@@ -2032,6 +2103,8 @@ class Problem(_pyoomph.Problem):
             self._plotting_process=subprocess.Popen(mycmd,stdin=subprocess.PIPE,stdout=plotlog,stderr=plotlog)
             #print(self._plotting_process.)
 
+        for hook in self._hooks:
+            hook.actions_after_initialise()
 
 
     def _perform_replot(self):
