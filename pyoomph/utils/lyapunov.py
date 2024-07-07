@@ -16,11 +16,13 @@ class LyapunovExponentCalculator(GenericProblemHooks):
         N: The number of Lyapunov exponents to calculate. N>=2 will invoke Gram-Schmidt on the perturbation vectors. Defaults to 1.
         filename: The name of the output file. Defaults to "lyapunov.txt".
         relative_to_output: Whether to save the output file relative to the problem's output directory. Defaults to True.
+        store_as_eigenvectors: Whether to store the perturbation vectors as eigenvectors. Defaults to False.
     """    
-    def __init__(self,average_time:ExpressionNumOrNone=None,N:int=1,filename:str="lyapunov.txt",relative_to_output:bool=True):
+    def __init__(self,average_time:ExpressionNumOrNone=None,N:int=1,filename:str="lyapunov.txt",relative_to_output:bool=True,store_as_eigenvectors:bool=False):
         super().__init__()
         self.filename=filename
         self.relative_to_output=relative_to_output
+        self.store_as_eigenvectors=store_as_eigenvectors
         
         self.perturbation:List[NPFloatArray]=[] # Storing the last perturbation
         self.old_perturbation:Optional[List[NPFloatArray]]=None # Storing the perturbation one step before
@@ -128,4 +130,10 @@ class LyapunovExponentCalculator(GenericProblemHooks):
                     self.ringbuffer.popleft()
             self.outputfile.write(str(t)+"\t"+"\t".join(map(str,ljap_estimate))+"\n")
             self.outputfile.flush()
-    
+
+            if self.store_as_eigenvectors:
+                problem._last_eigenvalues=numpy.array(ljap_estimate)
+                problem._last_eigenvalues_m=numpy.zeros(len(ljap_estimate),dtype="int")
+                problem._last_eigenvectors=self.perturbation.copy()
+                for i,ev in enumerate(problem._last_eigenvectors):
+                    problem._last_eigenvectors[i]=ev/numpy.linalg.norm(ev)
