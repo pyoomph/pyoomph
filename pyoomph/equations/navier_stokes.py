@@ -615,16 +615,24 @@ class NavierStokesFreeSurface(InterfaceEquations):
 
             kbc_sign=1
             if static:
+                    
                 kin_bc = -dot(u, n)
+                if self.mass_transfer_rate is not None and self.mass_transfer_rate!=0:
+                    bulkeqs = self.get_parent_domain().get_equations()
+                    nsbulk = bulkeqs.get_equation_of_type(StokesEquations)
+                    assert isinstance(nsbulk,StokesEquations)
+                    assert nsbulk.mass_density is not None
+                    kin_bc+= self.mass_transfer_rate / nsbulk.mass_density
                 self.add_residual(kbc_sign*weak(kin_bc , l_test,coordinate_system=self.kinematic_bc_coordinate_sys))
                 self.add_residual(kbc_sign*weak(l , dot(n, u_test),coordinate_system=self.kinematic_bc_coordinate_sys))
             else:
-                bulkeqs = self.get_parent_domain().get_equations()
-                nsbulk = bulkeqs.get_equation_of_type(StokesEquations)
-                assert isinstance(nsbulk,StokesEquations)
+                
 
                 kin_bc = dot(partial_t(R) - u, n)
                 if self.mass_transfer_rate is not None and self.mass_transfer_rate!=0:
+                    bulkeqs = self.get_parent_domain().get_equations()
+                    nsbulk = bulkeqs.get_equation_of_type(StokesEquations)
+                    assert isinstance(nsbulk,StokesEquations)
                     assert nsbulk.mass_density is not None
                     kin_bc+= self.mass_transfer_rate / nsbulk.mass_density
                 self.add_residual(kbc_sign*weak( kin_bc , l_test,coordinate_system=self.kinematic_bc_coordinate_sys))
