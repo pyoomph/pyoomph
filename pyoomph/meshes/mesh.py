@@ -900,7 +900,7 @@ class MeshFromTemplateBase(BaseMesh):
         for b, imsh in self._interfacemeshes.items():
             if not (b in bn) and b!="_internal_facets_":
                 raise RuntimeError("Boundary " + b +
-                                   " not in mesh. Boundaries are "+str(bn))
+                                   " not in mesh '"+str(self.get_full_name())+"', i.e. '"+str(self.get_full_name())+"/"+b+"' does not exist. Boundaries of '"+str(self.get_full_name())+"' are "+str(bn))
             ieqs = imsh.get_eqtree().get_equations()
             icg = imsh.get_eqtree().get_code_gen()
             if icg._code is not None:
