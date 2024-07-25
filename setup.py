@@ -183,7 +183,8 @@ class BuildExt(build_ext):
         c_opts['unix'] += darwin_opts
         l_opts['unix'] += darwin_opts
     elif sys.platform =="linux":
-        l_opts['unix'] += ["-s"]
+    	if not debug_symbols:
+        	l_opts['unix'] += ["-s"]
                 
     if debug_symbols:
        c_opts['unix'] += ["-g3"]

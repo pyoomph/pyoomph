@@ -870,6 +870,9 @@ class BaseMixedProperties:
         self._diffusion_table:Dict[Tuple[str,str],ExpressionOrNum]={}
 
 
+    def set_passive_field(self,passive_component:str):
+        self.passive_field=passive_component
+        self.required_adv_diff_fields=self.components-{self.passive_field}
     
     @overload
     def get_pure_component(self,name:str,raise_error:Literal[False]=...)->Optional[MaterialProperties]: ...
