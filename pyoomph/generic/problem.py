@@ -222,8 +222,10 @@ class Problem(_pyoomph.Problem):
         self.max_permitted_error:float=0.001
         #: Maximum number of refinements of all meshes. 
         self.max_refinement_level:int=8
-        #: Minimum refinement level of all meshes. 
+        #: Minimum refinement level of all meshes.       
         self.min_refinement_level:int=0
+        #: Add a .gitignore with content "*" to output folders
+        self.gitignore_output:bool=True
 
         self._meshtemplate_list:List[MeshTemplate]=[]
         self._meshdict={}
@@ -1971,6 +1973,10 @@ class Problem(_pyoomph.Problem):
             f=open(keyfile,"w+")
             #TODO: Add information
             f.close()
+            if self.gitignore_output:
+                gitignore=open(os.path.join(self._outdir,".gitignore"),"w")
+                gitignore.write("*\n")
+                gitignore.close()
 
         mpi_barrier()
 
