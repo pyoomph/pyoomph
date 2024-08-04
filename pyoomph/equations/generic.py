@@ -506,8 +506,30 @@ class TemporalErrorEstimator(BaseEquations):
         self.fieldfactors = fieldfactors.copy()
 
     def define_error_estimators(self):       
-        for f, v in self.fieldfactors.items():
+        for f, v in self.fieldfactors.items():                        
             self.set_temporal_error_factor(f, v)
+            
+            
+
+class SubstituteVarByExpression(BaseEquations):
+    """
+    If not defined in this domain, all statements of ``var(name)`` in the weak formulations in this domain will be replaced by the given expressions.
+    If you e.g. use a :py:class:`~pyoomph.equations.advection_diffusion.AdvectionDiffusionEquations`, you can combine it with ``SubstituteVarByExpression(velocity=vector(ux,uy))`` to introduce a prescribed velocity.
+    
+    You can do the same on the problem level, i.e. as fallback for all equations, by the :py:class:`~pyoomph.generic.problem.Problem`-method :py:meth:`~pyoomph.generic.problem.Problem.define_named_var`. With this class, you can do it on particular domains only.
+    
+    Attributes:
+        also_on_interfaces: A flag indicating whether the substitution should also be applied on interfaces.
+        def_vars: A dictionary containing the variables and their corresponding expressions to be subsitutes.
+    """
+    def __init__(self, also_on_interfaces: bool = True, **def_vars):
+        super().__init__()
+        self.def_vars = def_vars.copy()
+        self.also_on_interfaces = also_on_interfaces
+        
+    def define_fields(self):    
+        for name, val in self.def_vars.items():
+            self.define_field_by_substitution(name, val, also_on_interface=self.also_on_interfaces)
 
 class EquationCompilationFlags(BaseEquations):
     """

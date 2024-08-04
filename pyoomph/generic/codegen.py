@@ -944,8 +944,9 @@ class BaseEquations(_pyoomph.Equations):
             if not isinstance(named_res,_pyoomph.Expression):
                 named_res=_pyoomph.Expression(named_res)
             return named_res
+        cg_dom_name=cg.get_full_name()
         raise RuntimeError(
-            "Cannot expand the field '" + name + "' since it is not defined in the equation or any parents.\nCurrent code generator is:"+str(cg)+"\nIn: "+str(self)+"\nAdditional fields are: "+", ".join(self._additional_fields.keys()))
+            "Cannot expand the field '" + name + "' since it is not defined in the equation or any parents.\nCurrent code generator is:"+str(cg)+" : " +cg_dom_name+"\nIn: "+str(self)+"\nAdditional fields are: "+", ".join(self._additional_fields.keys()))
 
     def expand_additional_testfunction(self, name:str, expression:"Expression",in_domain:_pyoomph.FiniteElementCode)->"Expression":
         master = self._get_combined_element()
