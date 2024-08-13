@@ -392,7 +392,7 @@ class MixtureLiquid12HexanediolWater(MixtureLiquidProperties):
         from pyoomph.expressions.interpol import InterpolateSpline1d,CSplineInterpolator
         import pyoomph
         data_file= os.path.join(os.path.dirname(__file__),"csv_data","surftens_water_12hexanediol_pendant.csv" if pendant_drop_method else "surftens_water_12hexanediol_ring.csv")
-        inter=CSplineInterpolator(data_file,k=spline_order) if C_interpolator else InterpolateSpline1d(data_file,k=spline_order,w=0)
+        inter=CSplineInterpolator(data_file,k=spline_order) if C_interpolator else InterpolateSpline1d(data_file,k=spline_order)
         wHD=var("massfrac_12hexanediol")        
         self.default_surface_tension["gas"]=inter(wHD)*milli*newton/meter
 
