@@ -156,11 +156,22 @@ class PotentialFlowFarField(_PotentialFlowInterfaceEquations):
         
 
 class _PotentialFlowFreeInterfaceBase(_PotentialFlowInterfaceEquations):
-    def __init__(self,*,additional_pressure:ExpressionOrNum=0,surface_tension:ExpressionNumOrNone=None,curvature_sign:int=-1):
+    def __init__(self,*,additional_pressure:ExpressionOrNum=0,surface_tension:ExpressionNumOrNone=None,curvature_sign:int=-1,total_mass_transfer_rate:Optional[ExpressionOrNum]=None):
         super().__init__()
         self.additional_pressure=additional_pressure
         self.sigma=surface_tension
         self.curvature_sign=curvature_sign
+        self.total_mass_transfer_rate=total_mass_transfer_rate
+
+    def get_potential_flow_on_opposite_side(self):
+        if self.get_opposite_parent_domain(raise_error_if_none=False) is not None:
+            oppot=self.get_opposite_parent_equations(PotentialFlow).get_equation_of_type(PotentialFlow,always_as_list=True)
+            if len(oppot)>0:
+                if len(oppot)>1:
+                    raise RuntimeError("Multiple PotentialFlow equations found in the opposite domain")
+                return oppot[0]
+        else:
+            return None
 
     def define_fields(self):
         potflow=self.get_potential_flow()
@@ -168,14 +179,28 @@ class _PotentialFlowFreeInterfaceBase(_PotentialFlowInterfaceEquations):
             self.define_vector_field("_proj_normal",potflow.space)
             curvspace="C2"
             self.define_scalar_field("_curvature",curvspace,scale=1/scale_factor("spatial"),testscale=scale_factor("spatial"))        
+        if self.get_potential_flow_on_opposite_side():
+            self.define_scalar_field("_lagr_un_connect",potflow.space,testscale=1/scale_factor("velocity"),scale=1/scale_factor("temporal"))
 
     def define_residuals(self):
-        if self.sigma is not None:
-            n=var("normal")
+        n=var("normal")
+        if self.sigma is not None:            
             pn,pn_test=var_and_test("_proj_normal")
             curv,curv_test=var_and_test("_curvature")
             self.add_weak(pn-n,pn_test)
             self.add_weak(curv-self.curvature_sign*div(pn),curv_test)
+        opposite=self.get_potential_flow_on_opposite_side()
+        if opposite:
+            l,ltest=var_and_test("_lagr_un_connect")
+            phiI,phiItest=self.get_phi_and_test(bulk=True)
+            phiO,phiOtest=var_and_test(opposite.potential_name,domain="|..")
+            #self.add_weak(l*scale_factor("spatial"),ltest)
+            self.add_weak(dot(n,grad(phiI)-grad(phiO)),ltest)
+            if self.total_mass_transfer_rate:
+                pf=self.get_potential_flow()
+                self.add_weak(-self.total_mass_transfer_rate*(1/pf.rho-1/opposite.rho),ltest)
+            self.add_weak(l,phiItest)
+            self.add_weak(-l,phiOtest)
 
     def get_laplace_pressure(self):
         if self.sigma is None:
@@ -188,10 +213,11 @@ class _PotentialFlowFreeInterfaceBase(_PotentialFlowInterfaceEquations):
         x=var("mesh")
         potflow=self.get_potential_flow()
         u=grad(var(potflow.potential_name,domain=".."))
+        j=self.total_mass_transfer_rate if self.total_mass_transfer_rate is not None else 0
         if vectorial:
-            return partial_t(x)-u # (xdot-u)=0
+            return partial_t(x)-u+j/potflow.rho*n # (xdot-u)=0
         else:
-            return dot(n,partial_t(x)-u) # n*(xdot-u)=0
+            return dot(n,partial_t(x)-u)+j/potflow.rho # n*(xdot-u)=0
     
     def get_dynamic_boundary_condition(self):
         potflow=self.get_potential_flow()
@@ -209,14 +235,22 @@ class _PotentialFlowFreeInterfaceBase(_PotentialFlowInterfaceEquations):
             n=var("normal")
             u=potflow.get_interface_velocity_for_viscous_at_interfaces(domain="..")            
             traction-=2*potflow.dynamic_viscosity*dot(n,matproduct(sym(grad(u)),n))                    
+        opposite=self.get_potential_flow_on_opposite_side()
+        if opposite:
+            phiO=var(opposite.potential_name,domain="|..")
+            inertia-=(partial_t(phiO,ALE=False)-1/2*dot(grad(phiO),grad(phiO)))*opposite.rho/potflow.rho
+            if opposite.dynamic_viscosity is not None:
+                n=var("normal")
+                u=opposite.get_interface_velocity_for_viscous_at_interfaces(domain="|..")            
+                traction+=2*opposite.dynamic_viscosity*dot(n,matproduct(sym(grad(u)),n))*(opposite.rho/potflow.rho)
         return inertia-traction/potflow.rho
 
 
 #Imposing the dyn BC by shifting the mesh so that the dynBC is fulfilled
 #Imposing the kin BC by setting a NeumannBC for phi to set the velocity to partial_t(x)*n
 class PotentialFlowFreeInterface1(_PotentialFlowFreeInterfaceBase):
-    def __init__(self, *, additional_pressure: ExpressionOrNum = 0, surface_tension: ExpressionNumOrNone = None, curvature_sign: int = -1):
-        super().__init__(additional_pressure=additional_pressure, surface_tension=surface_tension, curvature_sign=curvature_sign)
+    def __init__(self, *, additional_pressure: ExpressionOrNum = 0, surface_tension: ExpressionNumOrNone = None, curvature_sign: int = -1,total_mass_transfer_rate:Optional[ExpressionOrNum]=None):
+        super().__init__(additional_pressure=additional_pressure, surface_tension=surface_tension, curvature_sign=curvature_sign,total_mass_transfer_rate=total_mass_transfer_rate)
     def define_fields(self):
         potflow=self.get_potential_flow()
         self.define_scalar_field("_lagr_dynbc",potflow.space,scale=1/test_scale_factor("mesh"), testscale=scale_factor("temporal")/scale_factor(potflow.potential_name))
@@ -244,8 +278,8 @@ class PotentialFlowFreeInterface1(_PotentialFlowFreeInterfaceBase):
 #Imposing the kin BC by moving the mesh in normal direction
 #Imposing the dyn BC by adjusting phi
 class PotentialFlowFreeInterface2(_PotentialFlowFreeInterfaceBase):
-    def __init__(self, *, additional_pressure: ExpressionOrNum = 0, surface_tension: ExpressionNumOrNone = None, curvature_sign: int = -1):
-        super().__init__(additional_pressure=additional_pressure, surface_tension=surface_tension, curvature_sign=curvature_sign)
+    def __init__(self, *, additional_pressure: ExpressionOrNum = 0, surface_tension: ExpressionNumOrNone = None, curvature_sign: int = -1,total_mass_transfer_rate:Optional[ExpressionOrNum]=None):
+        super().__init__(additional_pressure=additional_pressure, surface_tension=surface_tension, curvature_sign=curvature_sign,total_mass_transfer_rate=total_mass_transfer_rate)
 
     def define_fields(self):
         potflow=self.get_potential_flow()
@@ -284,8 +318,8 @@ class PotentialFlowFreeInterface2(_PotentialFlowFreeInterfaceBase):
 #Imposing the kin BC by moving the mesh with the flow, normally and tangetially
 #Imposing the dyn BC by adjusting phi
 class PotentialFlowFreeInterface3(_PotentialFlowFreeInterfaceBase):
-    def __init__(self, *, additional_pressure: ExpressionOrNum = 0, surface_tension: ExpressionNumOrNone = None, curvature_sign: int = -1):
-        super().__init__(additional_pressure=additional_pressure, surface_tension=surface_tension, curvature_sign=curvature_sign)
+    def __init__(self, *, additional_pressure: ExpressionOrNum = 0, surface_tension: ExpressionNumOrNone = None, curvature_sign: int = -1,total_mass_transfer_rate:Optional[ExpressionOrNum]=None):
+        super().__init__(additional_pressure=additional_pressure, surface_tension=surface_tension, curvature_sign=curvature_sign,total_mass_transfer_rate=total_mass_transfer_rate)
 
     def define_fields(self):
         potflow=self.get_potential_flow()

@@ -1178,7 +1178,7 @@ namespace pyoomph
 		}
 
 		handled.clear();
-		os << indent << "  for (unsigned tindex=0;tindex<" << shapeinfo << "->timestepper_ntstorage;tindex++)" << std::endl;
+		os << indent << "  for (unsigned tindex=0;tindex<" << "shapeinfo->timestepper_ntstorage;tindex++)" << std::endl;
 		os << indent << "  {" << std::endl;
 
 		for (auto &s : required_shapeexps)
@@ -1203,11 +1203,11 @@ namespace pyoomph
 				std::string nodalindex = s.get_nodal_index_str(for_code);
 				if (s.dt_order == 1)
 				{
-					os << indent << "    " << varname << "[l_shape] += " << shapeinfo << "->timestepper_weights_dt_" << timedisc_scheme << "[tindex]*" << eleminfo << "->" << nds << "[l_shape][" << nodalindex << "][tindex];" << std::endl;
+					os << indent << "    " << varname << "[l_shape] += " <<  "shapeinfo->timestepper_weights_dt_" << timedisc_scheme << "[tindex]*" << eleminfo << "->" << nds << "[l_shape][" << nodalindex << "][tindex];" << std::endl;
 				}
 				else if (s.dt_order == 2)
 				{
-					os << indent << "    " << varname << "[l_shape] += " << shapeinfo << "->timestepper_weights_d2t_" << timedisc_scheme << "[tindex]*" << eleminfo << "->" << nds << "[l_shape][" << nodalindex << "][tindex];" << std::endl;
+					os << indent << "    " << varname << "[l_shape] += " <<   "shapeinfo->timestepper_weights_d2t_" << timedisc_scheme << "[tindex]*" << eleminfo << "->" << nds << "[l_shape][" << nodalindex << "][tindex];" << std::endl;
 				}
 				else
 					throw_runtime_error("TODO Higher order time derivatives");
