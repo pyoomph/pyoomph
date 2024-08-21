@@ -66,6 +66,7 @@ class DropletGeometry:
         numgiven=0
         settings:Dict[str,ExpressionNumOrNone]= {}
         self._sampled_gravity_shape:Optional[Tuple[NPFloatArray,ExpressionOrNum]]=None
+        self._sampled_gravity_shape_reference_pressure:ExpressionOrNum=None
 
         def setprop(name:str,val:ExpressionNumOrNone)->int:
             settings[name]=val
@@ -228,9 +229,11 @@ class DropletGeometry:
                 self.volume=problem.get_mesh("domain").evaluate_observable("volume")
                 self.contact_angle=problem.get_mesh("domain/right").evaluate_observable("contact_angle")
                 self.surface_area=problem.get_mesh("domain").evaluate_observable("area")
+            self._sampled_gravity_shape_reference_pressure=problem.get_ode("globals").get_value("p0")
 
         # Store it. You might require it some day...
         self._sampled_gravity_shape=cast(Tuple[NPFloatArray,ExpressionOrNum],(numpy.transpose(numpy.array([rs, zs])), spatscal)) # type:ignore
+        
         return self._sampled_gravity_shape
 
 
@@ -276,11 +279,12 @@ class DropletEvaporationHelper:
 # Tangentially, the nodes would be free to move, i.e. no unique solution possible
 # Therefore, we move the nodes tangentially on the same fraction of the arc length as initially
 class YoungLaplaceEquations(Equations):
-    def __init__(self,p_ref:ExpressionOrNum,sigma:ExpressionOrNum,additional_pressure:ExpressionOrNum=0):
+    def __init__(self,p_ref:ExpressionOrNum,sigma:ExpressionOrNum,additional_pressure:ExpressionOrNum=0,blend_factor:ExpressionOrNum=1):
         super(YoungLaplaceEquations, self).__init__()
         self.sigma=sigma  # Surface tension
         self.p_ref=p_ref # reference pressure
         self.additional_pressure=additional_pressure # e.g. gravity
+        self.blend_factor=blend_factor # Blend factor for the mesh dynamics
 
     def define_fields(self):
         self.define_vector_field("_norm","C2") # Projected normal => Required for the curvature=div(n)
@@ -302,7 +306,7 @@ class YoungLaplaceEquations(Equations):
 
         # In normal direction, we must make sure that sigma*curv+additional_pressure=p_ref
         _,xtest=var_and_test("mesh")
-        self.add_residual(weak(self.sigma*curv+self.additional_pressure-self.p_ref,dot(real_n,xtest),coordinate_system=cartesian))
+        self.add_residual(weak(self.sigma*curv+self.additional_pressure-self.p_ref,self.blend_factor*dot(real_n,xtest),coordinate_system=cartesian))
 
         # We solve the normalized arclength (Dirichlet _s=0 and _s=smax at boundaries required)
         s,stest=var_and_test("_s")
@@ -311,7 +315,7 @@ class YoungLaplaceEquations(Equations):
         # And we shift the nodes tangentially so that they keep an equidistance arclength distance. Otherwise, they would be free to move tangentially
         sdest=var("lagrangian_x") # desired position is given by the initial arclength
         tang=vector(real_n[1],-real_n[0])
-        self.add_residual(weak(s-sdest,dot(xtest,tang)*scale_factor("pressure")/scale_factor("spatial")))
+        self.add_residual(weak(s-sdest,self.blend_factor*dot(xtest,tang)*scale_factor("pressure")/scale_factor("spatial")))
 
 
 
@@ -486,7 +490,7 @@ class YoungLaplaceDropletShape(Problem):
         self.solve(max_newton_iterations=1000, globally_convergent_newton=globally_convergent_newton)
         print("RELAXING DROPLET SHAPE BY GRAVITY")
         self.go_to_param(force_factor=1, final_adaptive_solve=False)
-        print("DROPLET SHAPE RELAXED BY GRAVITY")
+        print("DROPLET SHAPE RELAXED BY GRAVITY","REFERENCE PRESSURE:",self.get_ode("globals").get_value("p0"))        
         if output_text:
             self.output_at_increased_time()
         #self.quiet(False)

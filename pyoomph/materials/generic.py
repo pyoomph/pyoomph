@@ -284,13 +284,13 @@ class MaterialProperties:
         #print(fields)
         return fields,{}
     
-    def evaluate_at_condition(self,expr:Union[ExpressionOrNum,str],cond:Dict[str,ExpressionOrNum]={},*,temperature:ExpressionNumOrNone=None,**kwargs:ExpressionNumOrNone) -> Expression:
+    def evaluate_at_condition(self,expr:Union[ExpressionOrNum,str],cond:Union[Dict[str,ExpressionOrNum],Literal["initial","IC","initial_condition"]]={},*,temperature:ExpressionNumOrNone=None,**kwargs:ExpressionNumOrNone) -> Expression:
         """
         Evaluates a property at the given condition (temperature, mass fractions, etc.). The mass fractions should be given as ``massfrac_<component_name>``, where ``<component_name>`` is the name of the component. The mole fractions should be given as ``molefrac_<component_name>``. Other typical conditions are ``temperature`` and ``absolute_pressure``.
 
         Args:
             expr: Either a property name like ``"mass_density"`` or an expression to evaluate.
-            cond: Condition to evaluate. Can be e.g. ``{"massfrac_water":0.5,"temperature":300*kelvin}`` or use the :py:attr:`initial_condition` of the material properties.
+            cond: Condition to evaluate. Can be e.g. ``{"massfrac_water":0.5,"temperature":300*kelvin}`` or use the :py:attr:`initial_condition` of the material properties (shortcuts ``"initial"``, ``"IC"`` or ``"initial_condition"``).
             temperature: Temperature to evaluate the property at. If not given, the temperature from the condition will be used.
 
         Returns:
@@ -303,6 +303,8 @@ class MaterialProperties:
                 raise ValueError("No property "+expr+" defined")
         if not isinstance(expr,_pyoomph.Expression):
             expr=_pyoomph.Expression(expr)
+        if cond in ["initial","IC","initial_condition"]:
+            cond=self.initial_condition
         mycond=cond.copy()
         for i,j in kwargs.items():
             if j is not None:
@@ -807,6 +809,26 @@ class BaseLiquidProperties(MaterialProperties):
                 problem.set_scaling(thermal_conductivity=lambda0)
                 problem.set_scaling(rho_cp=rho0 * cp0)
 
+    def get_vapor_mass_concentration(self,component:str,relative_humidity_for_far_field:ExpressionNumOrNone=None,temperature:ExpressionNumOrNone=None,at_mixture_composition:bool=True):
+        """
+        Calculates the saturation vapor concentration :math:`c_{sat}` for the given component in [kg/m^3].
+        If relative_humidity_for_far_field is set, it does not apply Raoult's law, but uses the relative humidity to calculate the vapor concentration in the far field
+        """
+        gas_constant=8.3144598*joule/(mol*kelvin)
+        M=self.get_pure_component(component).molar_mass
+        temperature_set=temperature
+        if temperature is None:
+            temperature=var("temperature")
+        if relative_humidity_for_far_field is not None:
+            psat=relative_humidity_for_far_field*self.get_vapor_pressure_for(component,pure=True)
+        else:
+            psat=self.get_vapor_pressure_for(component)
+        csat=psat/(temperature * gas_constant)*M
+        if temperature_set is not None:
+            csat=self.evaluate_at_condition(csat,{},temperature=temperature_set)
+        if at_mixture_composition:
+            csat=self.evaluate_at_condition(csat,self.initial_condition)
+        return csat
 
 
 class BaseGasProperties(MaterialProperties):
@@ -870,6 +892,9 @@ class BaseMixedProperties:
         self._diffusion_table:Dict[Tuple[str,str],ExpressionOrNum]={}
 
 
+    def set_passive_field(self,passive_component:str):
+        self.passive_field=passive_component
+        self.required_adv_diff_fields=self.components-{self.passive_field}
     
     @overload
     def get_pure_component(self,name:str,raise_error:Literal[False]=...)->Optional[MaterialProperties]: ...
@@ -1111,6 +1136,7 @@ class PureLiquidProperties(BaseLiquidProperties):
         self._output_properties["vapor_pressure_"+self.name]=lambda props : self.get_vapor_pressure_for(self.name)
 
 
+    
     def set_unifac_groups(self,grps:Dict[str,int],only_for:Optional[Union[Set[str],str]]=None):
         """
         Sets the UNIFAC groups for the pure liquid, which are relevant for the activity coefficients in mixtures.

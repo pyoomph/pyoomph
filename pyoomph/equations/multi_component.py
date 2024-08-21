@@ -356,13 +356,16 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
         kinematic_bc_coordinate_sys(Optional[BaseCoordinateSystem]): The coordinate system for the kinematic boundary condition. Default is None.
         additional_masstransfer_scale(ExpressionOrNum): Additional mass transfer scale. Default is 1.
         additional_kin_bc_test_scale(ExpressionOrNum): Additional kinematic boundary condition test scale. Default is 1.
+        static_normal_interface_motion(ExpressionOrNum): If solved on a static mesh, we can mimic the interface motion by moving it in normal direction with this rate. Default is 0.
+        static_interface_motion_testfunction(ExpressionNumOrNone): If set, we solve that the total outflux is zero by adjusting this.
+        project_interface_flux(bool): If set to True, the interface flux (kinematic BC) is projected and used for the kinematic BC. Default is False.
     """
             
         
     from ..materials.mass_transfer import MassTransferModelBase
     def __init__(self, interface_props:AnyFluidFluidInterface, *, kinbc_name:str="_kin_bc", velo_connect_prefix:str="_lagr_conn_",
                  masstransfer_model:Optional[Union[MassTransferModelBase,Literal[False]]]=None, static:Union[Literal["auto"],bool]="auto", surface_tension_theta:float=1, total_mass_loss_factor_inside:ExpressionOrNum=1,total_mass_loss_factor_outside:ExpressionOrNum=1,
-                 surface_tension_projection_space:Optional[FiniteElementSpaceEnum]=None,additional_normal_traction:ExpressionOrNum=0,surface_tension_gradient_directly:bool=False,use_highest_space_for_velo_connection:bool=False,kinematic_bc_coordinate_sys:Optional[BaseCoordinateSystem]=None,additional_masstransfer_scale=1,additional_kin_bc_test_scale=1):
+                 surface_tension_projection_space:Optional[FiniteElementSpaceEnum]=None,additional_normal_traction:ExpressionOrNum=0,surface_tension_gradient_directly:bool=False,use_highest_space_for_velo_connection:bool=False,kinematic_bc_coordinate_sys:Optional[BaseCoordinateSystem]=None,additional_masstransfer_scale=1,additional_kin_bc_test_scale=1,static_normal_interface_motion:ExpressionOrNum=0,static_interface_motion_testfunction:ExpressionNumOrNone=None,project_interface_flux:bool=False):
         super(MultiComponentNavierStokesInterface, self).__init__()
         self.interface_props = interface_props
         self.kinbc_name = kinbc_name
@@ -388,6 +391,9 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
         self.kinematic_bc_coordinate_sys=kinematic_bc_coordinate_sys
         self.additional_masstransfer_scale=additional_masstransfer_scale
         self.additional_kin_bc_test_scale=additional_kin_bc_test_scale
+        self.static_normal_interface_motion=static_normal_interface_motion
+        self.static_interface_motion_testfunction=static_interface_motion_testfunction
+        self.project_interface_flux=project_interface_flux
 
     def define_fields(self):
         # Add kinematic boundary condition multiplier
@@ -453,6 +459,9 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
 
         if self.surface_tension_projection_space is not None:
             self.define_scalar_field("_surf_tension", self.surface_tension_projection_space)
+            
+        if self.project_interface_flux:
+            self.define_scalar_field("interface_flux", "C2",scale=scale_factor("velocity"),testscale=1/scale_factor("velocity"))
 
 
     def define_scaling(self):
@@ -538,8 +547,12 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
             partial_mass_transfer_rates:Dict[str,Expression] = {}
 
         # Kinematic boundary condition
-        actual_total_transfer_by_rho_inner = dot(partial_t(R) - u, n)
+        actual_total_transfer_by_rho_inner = dot(partial_t(R)+self.static_normal_interface_motion*n - u, n)
         kin_bc =  actual_total_transfer_by_rho_inner + self.total_mass_loss_factor_inside *total_mass_transfer_rate / rho_inner
+        if self.project_interface_flux:
+            iflux,ifluxtest=var_and_test("interface_flux")
+            self.add_weak(iflux-kin_bc,ifluxtest)
+            kin_bc=iflux
         static = self.static
         if static == "auto":
             static = not self.get_current_code_generator()._coordinates_as_dofs
@@ -549,6 +562,8 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
             self.add_residual(weak(kin_bc, l_test,coordinate_system=self.kinematic_bc_coordinate_sys))        
             if static:
                 self.add_residual(-weak(l, dot(n, u_test),coordinate_system=self.kinematic_bc_coordinate_sys))
+                if self.static_interface_motion_testfunction is not None:
+                    self.add_residual(weak(kin_bc,self.static_interface_motion_testfunction,coordinate_system=self.kinematic_bc_coordinate_sys))
             else:
                 self.add_residual(weak(l, dot(n, R_test),coordinate_system=self.kinematic_bc_coordinate_sys))
 
@@ -583,6 +598,11 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
 
         
         self.add_residual(weak(self.additional_normal_traction,dot(n,u_test)))
+        if self.masstransfer_model is not None:
+            self.masstransfer_model._setup_for_code(self.get_current_code_generator(),self.interface_props)
+            vap_recoil=self.masstransfer_model.get_vapor_recoil_pressure()
+            self.masstransfer_model._clean_up_for_code()
+            self.add_residual(weak(vap_recoil,dot(n,u_test)))
 
         #total_mass_flux = actual_total_transfer_by_rho_inner * rho_inner
         if self.masstransfer_model is not None:

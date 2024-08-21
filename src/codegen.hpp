@@ -60,6 +60,7 @@ namespace pyoomph
 
    public:
       int expansion_mode = 0; // For mode expansions
+      unsigned history_step=0; // For evaluations in past
       bool no_jacobian = false;
       bool no_hessian = false;
 

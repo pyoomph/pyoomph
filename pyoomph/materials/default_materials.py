@@ -257,6 +257,10 @@ class MixtureLiquidGlycerolWater(MixtureLiquidProperties):
         self.set_diffusion_coefficient(D)
 
         self.set_activity_coefficients_by_unifac("AIOMFAC")
+        
+    
+        
+        
 
 
 @MaterialProperties.register()
@@ -383,6 +387,14 @@ class MixtureLiquid12HexanediolWater(MixtureLiquidProperties):
 
         self.set_activity_coefficients_by_unifac("AIOMFAC")
 
+
+    def use_interpolated_experimental_surface_tension(self,pendant_drop_method:bool=True,C_interpolator:bool=True,spline_order:int=3):
+        from pyoomph.expressions.interpol import InterpolateSpline1d,CSplineInterpolator
+        import pyoomph
+        data_file= os.path.join(os.path.dirname(__file__),"csv_data","surftens_water_12hexanediol_pendant.csv" if pendant_drop_method else "surftens_water_12hexanediol_ring.csv")
+        inter=CSplineInterpolator(data_file,k=spline_order) if C_interpolator else InterpolateSpline1d(data_file,k=spline_order)
+        wHD=var("massfrac_12hexanediol")        
+        self.default_surface_tension["gas"]=inter(wHD)*milli*newton/meter
 
 ############## GASES ###################
 

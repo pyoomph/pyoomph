@@ -758,7 +758,7 @@ namespace pyoomph
 
 	bool operator==(const SpatialIntegralSymbol &lhs, const SpatialIntegralSymbol &rhs)
 	{
-		return lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian;
+		return lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian && lhs.history_step == rhs.history_step;
 	}
 	bool operator<(const SpatialIntegralSymbol &lhs, const SpatialIntegralSymbol &rhs)
 	{
@@ -770,8 +770,8 @@ namespace pyoomph
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) ||
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian < rhs.no_jacobian) ||
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) ||
-			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian < rhs.no_hessian)
-
+			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian < rhs.no_hessian) || 
+			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian && lhs.history_step<rhs.history_step)
 			;
 	}
 

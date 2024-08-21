@@ -359,7 +359,7 @@ namespace pyoomph
     virtual unsigned int get_node_index_C1_to_element(const unsigned int &i) const = 0;
     virtual unsigned int get_node_index_C2_to_element(const unsigned int &i) const = 0;
     virtual unsigned int get_node_index_C2TB_to_element(const unsigned int &i) const { throw_runtime_error("Implement"); }
-    virtual unsigned int get_node_index_C1TB_to_element(const unsigned int &i) const { throw_runtime_error("Implement"); }
+    virtual unsigned int get_node_index_C1TB_to_element(const unsigned int &i) const { throw_runtime_error("Implement for meshio type index "+std::to_string(this->get_meshio_type_index())); }
 
     // Mapping nnode-> -1 if not defined here or index
     virtual int get_node_index_element_to_C1(const unsigned int &i) const { return i; }
@@ -1286,6 +1286,7 @@ namespace pyoomph
     int get_node_index_element_to_C1TB(const unsigned int &i) const override { throw_runtime_error("TODO"); }
     unsigned int get_node_index_C1_to_element(const unsigned int &i) const { return index_C1_to_element[i]; }
     unsigned int get_node_index_C2_to_element(const unsigned int &i) const { return i; }
+    unsigned int get_node_index_C1TB_to_element(const unsigned int &i) const { return index_C1_to_element[i]; }
 
     int get_num_numpy_elemental_indices(bool tesselate_tri, unsigned &nsubdiv, std::vector<std::vector<std::set<oomph::Node *>>> &add_nodes) const
     {

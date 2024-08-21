@@ -73,6 +73,8 @@ class BasePlotter:
     """
     def __init__(self,problem:"Problem",eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs"):
         self._problem:"Problem"=problem
+        # You can have more than one problem to plot, e.g. for comparison
+        self._named_problems:Dict[str,"Problem"]={"":self._problem}
         self._initialised=False
         self._output_step=0 # Will be set by the problem
         self.active=True
@@ -80,29 +82,40 @@ class BasePlotter:
         self.eigenvector=eigenvector
         #: The mode to plot eigenvectors, e.g. ``"abs"`` for the absolute value, ``"real"`` for the real part, etc.
         self.eigenmode:"MeshDataEigenModes"=eigenmode
+        
+    def add_additional_problem(self,problem:"Problem",problem_name:str,output_dir:Optional[str]=None):
+        self._named_problems[problem_name]=problem        
+        if not problem.is_initialised():
+            if output_dir is None:
+                raise RuntimeError("Initialize the additional problem first or pass the output_dir")
+            else:
+                problem._outdir=output_dir
+            problem._runmode="overwrite"
+            problem.ignore_command_line=True
+            problem.initialise()
 
-    def get_eigenvalue(self)->Optional[complex]:
+    def get_eigenvalue(self,problem_name:str="")->Optional[complex]:
         """
         When plotting eigenfunctions, it will return the eigenvalue of the current eigenvector. When plotting normal solutions, it is ``None``.
         """
         if self.eigenvector is None:
             return None
         else:
-            return self._problem._last_eigenvalues[self.eigenvector] #type:ignore
+            return self.get_problem(problem_name)._last_eigenvalues[self.eigenvector] #type:ignore
         
-    def get_azimuthal_eigenmode(self)->Optional[int]:
+    def get_azimuthal_eigenmode(self,problem_name:str="")->Optional[int]:
         if self.eigenvector is None:
             return None
-        elif self._problem._last_eigenvalues_m is None or self.eigenvector>=len(self._problem._last_eigenvalues_m):
+        elif self.get_problem(problem_name)._last_eigenvalues_m is None or self.eigenvector>=len(self.get_problem(problem_name)._last_eigenvalues_m):
             return 0
         else:
-            return self._problem._last_eigenvalues_m[self.eigenvector]
+            return self.get_problem(problem_name)._last_eigenvalues_m[self.eigenvector]
 
-    def get_problem(self):
+    def get_problem(self,problem_name:str=""):
         """
         Returns the problem on which we want to plot. Useful to access the properties of the problem, e.g. sizes.
         """
-        return self._problem
+        return self._named_problems[problem_name]
 
     def initialise(self):
         pass
@@ -298,6 +311,7 @@ class MatplotLibPart:
 
 class MatplotLibPartWithMeshData(MatplotLibPart):
     use_lagrangian_coordinates=False
+    problem_name:str=""
     def __init__(self,plotter:"MatplotlibPlotter"):
         super(MatplotLibPartWithMeshData, self).__init__(plotter)
         self.mshcache:MeshDataCacheEntry
@@ -1234,7 +1248,7 @@ class MatplotLibElementOutlines(MatplotLibPartWithMeshData):
         tr=self.transform
         mesh=self.mshcache.mesh
         if isinstance(self.plotter.eigenvector,int):
-            backup_dofs, backup_pinned = mesh.get_problem().set_eigenfunction_as_dofs(self.plotter.eigenvector, mode=self.plotter.eigenmode) #type:ignore
+            backup_dofs, backup_pinned = mesh.get_problem(self.problem_name).set_eigenfunction_as_dofs(self.plotter.eigenvector, mode=self.plotter.eigenmode) #type:ignore
 
         ss=mesh.get_output_scale("spatial")
         for n in range(mesh.nelement()):
@@ -1251,7 +1265,7 @@ class MatplotLibElementOutlines(MatplotLibPartWithMeshData):
         plt.gca().add_collection(lc) #type:ignore
 
         if isinstance(self.plotter.eigenvector,int):
-                mesh.get_problem().set_all_values_at_current_time(backup_dofs, backup_pinned,False) #type:ignore
+                mesh.get_problem(self.problem_name).set_all_values_at_current_time(backup_dofs, backup_pinned,False) #type:ignore
 
 
 class MatplotLibOverlayBase(MatplotLibPart):
@@ -2257,8 +2271,8 @@ class MatplotlibPlotter(BasePlotter):
 
 
 
-    def _get_mesh_data(self,msh:Union[str,AnySpatialMesh]):
-        return self.get_problem().get_cached_mesh_data(msh,nondimensional=False,tesselate_tri=True,eigenvector=self.eigenvector,eigenmode=self.eigenmode,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
+    def _get_mesh_data(self,msh:Union[str,AnySpatialMesh],problem_name:str=""):
+        return self.get_problem(problem_name=problem_name).get_cached_mesh_data(msh,nondimensional=False,tesselate_tri=True,eigenvector=self.eigenvector,eigenmode=self.eigenmode,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
 
 
     def _gen_transform(self,transform:Optional[Union[str,PlotTransform]]=None):
@@ -2447,17 +2461,17 @@ class MatplotlibPlotter(BasePlotter):
         assert isinstance(res,MatplotLibPolygon)
         return res
 
-    def has_bulk_field(self,field:str) -> bool:
+    def has_bulk_field(self,field:str,problem_name:str="") -> bool:
         msh = field.split("/")
         if len(msh) < 2:
             return False
         else:
             field=msh[-1]
             mshname="/".join(msh[0:-1])
-        msh=self._problem.get_mesh(mshname,return_None_if_not_found=True)
+        msh=self.get_problem(problem_name=problem_name).get_mesh(mshname,return_None_if_not_found=True)
         if msh is None:
             return False
-        cached = self._get_mesh_data(msh)
+        cached = self._get_mesh_data(msh,problem_name=problem_name)
         if not field in cached.nodal_field_inds.keys():
             # Check if it is a vector field
             beqs=msh._eqtree.get_code_gen().get_equations()
@@ -2470,7 +2484,7 @@ class MatplotlibPlotter(BasePlotter):
                 return False
         return True
 
-    def has_field(self,field:str)->bool:
+    def has_field(self,field:str,problem_name:str="")->bool:
         msh = field.split("/")        
         if len(msh)<=1:
             return False
@@ -2479,7 +2493,7 @@ class MatplotlibPlotter(BasePlotter):
         msh=self._problem.get_mesh(mshname,return_None_if_not_found=True)
         if msh is None:
             return False
-        cached = self._get_mesh_data(msh)        
+        cached = self._get_mesh_data(msh,problem_name=problem_name)        
         if not field in cached.nodal_field_inds.keys():
             # Check if it is a vector field
             beqs=msh._eqtree.get_code_gen().get_equations()
@@ -2496,7 +2510,7 @@ class MatplotlibPlotter(BasePlotter):
 
 
 
-    def add_plot(self,infield:str,mode:Optional[str]=None,transform:Union[List[Union[PlotTransform,None]],List[Union[str,None]],Union[str,PlotTransform,None]]=None,*,linecolor:Optional[str]=None,linewidths:Optional[float]=None,colorbar:Optional[MatplotLibColorbar]=None,arrowkey:Optional[MatplotLibArrowKey]=None,arrowdensity:Optional[float]=None,arrowstyle:Optional[str]=None,arrowlength:Optional[float]=None,levels:Optional[int]=None,datamap:Optional[Any]=None,axes:Optional[MatplotLibAxes]=None)->Union[MatPlotLibAddPlotReturns,List[MatPlotLibAddPlotReturns]]:
+    def add_plot(self,infield:str,mode:Optional[str]=None,transform:Union[List[Union[PlotTransform,None]],List[Union[str,None]],Union[str,PlotTransform,None]]=None,*,linecolor:Optional[str]=None,linewidths:Optional[float]=None,colorbar:Optional[MatplotLibColorbar]=None,arrowkey:Optional[MatplotLibArrowKey]=None,arrowdensity:Optional[float]=None,arrowstyle:Optional[str]=None,arrowlength:Optional[float]=None,levels:Optional[int]=None,datamap:Optional[Any]=None,axes:Optional[MatplotLibAxes]=None,problem_name:str="")->Union[MatPlotLibAddPlotReturns,List[MatPlotLibAddPlotReturns]]:
         """
         Adds a plot of the field infield (e.g. "domain/velocity") to the current figure.
         If you pass a colorbar, you will get a color plot of the field (potentially along the interface).
@@ -2524,7 +2538,7 @@ class MatplotlibPlotter(BasePlotter):
         """
    
         
-        allkwargs={"linecolor":linecolor,"linewidths":linewidths,"colorbar":colorbar,"arrowkey":arrowkey,"arrowdensity":arrowdensity,"arrowstyle":arrowstyle,"levels":levels,"datamap":datamap,"arrowlength":arrowlength,"axes":axes}
+        allkwargs={"linecolor":linecolor,"linewidths":linewidths,"colorbar":colorbar,"arrowkey":arrowkey,"arrowdensity":arrowdensity,"arrowstyle":arrowstyle,"levels":levels,"datamap":datamap,"arrowlength":arrowlength,"axes":axes,"problem_name":problem_name}
         if isinstance(transform,list) :
             res:List[MatPlotLibAddPlotReturns]=[]
             for t in transform:
@@ -2550,7 +2564,7 @@ class MatplotlibPlotter(BasePlotter):
                     mshname="/".join(msh)
                 else:
                     raise ValueError("Cannot plot the field "+str(infield))
-            elif self.get_problem().get_mesh(infield,return_None_if_not_found=True):
+            elif self.get_problem(problem_name=problem_name).get_mesh(infield,return_None_if_not_found=True):
                 field=None
                 mshname=infield
             else:
@@ -2560,7 +2574,7 @@ class MatplotlibPlotter(BasePlotter):
             if msh is None:
                 raise ValueError("Cannot find the mesh "+mshname+" in the problem to plot "+str(field))
             dim=msh.get_dimension()
-            cached=self._get_mesh_data(msh)
+            cached=self._get_mesh_data(msh,problem_name=problem_name)
             if mode is None:
                 if field is None:
                     if dim==2:
@@ -2609,7 +2623,7 @@ class MatplotlibPlotter(BasePlotter):
         part=cls(self)
         part.set_kwargs(allkwargs)
         if isinstance(part,MatplotLibPartWithMeshData):
-            part.set_mesh_data(self._get_mesh_data(msh),field,transformG) #type:ignore
+            part.set_mesh_data(self._get_mesh_data(msh,problem_name=problem_name),field,transformG) #type:ignore
         elif isinstance(part,MatplotLibTracers):
             part.set_tracer_data(field,msh,transformG) #type:ignore
         elif isinstance(part,MatplotLibImage):

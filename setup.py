@@ -183,7 +183,8 @@ class BuildExt(build_ext):
         c_opts['unix'] += darwin_opts
         l_opts['unix'] += darwin_opts
     elif sys.platform =="linux":
-        l_opts['unix'] += ["-s"]
+    	if not debug_symbols:
+        	l_opts['unix'] += ["-s"]
                 
     if debug_symbols:
        c_opts['unix'] += ["-g3"]
@@ -272,7 +273,7 @@ setup(
     cmdclass={'build_ext': BuildExt},
     zip_safe=False,
     install_requires=["meshio", "pygmsh","numpy","scipy","matplotlib","mkl","more_itertools"]+([] if no_mpi else ["mpi4py"])+([] if with_tcc else ["tccbox"]),
-    package_data={'pyoomph.jitbridge': ['*.h']+(["libtcc1.a"] if with_tcc else []), 'pyoomph' : ["py.typed"]+(["NO_MPI"] if no_mpi else []), "_pyoomph-stubs" : ["py.typed","__init__.pyi"]},
+    package_data={'pyoomph.jitbridge': ['*.h']+(["libtcc1.a"] if with_tcc else []), 'pyoomph' : ["py.typed"]+(["NO_MPI"] if no_mpi else []), "_pyoomph-stubs" : ["py.typed","__init__.pyi"],"pyoomph.materials.csv_data":["*.csv"]},
     include_package_data=True,
     
 )

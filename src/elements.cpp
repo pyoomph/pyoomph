@@ -11836,17 +11836,20 @@ namespace pyoomph
 			unsigned interf_id = codeinst->resolve_interface_dof_id(fieldname);
 			interface_ids_C1TB[j] = interf_id;
 		}
-		for (unsigned int i = 0; i < eleminfo.nnode_C1TB; i++)
+		if (functable->numfields_C1TB)
 		{
-			unsigned i_el = this->get_node_index_C1TB_to_element(i);
-			for (unsigned int j = 0; j < functable->numfields_C1TB - functable->numfields_C1TB_basebulk; j++)
-			{
-				unsigned node_index = j + functable->buffer_offset_C1TB_interf;
-				unsigned interf_id = interface_ids_C1TB[j];
-				unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
-				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
-			}
+		  for (unsigned int i = 0; i < eleminfo.nnode_C1TB; i++)
+		  {
+			  unsigned i_el = this->get_node_index_C1TB_to_element(i);
+			  for (unsigned int j = 0; j < functable->numfields_C1TB - functable->numfields_C1TB_basebulk; j++)
+			  {
+				  unsigned node_index = j + functable->buffer_offset_C1TB_interf;
+				  unsigned interf_id = interface_ids_C1TB[j];
+				  unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
+				  eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
+				  eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+			  }
+		  }
 		}
 
 
