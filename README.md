@@ -83,9 +83,9 @@ If you want to contribute by e.g. adding new equations, meshes, problems, materi
 If you encounter a bug, please also let us know at c.diddens@utwente.nl or d.rocha@utwente.nl.
 
 ## How to cite
-At the moment, just cite the following preprint for pyoomph:
+At the moment, just cite the following paper for pyoomph:
 
-> Christian Diddens and Duarte Rocha, `Bifurcation tracking on moving meshes and with consideration of azimuthal symmetry breaking instabilities`, [arXiv:2312.11416](https://arxiv.org/abs/2312.11416), (2023).
+> Christian Diddens and Duarte Rocha, `Bifurcation tracking on moving meshes and with consideration of azimuthal symmetry breaking instabilities`, J. Comput. Phys. **518**, 113306, (2024), [doi:10.1016/j.jcp.2024.113306](https://dx.doi.org/doi:10.1016/j.jcp.2024.113306).
 
 Please mention that pyoomph is based on [`oomph-lib`](http://www.oomph-lib.org) and [`GiNaC`](https://www.ginac.de/), i.e. also cite at least:
 

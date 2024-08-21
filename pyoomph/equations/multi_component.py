@@ -598,6 +598,11 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
 
         
         self.add_residual(weak(self.additional_normal_traction,dot(n,u_test)))
+        if self.masstransfer_model is not None:
+            self.masstransfer_model._setup_for_code(self.get_current_code_generator(),self.interface_props)
+            vap_recoil=self.masstransfer_model.get_vapor_recoil_pressure()
+            self.masstransfer_model._clean_up_for_code()
+            self.add_residual(weak(vap_recoil,dot(n,u_test)))
 
         #total_mass_flux = actual_total_transfer_by_rho_inner * rho_inner
         if self.masstransfer_model is not None:

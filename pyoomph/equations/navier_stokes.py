@@ -185,10 +185,10 @@ class StokesEquations(Equations):
         super().__init__()
         self.bulkforce = bulkforce  # Some arbitrary bulk-force vector
         self.gravity = gravity  # Some gravity direction, i.e. g*<unit vector of direction>
-        if mode not in {"CR","TH","C1","SV","D2TBD1","D2D1","D1D0","mini","C2DL"}:
+        if mode not in {"CR","TH","C1","C2","SV","D2TBD1","D2D1","D1D0","mini","C2DL"}:
             raise ValueError(
-                "(Navier-)Stokes equations argument 'mode' needs to be 'CR' for Crouzeix-Raviart element or 'TH' for Taylor-Hood equations. Experimentally also 'C1' possible. If the mesh is constructed correctly, 'SV' for Scott-Vogelius also works. 'mini' elements are only possible on triangles. Also, discontinuous variants 'D2D1' and 'D1D0' are currently in development, i.e. experimental")
-        self.mode:Literal["TH","CR","C1","SV","D2D1","D1D0","mini","C2DL"] = mode
+                "(Navier-)Stokes equations argument 'mode' needs to be 'CR' for Crouzeix-Raviart element or 'TH' for Taylor-Hood equations. Experimentally also 'C1' and 'C2' are possible. If the mesh is constructed correctly, 'SV' for Scott-Vogelius also works. 'mini' elements are only possible on triangles. Also, discontinuous variants 'D2D1' and 'D1D0' are currently in development, i.e. experimental")
+        self.mode:Literal["TH","CR","C1","C2","SV","D2D1","D1D0","mini","C2DL"] = mode
         self.requires_interior_facet_terms=self.mode in {"D2D1","D1D0","D2TBD1"}
         self.DG_alpha=DG_alpha
 
@@ -230,7 +230,7 @@ class StokesEquations(Equations):
         self.velocity_name=velocity_name
 
     def get_velocity_space_from_mode(self,for_interface=False):
-        velospace={"C1":"C1","CR":"C2TB","TH":"C2","SV":"C2","D2D1":"D2","D1D0":"D1","D2TBD1":"D2TB","mini":"C1TB","C2DL":"C2"}
+        velospace={"C1":"C1","CR":"C2TB","TH":"C2","SV":"C2","D2D1":"D2","D1D0":"D1","D2TBD1":"D2TB","mini":"C1TB","C2DL":"C2","C2":"C2"}
         res=velospace[self.mode]
         if for_interface:
             if res=="C2TB":
@@ -242,7 +242,7 @@ class StokesEquations(Equations):
         return res
     
     def get_pressure_space_from_mode(self):
-        pspace={"C1":"C1","CR":"DL","TH":"C1","SV":"D1","D2D1":"D1","D1D0":"D0","D2TBD1":"D1","mini":"C1","C2DL":"DL"}
+        pspace={"C1":"C1","CR":"DL","TH":"C1","SV":"D1","D2D1":"D1","D1D0":"D0","D2TBD1":"D1","mini":"C1","C2DL":"DL","C2":"C2"}
         return pspace[self.mode]
 
     def define_fields(self):

@@ -284,13 +284,13 @@ class MaterialProperties:
         #print(fields)
         return fields,{}
     
-    def evaluate_at_condition(self,expr:Union[ExpressionOrNum,str],cond:Dict[str,ExpressionOrNum]={},*,temperature:ExpressionNumOrNone=None,**kwargs:ExpressionNumOrNone) -> Expression:
+    def evaluate_at_condition(self,expr:Union[ExpressionOrNum,str],cond:Union[Dict[str,ExpressionOrNum],Literal["initial","IC","initial_condition"]]={},*,temperature:ExpressionNumOrNone=None,**kwargs:ExpressionNumOrNone) -> Expression:
         """
         Evaluates a property at the given condition (temperature, mass fractions, etc.). The mass fractions should be given as ``massfrac_<component_name>``, where ``<component_name>`` is the name of the component. The mole fractions should be given as ``molefrac_<component_name>``. Other typical conditions are ``temperature`` and ``absolute_pressure``.
 
         Args:
             expr: Either a property name like ``"mass_density"`` or an expression to evaluate.
-            cond: Condition to evaluate. Can be e.g. ``{"massfrac_water":0.5,"temperature":300*kelvin}`` or use the :py:attr:`initial_condition` of the material properties.
+            cond: Condition to evaluate. Can be e.g. ``{"massfrac_water":0.5,"temperature":300*kelvin}`` or use the :py:attr:`initial_condition` of the material properties (shortcuts ``"initial"``, ``"IC"`` or ``"initial_condition"``).
             temperature: Temperature to evaluate the property at. If not given, the temperature from the condition will be used.
 
         Returns:
@@ -303,6 +303,8 @@ class MaterialProperties:
                 raise ValueError("No property "+expr+" defined")
         if not isinstance(expr,_pyoomph.Expression):
             expr=_pyoomph.Expression(expr)
+        if cond in ["initial","IC","initial_condition"]:
+            cond=self.initial_condition
         mycond=cond.copy()
         for i,j in kwargs.items():
             if j is not None:

@@ -100,6 +100,9 @@ class MassTransferModelBase:
 
     def get_latent_heat_flux(self)->Expression:
         raise NotImplementedError("get_latent_heat_flux")
+    
+    def get_vapor_recoil_pressure(self)->Expression:
+        return Expression(0)
 
 
 # This model will project the mass transfer rates on fields
@@ -200,9 +203,23 @@ class FluidPropMassTransferModel(ProjectedMassTransferModelBase):
         self.props_inside=props_inside
         self.props_outside=props_outside
          # For terms as in Prosperetti, Plesset, Phys. Fluids 27(7), (1984)
-         # 1/2*{[(u_l-u_inter)*n]**2-[(u_g-u_inter)*n]**2}=J**3*(1/rho_g**2-1/rho_l**2)/2
+         # 1/2*{[(u_l-u_inter)*n]**2-[(u_g-u_inter)*n]**2}=J**3*(1/rho_g**2-1/rho_l**2)/2 in the heat equation
+         # And the vapor recoil pressure in the dynamic condition
         self.with_prosperetti_term=False
 
+
+    def get_vapor_recoil_pressure(self)->Expression:
+        res=super(FluidPropMassTransferModel, self).get_vapor_recoil_pressure()
+        if self.with_prosperetti_term:
+            js=self.get_all_masstransfer_rates()
+            assert self.interface_props is not None            
+            JTotal=Expression(0)
+            for _name,j in js.items():
+                JTotal+=j
+            rho_inside=self.props_inside.mass_density
+            rho_outside=evaluate_in_domain(self.props_outside.mass_density,domain=self._opposite_interface)
+            res=JTotal**2*(1/rho_outside-1/rho_inside)                
+        return res
 
     def identify_transfer_components(self) -> Set[str]:
         if self.props_outside.is_pure:

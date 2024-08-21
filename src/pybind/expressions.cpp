@@ -779,7 +779,7 @@ void PyReg_Expressions(py::module &m)
 					  }
 					  else
 					  {
-						  throw_runtime_error("Non-rational unit power");
+						  throw_runtime_error("Non-rational unit power. Please use e.g. L=V**rational_num(1,3) instead of L=V**(1/3), i.e. all exponents involving units must use rational_num since float accuracy is truncated and the corresponding units cannot be calculated then");
 					  }
 				  }
 				  occurrences[bu.first] = std::make_pair(pnumer, pdenom);
