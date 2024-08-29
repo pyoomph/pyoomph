@@ -125,6 +125,9 @@ class ConnectFieldsAtInterface(InterfaceEquations):
             self.pin_redundant_lagrange_multipliers(mesh,lname,finner,fouter)
 
         super().before_assigning_equations_postorder(mesh)
+        
+    def with_removed_overconstraining(self,*corners:str):
+        return self+sum([ConnectFieldsAtInterfaceRemoveOverconstraining(self.fields)@corner for corner in corners])
 
 
 class ConnectFieldsAtInterfaceRemoveOverconstraining(InterfaceEquations):
