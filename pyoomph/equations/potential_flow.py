@@ -357,11 +357,12 @@ class PotentialFlowFreeInterface3(_PotentialFlowFreeInterfaceBase):
 
 
 class PotentialFlowFreeInterface(_PotentialFlowInterfaceEquations):
-    def __init__(self,*,additional_pressure:ExpressionOrNum=0,surface_tension:ExpressionNumOrNone=None):
+    def __init__(self,*,additional_pressure:ExpressionOrNum=0,surface_tension:ExpressionNumOrNone=None,total_mass_transfer_rate:Optional[ExpressionOrNum]=None):
         super().__init__()
         self.additional_pressure=additional_pressure
         self.sigma=surface_tension
         self.new_version:bool=True
+        self.total_mass_transfer_rate=total_mass_transfer_rate
 
     def define_fields(self):
         potflow=self.get_potential_flow()
@@ -417,6 +418,8 @@ class PotentialFlowFreeInterface(_PotentialFlowInterfaceEquations):
             
             lkin,lkintest=var_and_test("_lagr_kinbc")
             kinbc=dot(n,partial_t(x,ALE=True)-grad(phiB))
+            if self.total_mass_transfer_rate:
+                kinbc-=self.total_mass_transfer_rate/potflow.rho
             self.add_weak(kinbc,lkintest,coordinate_system=crdsys_lagr)
             self.add_weak(lkin,dot(n,xtest),coordinate_system=crdsys_lagr)
 

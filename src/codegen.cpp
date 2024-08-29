@@ -5377,7 +5377,11 @@ namespace pyoomph
 	{
 		FiniteElementField *field = this->get_field_by_name(fieldname);
 		if (!field)
-			throw_runtime_error("Cannot set Dirichlet condition of field '" + fieldname + "', since it is not defined in the element");
+		{
+		     std::string avfields="";
+		     for (const auto & f : myfields) { if (avfields!="") avfields+=", "; avfields+=f->get_name(); }
+		    throw_runtime_error("Cannot set Dirichlet condition of field '" + fieldname + " in domain '"+this->get_full_domain_name() +"', since it is not defined in the element.\nAvailable fields:\n"+avfields);
+		}
 		if (pyoomph_verbose)
 			std::cout << "SETTING DIRICHLET COND " << expression << std::endl;
 		field->Dirichlet_condition = this->expand_initial_or_Dirichlet(fieldname, expression);
