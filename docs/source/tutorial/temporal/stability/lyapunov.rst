@@ -59,7 +59,7 @@ As an example, we will check the Lorenz system (with the default parameters :mat
 		# Run it with a rather fine time step and temporal error
 		problem.run(endtime=200,outstep=0.0025,startstep=0.01,temporal_error=0.05,maxstep=0.01)        
 
-we get a file called ``lyapunov.txt`` in the output directory. The average time is chosen to :math:`T_\text{avg}=20`, which averages over several typical frequencies of the Lorenz system. The resulting plot is the following, where we also added the long-time limit literature values by dotted lines. The sum of all Lyapunov exponents corresponds to the phase space divergence, i.e. the trace of the Jacobian, which can be obtained analyically by :math:`\sum_{i=1}^3 \lambda_i=-\sigma-1-\beta\approx 13.666`.
+we get a file called ``lyapunov.txt`` in the output directory. The average time is chosen to :math:`T_\text{avg}=20`, which averages over several typical frequencies of the Lorenz system. The resulting plot is the following, where we also added the long-time limit literature values by dotted lines. The sum of all Lyapunov exponents corresponds to the phase space divergence, i.e. the trace of the Jacobian, which can be obtained analyically by :math:`\sum_{i=1}^3 \lambda_i=-\sigma-1-\beta\approx -13.666`.
 
 ..  figure:: lorenzlyapunov.*
 	:name: figodelorenzlyapunov
@@ -68,7 +68,7 @@ we get a file called ``lyapunov.txt`` in the output directory. The average time 
 	:class: with-shadow
 	:width: 70%
 	
-	Lyapunov spectrum of the Lorenz system with :math:`\rho` and :math:`\sigma` at :math:`\beta=8/3`. Dotted lines are the long-time limit literature values.
+	Lyapunov spectrum of the Lorenz system with :math:`\sigma=10`, :math:`\rho=28` and :math:`\beta=8/3`. Dotted lines are the long-time limit literature values.
 
 
 
