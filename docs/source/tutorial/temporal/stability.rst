@@ -15,5 +15,6 @@ Obviously, in order to investigate the stability of stationary solutions of ODE 
    stability/constraints.rst
    stability/arclength.rst         
    stability/jumponbif.rst   
-   stability/biftrack.rst               
+   stability/biftrack.rst
+   stability/lyapunov.rst                                 
 

@@ -578,3 +578,13 @@ class PureSolidBorosilicate(PureSolidProperties):
         self.specific_heat_capacity = 830 * joule / (kilogram * kelvin)
         # https://www.design1st.com/Design-Resource-Library/engineering_data/MaterialPropertiesTables.pdf
         self.thermal_conductivity = 1.13 * watt / (meter * kelvin)
+
+@MaterialProperties.register()
+class PureSolidStainlessSteel(PureSolidProperties):
+    name="stainless_steel"
+    def __init__(self):
+        super().__init__()
+        self.molar_mass = 55.845 * gram / mol
+        self.mass_density = 7.8 * gram / (centi*meter)**3
+        self.thermal_conductivity=16.3*watt/(meter*kelvin)
+        self.specific_heat_capacity=0.5*kilo*joule/(kilogram*kelvin)

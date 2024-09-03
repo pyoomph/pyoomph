@@ -125,6 +125,9 @@ class ConnectFieldsAtInterface(InterfaceEquations):
             self.pin_redundant_lagrange_multipliers(mesh,lname,finner,fouter)
 
         super().before_assigning_equations_postorder(mesh)
+        
+    def with_removed_overconstraining(self,*corners:str):
+        return self+sum([ConnectFieldsAtInterfaceRemoveOverconstraining(self.fields)@corner for corner in corners])
 
 
 class ConnectFieldsAtInterfaceRemoveOverconstraining(InterfaceEquations):
@@ -256,9 +259,10 @@ class RefineMaxElementSize(Equations):
 
 # Refine an element to a level specified by a callback with the element
 class RefineAccordingToElement(Equations):
-    def __init__(self, level_func:Callable[[Element],int]):
+    def __init__(self, level_func:Callable[[Element],int],prevent_unrefinement:bool=True):
         super(RefineAccordingToElement, self).__init__()
         self.level_func = level_func
+        self.prevent_unrefinement=prevent_unrefinement
         
 
     def calculate_error_overrides(self):
@@ -275,7 +279,7 @@ class RefineAccordingToElement(Equations):
             desired_level=self.level_func(e)                 
             if currlevel<desired_level:
                 e._elemental_error_max_override=must_refine
-            elif currlevel>=desired_level:
+            elif currlevel>=desired_level and self.prevent_unrefinement:
                 e._elemental_error_max_override = max(e._elemental_error_max_override,may_not_unrefine)
 
 

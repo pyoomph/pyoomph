@@ -2859,7 +2859,7 @@ class Problem(_pyoomph.Problem):
         Args:
             reset_pars (bool, optional): Whether to reset arc length parameters. Defaults to True.
             startstep (float, optional): The initial step size for the parameter continuation. Defaults to None.
-            call_after_step (Callable[[float],None], optional): A function to call after each step. Defaults to None.
+            call_after_step (Callable[[float],None], optional): A function to call after each step. If it returns "stop", we stop any further continuation. Defaults to None.
             final_adaptive_solve (Union[bool,int], optional): Whether to perform a final adaptive solve. Defaults to False.
             max_newton_iterations (int, optional): The maximum number of Newton iterations. Defaults to None.
             **kwargs (float): The parameter name and desired value.
@@ -2906,7 +2906,8 @@ class Problem(_pyoomph.Problem):
                 if ds * (desired_val - self.get_global_parameter(pname).value) < 0:
                     ds *= -1  # Always move towards the parameter
             if call_after_step is not None:
-                call_after_step(ds)
+                if call_after_step(ds)=="stop":
+                    return
         self.get_global_parameter(pname).value = desired_val
         if self.max_refinement_level > 0 and final_adaptive_solve:
             if isinstance(final_adaptive_solve,bool) and final_adaptive_solve:

@@ -817,6 +817,11 @@ namespace pyoomph
          oss << this;
          return oss.str();
       }
+      virtual std::string get_full_domain_name()
+      {
+         if (this->get_bulk_element()) return this->get_bulk_element()->get_full_domain_name()+"/"+this->get_domain_name();
+         else return this->get_domain_name();
+      }      
       virtual void set_discontinuous_refinement_exponent(std::string field, double exponent);
       double warn_on_large_numerical_factor = 0.0;
       bool bulk_position_space_to_C1 = false;
