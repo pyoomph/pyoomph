@@ -2798,6 +2798,22 @@ class ScalarField(Equations):
         if self.residual is not None:
             self.add_residual(self.residual)
 
+class VectorField(Equations):
+    def __init__(self,name:str,space:"FiniteElementSpaceEnum",scale:Optional["ExpressionOrNum"]=None,testscale:Optional["ExpressionOrNum"]=None,residual:Optional["ExpressionOrNum"]=None,dim:Optional[int]=None):
+        super(VectorField, self).__init__()
+        self.name=name
+        self.space:"FiniteElementSpaceEnum"=space
+        self.scale=scale
+        self.testscale=testscale
+        self.residual=residual
+        self.dim=dim
+
+    def define_fields(self):
+        self.define_vector_field(self.name,self.space,scale=self.scale,testscale=self.testscale,dim=self.dim)
+
+    def define_residuals(self):
+        if self.residual is not None:
+            self.add_residual(self.residual)
 
 
 class WeakContribution(BaseEquations):
