@@ -3289,7 +3289,7 @@ namespace pyoomph
 				os << "    if (flag)" << std::endl;
 			os << "    {" << std::endl;
 
-			DerivedShapeExpansionsToUnity deriv_se_to_1;
+			
 			for (unsigned int j = 0; j < subexpressions.size(); j++)
 			{
 				for (auto &f : subexpressions[j].req_fields)
@@ -3305,10 +3305,11 @@ namespace pyoomph
 					__deriv_subexpression_wrto = &f;
 					if (pyoomph::pyoomph_verbose)
 					{
-						std::cout << "DERIVING SUBSEXPRESSION " << subexpressions[j].get_expression() << " BY " << f.field->get_symbol() << std::endl;
+						std::cout << "DERIVING SUBSEXPRESSION " << subexpressions[j].get_expression() << " BY " << f.field->get_symbol() << ", more specifically by " << (0 + GiNaC::GiNaCShapeExpansion(f)) << std::endl;
 					}
 					GiNaC::ex dsdf = pyoomph::expressions::diff(subexpressions[j].get_expression(), f.field->get_symbol());
 					__deriv_subexpression_wrto = NULL;
+					DerivedShapeExpansionsToUnity deriv_se_to_1(f.basis,f.dt_order); // Map all other expanded basis functions to zero to separate between e.g. d/dx or nonderived shapes
 					GiNaC::ex dsub = deriv_se_to_1(dsdf);
 					if (pyoomph::pyoomph_verbose)
 					{
