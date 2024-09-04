@@ -3309,7 +3309,7 @@ namespace pyoomph
 					}
 					GiNaC::ex dsdf = pyoomph::expressions::diff(subexpressions[j].get_expression(), f.field->get_symbol());
 					__deriv_subexpression_wrto = NULL;
-					DerivedShapeExpansionsToUnity deriv_se_to_1(f.basis,f.dt_order); // Map all other expanded basis functions to zero to separate between e.g. d/dx or nonderived shapes
+					DerivedShapeExpansionsToUnity deriv_se_to_1(f.basis,f.dt_order,f.dt_scheme); // Map all other expanded basis functions to zero to separate between e.g. d/dx or nonderived shapes
 					GiNaC::ex dsub = deriv_se_to_1(dsdf);
 					if (pyoomph::pyoomph_verbose)
 					{
