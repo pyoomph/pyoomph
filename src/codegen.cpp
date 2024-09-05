@@ -112,6 +112,8 @@ namespace pyoomph
 		return __in_pitchfork_symmetry_constraint && !pyoomph::__derive_shapes_by_second_index;
 	}
 
+	
+
 	class SubExpressionsToStructs : public GiNaC::map_function
 	{
 	protected:
@@ -1625,12 +1627,24 @@ namespace pyoomph
 					  std::cout << "22 MASSPART BY" << f2->get_symbol()<< " : " << masspart2 << std::endl;
 					}*/
 					for_code->subexpressions = __SE_to_struct_hessian->subexpressions;
+					for (auto &s : for_code->subexpressions)
+					{
+						auto se_shapes=for_code->get_all_shape_expansions_in(s.get_expression());
+						for (auto & se : se_shapes) {
+							if (!se.is_derived && !se.is_derived_other_index)
+							{
+								__all_Hessian_shapeexps.insert(se);
+							}
+							__all_Hessian_indices_required.insert(se.field);
+						}
+					}
 					__derive_shapes_by_second_index = false;
 					if (diffpart2.is_zero() && masspart2.is_zero()) // &&  masspart2.is_zero()
 						continue;
 
 					auto shapeexps = for_code->get_all_shape_expansions_in(diffpart2);
 					auto shapeexpsM = for_code->get_all_shape_expansions_in(masspart2);
+					
 					for (auto sexpa : shapeexps)
 					{
 						if ((!sexpa.is_derived && !sexpa.is_derived_other_index) || sexpa.nodal_coord_dir != -1 || sexpa.nodal_coord_dir2 != -1)
@@ -3261,9 +3275,11 @@ namespace pyoomph
 		}
 
 		// if (!hessian) //Derivatives of subexpressions are treated in another way in Hessian
+		
 		{
 			csrc_opts.in_subexpr_deriv = true;
 			os << "    //Derivatives of subexpressions" << std::endl;
+			std::set<std::string> subexpr_defined_written_in_hessian;
 			for (unsigned int j = 0; j < subexpressions.size(); j++)
 			{
 
@@ -3279,7 +3295,10 @@ namespace pyoomph
 					std::string wrto = f.get_spatial_interpolation_name(this);
 					std::ostringstream derivname;
 					derivname << "d_" << subexpressions[j].get_cvar() << "_d_" << wrto;
+					if (hessian && subexpr_defined_written_in_hessian.count(derivname.str()))
+						continue;
 					os << "    double " << derivname.str() << ";" << std::endl;
+					subexpr_defined_written_in_hessian.insert(derivname.str());
 					//	subexpressions[j].derivsyms[f.get_cpp_symbol()]=GiNaC::symbol(derivname.str());
 					//			}
 				}
@@ -3289,7 +3308,7 @@ namespace pyoomph
 				os << "    if (flag)" << std::endl;
 			os << "    {" << std::endl;
 
-			
+			std::set<std::string> subexpr_rhs_written_in_hessian;
 			for (unsigned int j = 0; j < subexpressions.size(); j++)
 			{
 				for (auto &f : subexpressions[j].req_fields)
@@ -3319,7 +3338,9 @@ namespace pyoomph
 					{
 						std::ostringstream derivname;
 						derivname << "d_" << subexpressions[j].get_cvar() << "_d_" << wrto;
+						if (hessian && subexpr_rhs_written_in_hessian.count(derivname.str())) continue;
 						os << "     " << derivname.str() << " = ";
+						subexpr_rhs_written_in_hessian.insert(derivname.str());
 						// dsub.evalf().print(GiNaC::print_csrc_FEM(os,&csrc_opts));
 						// GiNaC::factor(GiNaC::normal(GiNaC::expand(GiNaC::expand(dsub).evalf()))).print(GiNaC::print_csrc_FEM(os,&csrc_opts));
 						print_simplest_form(dsub, os, csrc_opts);
@@ -3444,6 +3465,11 @@ namespace pyoomph
 
 		// if (!spatial_integral_portion_Lagrangian.is_zero()) this->mark_shapes_required("ResJac["+std::to_string(residual_index)+"]",spaces[0],"psi");
 		GiNaC::ex spatial_integral_portion = spatial_integral_portion_Eulerian + spatial_integral_portion_Lagrangian;
+
+		// REMOVE ALL SUBEXPRESSIONS FOR THE TIME BEING
+		RemoveSubexpressionsByIndentity rem_ses(this);
+		spatial_integral_portion = rem_ses(spatial_integral_portion);
+
 		spatial_integral_portion = (*__SE_to_struct_hessian)(spatial_integral_portion);
 
 		osm << "    //START: Contribution of the spaces" << std::endl;
@@ -7399,7 +7425,7 @@ namespace GiNaC
 			const auto &femprint = dynamic_cast<const print_csrc_FEM &>(c);
 			if (femprint.FEM_opts->for_code)
 			{
-			   c.s << "/* EIGEX: " << sp.is_eigenexpansion << " NOJA " << sp.no_jacobian << " NOHESS " << sp.no_hessian << "*/" << std::endl;
+			   //c.s << "/* EIGEX: " << sp.is_eigenexpansion << " NOJA " << sp.no_jacobian << " NOHESS " << sp.no_hessian << "*/" << std::endl;
 				if (sp.is_eigenexpansion)
 				{
 					c.s << "NORMAL_EIGEN_EXPANSION_" + std::to_string(sp.get_direction()) + "_DERIVS_" + std::to_string(sp.get_derived_direction()) + "_" + std::to_string(sp.get_derived_direction2()) + "/*THIS SHOULD NOT HAPPEN*/";
