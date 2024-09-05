@@ -209,6 +209,7 @@ class DropletGeometry:
     # returns an array of r and z positions and a scale factor to multiply the results with to get the right scaling
     def sample_gravity_shape(self,surface_tension:ExpressionOrNum,delta_rho_times_g:ExpressionOrNum,output_dir:str,fixations:Optional[YoungLaplaceFixationsType]=None,update_params:bool=True,N:int=200,output_text:bool=True,compiler:Any=None,ignore_command_line:bool=False,globally_convergent_newton:bool=False)->Tuple[NPFloatArray,ExpressionOrNum]:
         with YoungLaplaceDropletShape(self,sigma=surface_tension,rho_g_ez=delta_rho_times_g,fixations=fixations,N=N) as problem:
+            problem.logfile_name=None # Do not change the log file here
             problem.set_output_directory(output_dir)
             problem.ignore_command_line=ignore_command_line
             if compiler is not None:
