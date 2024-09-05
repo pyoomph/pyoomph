@@ -191,6 +191,7 @@ namespace pyoomph
   {
   protected:
     CCompiler *compiler;
+    std::ofstream * logfile;
     bool _is_quiet;
     friend class DynamicBulkElementInstance;
     //	 MeshTemplate *meshtemplate;
@@ -359,6 +360,8 @@ namespace pyoomph
     void set_FD_step_used_in_get_hessian_vector_products(double step) {FD_step_used_in_get_hessian_vector_products=step;}
     
     //	 virtual bool _globally_convergent_newton_method() {return Use_globally_convergent_newton_method;} // Damn this private decl
+    void open_log_file(const std::string & fname,const bool & activate_logging=true);
+    
   };
 
   void RequiredShapes_merge(JITFuncSpec_RequiredShapes_FiniteElement_t *src, JITFuncSpec_RequiredShapes_FiniteElement_t *dest);

@@ -23,9 +23,32 @@
 #  The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 #
 # ========================================================================
- 
-import inspect
-from .typings import *
-def printWarning(what:Any):
-	print("WARNING @ "+inspect.stack()[1][1]+":"+str(inspect.stack()[1][2])+" in "+inspect.stack()[1][3]+":",what)
+
+import sys
+import _pyoomph
+
+class _LogWrapper(object):
+    
+    def __init__(self,terminal,is_stderr=False):
+        self.terminal = terminal     
+        self.is_stderr=is_stderr   
+   
+    def write(self, message):        
+        self.terminal.write(message)
+        _pyoomph._write_to_log_file(message)
+
+    def flush(self):        
+        pass    
+    
+    def __del__(self):
+        if self.is_stderr:
+           sys.stderr=self.terminal
+        else:
+           sys.stdout=self.terminal
+    
+        
+def pyoomph_activate_logging_to_file():	
+    if not isinstance(sys.stdout,_LogWrapper):
+        sys.stdout = _LogWrapper(sys.stdout)
+        sys.stderr = _LogWrapper(sys.stderr)
 

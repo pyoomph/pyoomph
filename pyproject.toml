@@ -1,6 +1,5 @@
 [project]
 name = "pyoomph"
-version = "0.1.2"
 description = "pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC"
 dependencies = [
 'meshio>=5.3.4', 
@@ -39,7 +38,9 @@ classifiers=[
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Scientific/Engineering :: Physics'
     ]
+dynamic = ["version"]
 
+[tool.setuptools_scm]
 
 [project.urls]
 homepage = "https://pyoomph.github.io"
@@ -49,7 +50,7 @@ download = "https://pypi.org/project/pyoomph/"
 tracker = "https://github.com/pyoomph/pyoomph/issues"
 
 [build-system]
-requires = ["setuptools>=68.0","pybind11>=2.5.0"]
+requires = ["setuptools>=68.0","pybind11>=2.5.0","setuptools-scm>=8"]
 build-backend = "setuptools.build_meta:__legacy__"
 
 [tool.cibuildwheel]

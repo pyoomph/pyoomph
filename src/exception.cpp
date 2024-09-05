@@ -21,8 +21,30 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 
 
 #include "exception.hpp"
+#include "logging.hpp"
 
 namespace pyoomph
 {
     int pyoomph_verbose = 0;
+
+    runtime_error_with_line::runtime_error_with_line(const std::string &arg, const char *file, int line) : std::runtime_error(arg)
+    {
+        std::ostringstream o;
+        o << file << ":" << line << ": " << arg;
+        msg = o.str();
+/*        if (get_logging_stream())
+        {
+            *get_logging_stream() << "RuntimeError: " << msg << std::endl << std::flush;
+            
+        }*/
+    }
+    
+    
+    const char *runtime_error_with_line::what() const throw()
+    {
+        
+        return msg.c_str();
+    }
+    
+    
 }

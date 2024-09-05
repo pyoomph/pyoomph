@@ -21,27 +21,12 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 
 
 #pragma once
-
 #include <iostream>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-
 namespace pyoomph
 {
-    class runtime_error_with_line : public std::runtime_error
-    {
-    protected:
-        std::string msg;
 
-    public:
-        runtime_error_with_line(const std::string &arg, const char *file, int line);
-        ~runtime_error_with_line() throw() {}
-        const char *what() const throw();
-        
-    };
-
-    extern int pyoomph_verbose;
-
-}
-#define throw_runtime_error(arg) throw pyoomph::runtime_error_with_line(arg, __FILE__, __LINE__);
+  extern std::ostream * g_current_log_stream;
+  void set_logging_stream(std::ostream * logstream);
+  std::ostream * get_logging_stream();
+  void write_to_log_file(const std::string & message);
+};

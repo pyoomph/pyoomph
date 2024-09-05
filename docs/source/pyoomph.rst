@@ -18,13 +18,6 @@ Subpackages
    pyoomph.typings
    pyoomph.utils
 
-Submodules
-----------
-
-.. toctree::
-   :maxdepth: 4
-
-   pyoomph.logging
 
 Module contents
 ---------------
