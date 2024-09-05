@@ -27,6 +27,7 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 #include "codegen.hpp"
 #include "bifurcation.hpp"
 #include "ccompiler.hpp"
+#include "logging.hpp"
 
 extern "C"
 {
@@ -531,9 +532,16 @@ namespace pyoomph
 		// for (unsigned int i=0;i<fields_by_index.size();i++) delete fields_by_index[i];
 		unload_all_dlls();
 		// if (this->compiler) delete this->compiler;
+		if (logfile)
+		{
+		  if (pyoomph::get_logging_stream()==logfile) pyoomph:set_logging_stream(NULL);
+		  delete logfile;
+		  logfile=NULL;
+		  
+		}
 	}
 
-	Problem::Problem() : oomph::Problem(), compiler(NULL), _is_quiet(false), bulk_element_codes(0) // , meshtemplate(new MeshTemplate(this))
+	Problem::Problem() : oomph::Problem(), compiler(NULL), logfile(NULL), _is_quiet(false), bulk_element_codes(0) // , meshtemplate(new MeshTemplate(this))
 	{
 	}
 
@@ -1153,6 +1161,32 @@ namespace pyoomph
 				}
 			}
 		}
+	}
+	
+	
+	void Problem::open_log_file(const std::string &fname,const bool & activate_logging)
+	{
+
+		if (fname=="")
+		{
+			if (activate_logging) pyoomph::set_logging_stream(this->logfile);
+			else 
+			{
+				if (pyoomph::get_logging_stream()==logfile) pyoomph::set_logging_stream(NULL);
+				if (logfile) delete logfile;
+				logfile=NULL;
+			}
+			return;
+		}
+		if (activate_logging && logfile)
+		{
+			if (pyoomph::get_logging_stream()==logfile) pyoomph::set_logging_stream(NULL);
+			delete logfile;
+			logfile=NULL;
+		}
+		logfile=new std::ofstream(fname.c_str());
+		if (!logfile->is_open()) throw_runtime_error("Cannot open log file "+fname);
+		if (activate_logging) pyoomph::set_logging_stream(logfile);
 	}
 
 	void Problem::quiet(bool _quiet)

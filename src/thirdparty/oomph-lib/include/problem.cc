@@ -9012,11 +9012,11 @@ namespace oomph
     // Set the loop flag
     unsigned LOOP_FLAG = 1;
 
-    if (Use_globally_convergent_newton_method && this->communicator_pt()->nproc()>1) // FOR PYOOMPH nproc>1 test
+    if (Use_globally_convergent_newton_method)
     {
 #ifdef OOMPH_HAS_MPI
       // Break if running in parallel
-      if (MPI_Helpers::mpi_has_been_initialised())
+      if (MPI_Helpers::mpi_has_been_initialised() && this->communicator_pt()->nproc()>1)  // FOR PYOOMPH nproc>1 test
       {
         std::ostringstream error_stream;
         error_stream << "Globally convergent Newton method has not been "

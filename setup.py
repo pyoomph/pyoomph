@@ -54,8 +54,13 @@ if no_mpi:
 else:  
   if no_mpi_indicator_file.exists():    
      no_mpi_indicator_file.unlink()
-     
-__version__ = '0.1.2'
+
+import re
+try:
+    __version__=open("pyoomph/_version.py", "rt").read().split("=")[1].strip().strip("\"")    
+except:
+    raise
+    
 
 
 class get_pybind_include(object):
@@ -185,7 +190,7 @@ class BuildExt(build_ext):
     elif sys.platform =="linux":
     	if not debug_symbols:
         	l_opts['unix'] += ["-s"]
-                
+         
     if debug_symbols:
        c_opts['unix'] += ["-g3"]
        l_opts['unix'] +=  ["-g3"]

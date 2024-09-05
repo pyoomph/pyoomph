@@ -12,7 +12,14 @@ sys.path.insert(0, os.path.abspath('../../pyoomph'))
 project = 'pyoomph'
 copyright = '2024, Christian Diddens & Duarte Rocha'
 author = 'Christian Diddens & Duarte Rocha'
-release = '0.1.2'
+
+import re
+try:
+    release=open(os.path.abspath("../../pyoomph/_version.py"), "rt").read().split("=")[1].strip().strip("\"")    
+except:
+    raise
+
+#release = '0.1.2'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

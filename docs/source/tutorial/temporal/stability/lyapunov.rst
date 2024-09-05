@@ -5,9 +5,9 @@ After a stationary state becomes unstable due to bifurcations, it can either con
 
 A necessary requirement for deterministic chaos is the sensitivity to small changes of the initial conditions. If a system is chaotic, a small perturbation in the initial condition will grow over time and the long term dynamics of the unperturbed and the perturbed system will be separated by a growing distance in phase space. However, usually, dissipative systems are considered, i.e. systems that relax on a *strange attractor*, which is bounded in phase space. Therefore, eventually both the unperturbed and perturbed trajectory, can converge to the same *strange attractor* and the distance between both trajectories in time will be bounded as well. 
 
-Therefore, instead of measuring the divergence of perturbtions in the initial conditions (which is ultimately bounded) it is beneficial to investiage the growth of the a tiny perturbation along the trajectory. Let :math:`\vec{x}(t)` be a trajectory, then we are interested in how a perturbation :math:`\vec{x}(t)+\delta\vec{x}(t)` will develop. Here, we choose a tiny initial pertrubation vector :math:`\delta\vec{x}(0)` and make sure that it remains tiny during its evolution, so that the linear dynamics around :math:`\vec{x}(t)` alone govern the evolution of :math:`\delta\vec{x}(0)`. This can be achieved by either choosing the magnitude of the initial perturbation :math:`\delta\vec{x}(0)` sufficiently small that it does not grow within the considered simulation time to a magnitude where nonlinear contributions become relevant. Alternatively, one can renormalize :math:`\delta\vec{x}(t)`, e.g. after each :math:`n^\text{th}` time step, to a tiny magnitude, but monitoring its exponential growth.
+Therefore, instead of measuring the divergence of perturbtions in the initial conditions (which is ultimately bounded) it is beneficial to investiage the growth of the a tiny perturbation along the trajectory. Let :math:`\vec{x}(t)` be a trajectory, then we are interested in how a perturbation :math:`\vec{x}(t)+\delta\vec{x}(t)` will develop. Here, we choose a tiny initial pertrubation vector :math:`\delta\vec{x}(0)` and make sure that it remains tiny during its evolution, so that the linear dynamics around :math:`\vec{x}(t)` alone govern the choice of :math:`\delta\vec{x}(0)`. This can be achieved by either choosing the magnitude of the initial perturbation :math:`\delta\vec{x}(0)` sufficiently small that it does not grow within the considered simulation time to a magnitude where nonlinear contributions become relevant. Alternatively, one can renormalize :math:`\delta\vec{x}(t)`, e.g. after each :math:`n^\text{th}` time step, to a tiny magnitude, but monitoring its exponential growth.
 
-More precisely, for a system :math:`\partial_t\vec{x}=\vec{F}(\vec{x})`, it is sufficient to calculate the evolution of 
+More precisely, for a system :math:`\partial_t\vec{x}=\vec{F}(\vec{x})`, it is sufficient to calculate the linearized evolution of 
 
 .. math:: :label: eqlyapdynsys
 
@@ -59,7 +59,7 @@ As an example, we will check the Lorenz system (with the default parameters :mat
 		# Run it with a rather fine time step and temporal error
 		problem.run(endtime=200,outstep=0.0025,startstep=0.01,temporal_error=0.05,maxstep=0.01)        
 
-we get a file called ``lyapunov.txt`` in the output directory. The average time is chosen to :math:`T_\text{avg}=20`, which averages over several typical frequencies of the Lorenz system. The resulting plot is the following, where we also added the long-time limit literature values by dotted lines. The sum of all Lyapunov exponents corresponds to the phase space divergence, i.e. the trace of the Jacobian, which can be obtained analyically by :math:`\sum_{i=1}^3 \lambda_i=-\sigma-1-\beta\approx 13.666`.
+we get a file called ``lyapunov.txt`` in the output directory. The average time is chosen to :math:`T_\text{avg}=20`, which averages over several typical frequencies of the Lorenz system. The resulting plot is the following, where we also added the long-time limit literature values by dotted lines. The sum of all Lyapunov exponents corresponds to the phase space divergence, i.e. the trace of the Jacobian, which can be obtained analyically by :math:`\sum_{i=1}^3 \lambda_i=-\sigma-1-\beta\approx -13.666`.
 
 ..  figure:: lorenzlyapunov.*
 	:name: figodelorenzlyapunov
@@ -68,8 +68,12 @@ we get a file called ``lyapunov.txt`` in the output directory. The average time 
 	:class: with-shadow
 	:width: 70%
 	
-	Lyapunov spectrum of the Lorenz system with :math:`\rho` and :math:`\sigma` at :math:`\beta=8/3`. Dotted lines are the long-time limit literature values.
+	Lyapunov spectrum of the Lorenz system with :math:`\sigma=10`, :math:`\rho=28` and :math:`\beta=8/3`. Dotted lines are the long-time limit literature values.
 
+
+As expected, we have one positive Lyapunov exponent (indicating chaos), one is around zero (in the direction of the trajectory) and another one is negative, so that the sum of all is in total negative (requirement for phase volume contraction, i.e. for a strange attractor).
+
+The method described here can also be applied to spatio-temporal PDEs, which are discussed later in :numref:`secpde`.
 
 
 .. only:: html

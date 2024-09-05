@@ -226,6 +226,8 @@ class Problem(_pyoomph.Problem):
         self.min_refinement_level:int=0
         #: Add a .gitignore with content "*" to output folders
         self.gitignore_output:bool=True
+        #: Name of the logfile (or None for no logfile), relative to the output directory
+        self.logfile_name:Optional[str]="_pyoomph_logfile.txt"
 
         self._meshtemplate_list:List[MeshTemplate]=[]
         self._meshdict={}
@@ -1890,6 +1892,27 @@ class Problem(_pyoomph.Problem):
 
     def before_parsing_cmd_line(self):
         pass
+    
+    
+    def _write_log_header(self):
+        from .. _version import __version__
+        import datetime
+        _pyoomph._write_to_log_file("Pyoomph version: "+str(__version__)+os.linesep)
+        info=_pyoomph._get_core_information()
+        _pyoomph._write_to_log_file("Core version: "+str(info)+os.linesep)
+        _pyoomph._write_to_log_file("Python interpreter: "+sys.executable+os.linesep)
+        _pyoomph._write_to_log_file("Python version: "+sys.version+os.linesep)        
+        _pyoomph._write_to_log_file("Python path: "+str(sys.path)+os.linesep)
+        _pyoomph._write_to_log_file("Platform: "+str(sys.platform)+os.linesep)
+        #modules={modul.__name__:getattr(modul,"__version__","UNKNOWN") for _,modul in sys.modules if isinstance(modul, types.ModuleType)}
+        modules= {m.__name__:m.__version__ for m in sorted(sys.modules.values(),key=lambda a : getattr(a,"__name__","")) if hasattr(m,"__name__") and hasattr(m,"__version__") and len(m.__name__.split("."))==1}
+        _pyoomph._write_to_log_file("Loaded module versions: "+str(modules)+os.linesep)                
+        _pyoomph._write_to_log_file("Log file started: "+str(datetime.datetime.now())+os.linesep)
+        _pyoomph._write_to_log_file("####################"+os.linesep)
+        _pyoomph._write_to_log_file("Args: "+str(sys.argv)+os.linesep)
+        _pyoomph._write_to_log_file("####################"+os.linesep)
+        _pyoomph._write_to_log_file(os.linesep)
+        
 
     def initialise(self):
         """
@@ -1917,6 +1940,13 @@ class Problem(_pyoomph.Problem):
             keyfile=os.path.join(self._outdir,"_pyoomph_run_.txt")
         else:
             keyfile=None
+            
+        if self.logfile_name is not None:
+            self._open_log_file(os.path.join(self._outdir,self.logfile_name),True)
+            from . logging import pyoomph_activate_logging_to_file
+            pyoomph_activate_logging_to_file()
+            self._write_log_header()
+            
 
         if self._runmode=="continue":
             # Find the highest dump
@@ -3043,11 +3073,11 @@ class Problem(_pyoomph.Problem):
             evals0=evals1
             param0=param1
 
-    def set_max_refinement_level(self,level:int):
+    def set_max_refinement_level(self,level:int,do_adapt:bool=True):
         if level<0:
             raise RuntimeError("Must be >=0")
         
-        def set_level_for_mesh(mesh:AnySpatialMesh,level,do_adapt:bool=True):            
+        def set_level_for_mesh(mesh:AnySpatialMesh,level):            
             assert isinstance(mesh,MeshFromTemplate2d)            
             mesh._templatemesh.get_template()._max_refinement_level=level            
             maxref=0

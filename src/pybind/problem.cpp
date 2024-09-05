@@ -38,7 +38,7 @@ namespace py = pybind11;
 #include "../elements.hpp"
 #include "../codegen.hpp"
 #include "../ccompiler.hpp"
-
+#include "../logging.hpp"
 #ifdef __gnu_linux__
 #include <fenv.h>
 #endif
@@ -161,6 +161,16 @@ void PyReg_Problem(py::module &m)
 				oomph::MPI_Helpers::init(args.size(),&(argv[0])); });
 
 	m.def("FinaliseMPI", &oomph::MPI_Helpers::finalize);
+	
+	m.def("_write_to_log_file",pyoomph::write_to_log_file);
+
+	m.def("_get_core_information",[](){
+		std::map<std::string,std::string> info;
+		#ifdef VERSION_INFO
+			info["core_version"]=VERSION_INFO;
+		#endif
+		return info;
+	});
 
 	m.def("get_verbosity_flag", []()
 		  { return pyoomph::pyoomph_verbose; });
@@ -522,6 +532,7 @@ void PyReg_Problem(py::module &m)
 		 for (unsigned int i=0;i<n;i++) res[i]=resi[i];
        return std::make_tuple(res,n,J_nzz,J_nrow_local,J_values_arr,J_colindex_arr,J_row_start_arr); })
 		.def("quiet", &pyoomph::Problem::quiet, py::arg("quiet") = true, "Deactivate output messages from the oomph-lib and pyoomph C++ core")
+		.def("_open_log_file", &pyoomph::Problem::open_log_file,py::arg("fname"),py::arg("activate_logging")=true,"Open a log file for the problem")
 		.def("_assemble_hessian_tensor", &pyoomph::Problem::assemble_hessian_tensor)
 		.def("is_quiet", &pyoomph::Problem::is_quiet)
 		.def("_unload_all_dlls", &pyoomph::Problem::unload_all_dlls)

@@ -371,8 +371,12 @@ namespace pyoomph
 
    class DerivedShapeExpansionsToUnity : public GiNaC::map_function
    {
+   protected:
+     BasisFunction * ensure_basis; // If set, derived shape expansions on other basis functions will become zero
+     int ensure_dt_order; // Same as above but for time derivaties, -1 deactivates it
+     std::string ensure_dt_scheme;
    public:
-      DerivedShapeExpansionsToUnity() {}
+      DerivedShapeExpansionsToUnity(BasisFunction * _ensure_basis=NULL,int _ensure_dt_order=-1,std::string _ensure_dt_scheme=""): ensure_basis(_ensure_basis), ensure_dt_order(_ensure_dt_order), ensure_dt_scheme(_ensure_dt_scheme) {}
       GiNaC::ex operator()(const GiNaC::ex &inp)
       {
          if (GiNaC::is_a<GiNaC::GiNaCShapeExpansion>(inp))
@@ -380,6 +384,18 @@ namespace pyoomph
             auto &shp = (GiNaC::ex_to<GiNaC::GiNaCShapeExpansion>(inp)).get_struct();
             if (shp.is_derived)
             {
+               if (this->ensure_basis)
+               {
+                 if (shp.basis!=this->ensure_basis) return 0;
+               }
+               if (this->ensure_dt_order!=-1)
+               {
+                 if (shp.dt_order!=this->ensure_dt_order) return 0;
+               }
+               if (this->ensure_dt_scheme!="")
+               {
+                if (shp.dt_scheme!=this->ensure_dt_scheme) return 0;
+               }
                return 1;
             }
             else

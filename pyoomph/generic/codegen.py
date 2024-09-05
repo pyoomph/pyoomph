@@ -2783,6 +2783,16 @@ class GlobalLagrangeMultiplier(ODEEquations):
         return ", ".join([str(n) + " with contrib. " + str(v) for n, v in self._entries.items()])
 
 class ScalarField(Equations):
+    """
+    Introduces a scalar field with the given name and the given space. Residuals can be either added in the constructor or by combining with :py:class:`~pyoomph.generic.codegen.WeakContribution`.
+    
+    Args:
+        name: Name of the scalar field
+        space: Space of the scalar field
+        scale: Optional scaling of the field (default is 1)
+        testscale: Optional scaling of the test function (default is 1)
+        residual: Optional residual to be added. Formulate it in terms of the scalar field and the test function.
+    """
     def __init__(self,name:str,space:"FiniteElementSpaceEnum",scale:Optional["ExpressionOrNum"]=None,testscale:Optional["ExpressionOrNum"]=None,residual:Optional["ExpressionOrNum"]=None):
         super(ScalarField, self).__init__()
         self.name=name
@@ -2798,6 +2808,33 @@ class ScalarField(Equations):
         if self.residual is not None:
             self.add_residual(self.residual)
 
+class VectorField(Equations):
+    """
+    Introduces a vector field with the given name and the given space. Residuals can be either added in the constructor or by combining with :py:class:`~pyoomph.generic.codegen.WeakContribution`.
+    
+    Args:
+        name: Name of the scalar field
+        space: Space of the scalar field
+        scale: Optional scaling of the field (default is 1)
+        testscale: Optional scaling of the test function (default is 1)
+        residual: Optional residual to be added. Formulate it in terms of the scalar field and the test function.
+        dim: Vector dimension. If not set, it will be taken by the dimension of the mesh coordinates, i.e. the nodal dimension
+    """
+    def __init__(self,name:str,space:"FiniteElementSpaceEnum",scale:Optional["ExpressionOrNum"]=None,testscale:Optional["ExpressionOrNum"]=None,residual:Optional["ExpressionOrNum"]=None,dim:Optional[int]=None):
+        super(VectorField, self).__init__()
+        self.name=name
+        self.space:"FiniteElementSpaceEnum"=space
+        self.scale=scale
+        self.testscale=testscale
+        self.residual=residual
+        self.dim=dim
+
+    def define_fields(self):
+        self.define_vector_field(self.name,self.space,scale=self.scale,testscale=self.testscale,dim=self.dim)
+
+    def define_residuals(self):
+        if self.residual is not None:
+            self.add_residual(self.residual)
 
 
 class WeakContribution(BaseEquations):
