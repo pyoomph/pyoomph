@@ -281,6 +281,8 @@ namespace pyoomph
 
     virtual void ensure_external_data();
 
+    virtual void connect_periodic_tree(BulkElementBase *other, const int &mydir, const int &otherdir);
+
     virtual std::vector<std::string> get_dof_names(bool not_a_root_call = false);
     virtual void debug_analytical_jacobian(oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian, double diff_eps);
     virtual void fill_in_generic_residual_contribution_jit(oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian, oomph::DenseMatrix<double> &mass_matrix, unsigned flag);

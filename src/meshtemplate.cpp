@@ -1588,25 +1588,27 @@ namespace pyoomph
 
 		std::vector<nodeindex_t> nodeindices = el->get_node_indices();
 		std::string domspace = coll->code_instance->get_func_table()->dominant_space;
-		if (el->get_geometric_type_index() == 8 && domspace == "C1")
+		if (el->get_geometric_type_index() == 8 && (domspace == "C1" || domspace=="C1TB")) // QC2 -> QC1
 		{
 			// Reduce the element
 			nodeindices = {nodeindices[0], nodeindices[2], nodeindices[6], nodeindices[8]};
 		}
-		else if (el->get_geometric_type_index() == 9 && domspace == "C1")
+		else if (el->get_geometric_type_index() == 9 && domspace == "C1") // TC2 -> TC1
 		{
 			// Reduce the element
 			nodeindices = {nodeindices[0], nodeindices[1], nodeindices[2]};
 		}
-		else if (el->get_geometric_type_index() == 2 && (domspace == "C1" || domspace == "C1TB"))
+		else if (el->get_geometric_type_index() == 2 && (domspace == "C1" || domspace == "C1TB")) // LC2->LC1
 		{
 			// Reduce the element
 			nodeindices = {nodeindices[0], nodeindices[2]};
 		}		
-		else if ((el->get_geometric_type_index() == 14 || el->get_geometric_type_index() == 11) && (domspace == "C1" || domspace == "C1TB"))
+		else if (el->get_geometric_type_index()==14 && (domspace == "C1" || domspace == "C1TB") ) //BC2 ->BC1
 		{
-			throw_runtime_error("TODO: Restrict nodes for geometric type index "+std::to_string(el->get_geometric_type_index()));
+		
+			nodeindices = {nodeindices[0], nodeindices[2], nodeindices[6], nodeindices[8],nodeindices[18],nodeindices[20],nodeindices[24],nodeindices[26]};
 		}
+		
 
 		std::vector<bool> constructed_oomph_node(nodeindices.size(), false);
 		for (unsigned int ni = 0; ni < nodeindices.size(); ni++)

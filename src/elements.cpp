@@ -276,6 +276,76 @@ namespace pyoomph
 		return minJ / (size / weightsum);
 	}
 
+	void BulkElementBase::connect_periodic_tree(BulkElementBase *other, const int &mydir, const int &otherdir)
+	{
+		oomph::QuadTree *my_qt = dynamic_cast<oomph::QuadTree *>(Tree_pt);
+		oomph::BinaryTree *my_bt = dynamic_cast<oomph::BinaryTree *>(Tree_pt);
+		oomph::OcTree *my_ot = dynamic_cast<oomph::OcTree *>(Tree_pt);
+		oomph::TreeRoot * myroot=NULL;
+		oomph::TreeRoot * otherroot=NULL;
+		int my_root_dir,other_root_dir;
+		if (my_qt)
+		{
+			using namespace oomph::QuadTreeNames;
+			oomph::QuadTree *other_qt = dynamic_cast<oomph::QuadTree *>(other->tree_pt());
+			if (!other_qt) throw_runtime_error("Cannot connect a QuadTree with a non-QuadTree for a periodic boundary");
+			myroot=my_qt->root_pt(); otherroot=other_qt->root_pt();
+			if (mydir==-1) my_root_dir=W;
+			else if (mydir==1) my_root_dir=E;
+			else if (mydir==-2) my_root_dir=S;
+			else if (mydir==2) my_root_dir=N;
+			else throw_runtime_error("Invalid direction");
+			if (otherdir==-1) other_root_dir=W;
+			else if (otherdir==1) other_root_dir=E;
+			else if (otherdir==-2) other_root_dir=S;
+			else if (otherdir==2) other_root_dir=N;
+			else throw_runtime_error("Invalid direction");						
+		}
+		else if (my_ot)
+		{
+			using namespace oomph::OcTreeNames;
+			oomph::OcTree *other_ot = dynamic_cast<oomph::OcTree *>(other->tree_pt());			
+			if (!other_ot) throw_runtime_error("Cannot connect a OcTree with a non-OcTree for a periodic boundary");			
+			myroot=my_ot->root_pt(); otherroot=other_ot->root_pt();						
+			if (mydir==-1) my_root_dir=L;
+			else if (mydir==1) my_root_dir=R;
+			else if (mydir==-2) my_root_dir=D;
+			else if (mydir==2) my_root_dir=U;			
+			else if (mydir==-3) my_root_dir=B;			
+			else if (mydir==3) my_root_dir=F;			
+			else throw_runtime_error("Invalid direction");
+			if (otherdir==-1) other_root_dir=L;
+			else if (otherdir==1) other_root_dir=R;
+			else if (otherdir==-2) other_root_dir=D;
+			else if (otherdir==2) other_root_dir=U;			
+			else if (otherdir==-3) other_root_dir=B;			
+			else if (otherdir==3) other_root_dir=F;			
+			else throw_runtime_error("Invalid direction");			
+		}
+		else if (my_bt)
+		{
+			using namespace oomph::BinaryTreeNames;
+			oomph::BinaryTree *other_bt = dynamic_cast<oomph::BinaryTree *>(other->tree_pt());
+			if (!other_bt) throw_runtime_error("Cannot connect a BinaryTree with a non-BinaryTree for a periodic boundary");
+			myroot=my_bt->root_pt(); otherroot=other_bt->root_pt();
+			if (mydir==-1) my_root_dir=L;
+			else if (mydir==1) my_root_dir=R;			
+			else throw_runtime_error("Invalid direction");
+			if (otherdir==-1) other_root_dir=L;
+			else if (otherdir==1) other_root_dir=R;			
+			else throw_runtime_error("Invalid direction");			
+		}
+		if (myroot && otherroot)
+		{
+			myroot->set_neighbour_periodic(my_root_dir);
+			otherroot->set_neighbour_periodic(other_root_dir);
+			myroot->neighbour_pt(my_root_dir)=otherroot;
+			otherroot->neighbour_pt(other_root_dir)=myroot;
+		}
+		
+		// Otherwise, we can't do anything
+	}
+
 	unsigned BulkElementBase::ndof_types() const
 	{
 		auto *ft = codeinst->get_func_table();

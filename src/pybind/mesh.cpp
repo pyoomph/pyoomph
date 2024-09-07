@@ -354,6 +354,47 @@ void PyReg_Mesh(py::module &m)
 			if (!be) return NULL;
 			return dynamic_cast<pyoomph::Node*>(be->node_pt(i)); },
 			py::return_value_policy::reference)
+		.def("nodes",[](oomph::GeneralisedElement *self) 
+			{
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);			
+			std::vector<pyoomph::Node*> nodes;
+			if (be)
+			{			
+				for (unsigned int i=0;i<be->nnode();i++) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->node_pt(i)));
+			}
+			return nodes;
+			},py::return_value_policy::reference)
+		.def("boundary_nodes",[](oomph::GeneralisedElement *self,int boundary_index) 
+			{
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);			
+			std::vector<pyoomph::Node*> nodes;
+			if (be)
+			{		
+				if (boundary_index<0)	
+				{
+					for (unsigned int i=0;i<be->nnode();i++) if (be->node_pt(i)->is_on_boundary()) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->node_pt(i)));
+				}
+				else
+				{
+					for (unsigned int i=0;i<be->nnode();i++) if (be->node_pt(i)->is_on_boundary(boundary_index)) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->node_pt(i)));
+				}
+			}
+			return nodes;
+			},py::return_value_policy::reference,py::arg("boundary_index")=-1)
+		.def("boundary_vertex_nodes",[](oomph::GeneralisedElement *self,int boundary_index) 
+			{
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);			
+			std::vector<pyoomph::Node*> nodes;
+			if (be)
+			{		
+				for (unsigned int i=0;i<be->nvertex_node();i++) if (be->vertex_node_pt(i)->is_on_boundary(boundary_index)) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->vertex_node_pt(i)));				
+			}
+			return nodes;
+			},py::return_value_policy::reference)
+		.def("_connect_periodic_tree",[](oomph::GeneralisedElement *self,oomph::GeneralisedElement *other, int mydir, int otherdir)
+			{
+				dynamic_cast<pyoomph::BulkElementBase*>(self)->connect_periodic_tree(dynamic_cast<pyoomph::BulkElementBase*>(other),mydir,otherdir);
+			})
 		//Returns oomph::Data and value indices for a fields. If use_elemental_indices, it will return (NULL,-1) for elemental node indices that do not have data associated
 		.def("get_field_data_list",[](oomph::GeneralisedElement *self, std::string name,bool use_elemental_indices) -> std::vector<std::pair<oomph::Data *,int> >
 		   {
@@ -667,6 +708,12 @@ void PyReg_Mesh(py::module &m)
 		.def("nboundary", &oomph::Mesh::nboundary)
 		.def("nboundary_node", &oomph::Mesh::nboundary_node)
 		.def("nboundary_element", &oomph::Mesh::nboundary_element)
+		.def("resolve_copy_master_node", [](oomph::Mesh *self, pyoomph::Node *n)->pyoomph::Node *
+			 { 
+				if (!dynamic_cast<pyoomph::Mesh*>(self)) return NULL;
+				return dynamic_cast<pyoomph::Node *>(dynamic_cast<pyoomph::Mesh*>(self)->resolve_copy_master(n)); 
+			},py::return_value_policy::reference
+			)
 		.def("_disable_adaptation", [](oomph::Mesh *self)
 			 {
     oomph::RefineableMeshBase* refmesh =dynamic_cast<oomph::RefineableMeshBase*>(self);
@@ -837,7 +884,33 @@ void PyReg_Mesh(py::module &m)
 			 unsigned nnode=self->count_nnode(discontinuous);
 			 pyoomph::Node* node0=self->get_some_node();
 			 unsigned nodal_dim=(node0 ? node0->ndim() : 0);
-			 pyoomph::BulkElementBase* be=dynamic_cast<pyoomph::BulkElementBase*>(self->element_pt(0));
+			 pyoomph::BulkElementBase* be=NULL;
+			 if (self->nelement()>0) 
+			 {
+				be=dynamic_cast<pyoomph::BulkElementBase*>(self->element_pt(0));
+			 }
+			 #ifdef OOMPH_HAS_MPI
+			 else
+			 {
+			 	int my_rank = self->communicator_pt()->my_rank();
+      			int n_proc = self->communicator_pt()->nproc();
+				for (int nrnk=0;nrnk<n_proc;nrnk++)
+				{
+					std::cout << "INFO MY RANK " << my_rank << " NRNK " << nrnk << " NROOT " << self->nroot_haloed_element(nrnk) << std::endl;
+					if (nrnk!=my_rank) 
+					{
+						if (self->nroot_haloed_element(nrnk)>0) 
+						{
+							be=dynamic_cast<pyoomph::BulkElementBase*>(self->root_haloed_element_pt(nrnk,0));
+							break;
+						}
+					}
+				}
+				
+			 }
+			 #endif
+			 if (!be) throw std::runtime_error("No elements in mesh. Cannot convert to numpy.");
+			 
  			 unsigned nlagrange=(node0 ? node0 ->nlagrangian() : 0);
 			 unsigned ncontfields=(be ? be->ncont_interpolated_values() : 0);
 			 unsigned nDGfields=(be ? be->num_DG_fields(false) :0);

@@ -542,6 +542,8 @@ class PeriodicBC(InterfaceEquations):
     def before_finalization(self, codegen: "FiniteElementCodeGenerator"):
        
         bulkdom = self.get_parent_domain()
+        if bulkdom.get_nodal_dimension()!=len(self.offset):
+            raise RuntimeError("The offset of the PeriodicBC must have the same dimension as the nodal dimension of the mesh")
         while bulkdom.get_parent_domain() is not None:
             raise RuntimeError("Cannot yet apply periodic boundaries on interfaces on interfaces")
         pmesh = bulkdom.get_equations().get_mesh()
@@ -570,6 +572,8 @@ class PeriodicBC(InterfaceEquations):
             raise RuntimeError("Mismatch in number of nodes for a periodic boundary")
         kdtree = scipy.spatial.KDTree(data)  # type:ignore
 
+        slave_to_master:Dict[_pyoomph.Node,_pyoomph.Node]=dict()
+        master_to_slave:Dict[_pyoomph.Node,_pyoomph.Node]=dict()
         for ps, nslave in my_nodes_by_pos.items():
             qres = kdtree.query(ps)  # type:ignore
             if qres[0] > 1e-6:  # type:ignore
@@ -580,11 +584,32 @@ class PeriodicBC(InterfaceEquations):
                     raise RuntimeError(
                         "A periodic node on a single boundary shall be copied from a master that lies on more than one boundary")
                 pmesh._periodic_corner_node_info[nslave] = nmaster  # type:ignore
+                slave_to_master[nslave]=nmaster
+                master_to_slave[nmaster]=nslave
                 continue
             elif len(nslave.get_boundary_indices()) >= 2:
                 raise RuntimeError(
                     "A periodic corner node located on multiple boundaries shall be attached to a periodic master on a single boundary")
+            slave_to_master[nslave]=nmaster
+            master_to_slave[nmaster]=nslave
             nslave._make_periodic(nmaster, pmesh)
+            
+        # If we have a quad tree, we must also connect the quad tree here
+        if pmesh.refinement_possible():
+            myind=bnames.index(my_name)
+            oppind=bnames.index(self.other_interface)
+            oppnodes_to_oppelem:Dict[_pyoomph.Node,_pyoomph.Element]=dict()
+            for oppelem,direct in pmesh.boundary_elements(self.other_interface,with_directions=True):
+                oppnodes_to_oppelem[tuple(oppelem.boundary_nodes(oppind))]=(oppelem,direct)
+            
+            for myelem,direct in pmesh.boundary_elements(my_name,with_directions=True):                
+                my_nodes_on_bind=myelem.boundary_nodes(myind)                            
+                search_for=tuple(slave_to_master[n] for n in my_nodes_on_bind)
+                oppelem=oppnodes_to_oppelem.get(search_for,None)
+                if oppelem is None:            
+                    raise RuntimeError("Cannot identify the corresponding periodic boundary element on the other interface.")
+                myelem._connect_periodic_tree(oppelem[0],direct,oppelem[1])
+        
 
 
 class PythonDirichletBC(BoundaryCondition):

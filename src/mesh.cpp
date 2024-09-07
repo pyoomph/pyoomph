@@ -302,7 +302,10 @@ namespace pyoomph
           //			std::cout << "N IS " << n << std::endl;
           if (n->is_on_boundary(ib) && n->is_a_copy())
           {
-            throw_runtime_error("Distributed parallel with copied nodes (i.e. periodic boundaries) does not work...");
+            if (n->nvalue() > 0 || (dynamic_cast<pyoomph::Node*>(n)->variable_position_pt()->nvalue() > 0 && dynamic_cast<pyoomph::Node*>(n)->variable_position_pt()->is_a_copy()))
+            {
+              throw_runtime_error("Distributed parallel with copied nodes (i.e. PeriodicBC) does not work with nodal degrees of freedom. Either use pure DG or implement a periodic boundary condition by Lagrange multipliers");
+            }
             std::cout << "FOUND ELEM NODE: " << ib << "  " << ie << "  " << in << "  iscpy " << n->is_a_copy() << std::endl;
             auto *master = n->copied_node_pt();
             std::cout << "MASTER NODE " << master << std::endl;

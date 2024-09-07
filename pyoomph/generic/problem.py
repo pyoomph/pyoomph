@@ -228,6 +228,7 @@ class Problem(_pyoomph.Problem):
         self.gitignore_output:bool=True
         #: Name of the logfile (or None for no logfile), relative to the output directory
         self.logfile_name:Optional[str]="_pyoomph_logfile.txt"
+        self.only_write_logfile_on_proc0:bool=True
 
         self._meshtemplate_list:List[MeshTemplate]=[]
         self._meshdict={}
@@ -1942,10 +1943,13 @@ class Problem(_pyoomph.Problem):
             keyfile=None
             
         if self.logfile_name is not None:
+            if not self.only_write_logfile_on_proc0 and get_mpi_rank()>1:
+                raise RuntimeError("Cannot write log file on all processors yet")
             self._open_log_file(os.path.join(self._outdir,self.logfile_name),True)
             from . logging import pyoomph_activate_logging_to_file
             pyoomph_activate_logging_to_file()
             self._write_log_header()
+            
             
 
         if self._runmode=="continue":
@@ -2046,7 +2050,9 @@ class Problem(_pyoomph.Problem):
 
 
         if self.cmdlineargs.distribute:
+            self.actions_before_distribute()
             self.distribute()
+            self.actions_after_distribute()
 
         if self._runmode!="continue" and self._runmode!="replot":
             if self.initial_adaption_steps is None:
@@ -2265,6 +2271,9 @@ class Problem(_pyoomph.Problem):
             if isinstance(m, ODEStorageMesh):
                 continue
             m.ensure_halos_for_periodic_boundaries()
+            
+    def actions_after_distribute(self):
+        self.actions_after_adapt()
 
     def map_nodes_on_macro_elements(self):
         self.invalidate_cached_mesh_data()
@@ -4133,7 +4142,7 @@ class Problem(_pyoomph.Problem):
 
     def save_state(self, fname:str,relative_to_output:bool=False)->None:
         if self.is_distributed():
-            raise RuntimeError("Distributed save state")
+            raise RuntimeError("Distributed save state does not work. Consider to set write_states=False in the Problem class for the time being")
         elif get_mpi_rank()>0:
             return
 
