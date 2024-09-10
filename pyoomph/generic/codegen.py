@@ -480,6 +480,9 @@ class BaseEquations(_pyoomph.Equations):
 
     def on_apply_boundary_conditions(self,mesh:"AnyMesh"):
         pass
+    
+    def before_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str):
+        pass
 
     def _assert_codegen(self)->FiniteElementCodeGenerator:
         cg=self._get_current_codegen()
@@ -1468,13 +1471,18 @@ class EquationTree:
                 self._equations=DummyEquations()
                 self._equations._problem=problem
         if self._equations:
-            self._equations._problem = problem 
+            self._equations._problem = problem             
+            self._equations.before_fill_dummy_equations(problem,self,pathname)
             if self._equations.interior_facet_terms_required():
                 if "_internal_facets_" not in self._children.keys():
                     self._children["_internal_facets_"]=EquationTree(DummyEquations(),self)
                     self._children["_internal_facets_"]._equations._problem=problem
+        #for dn in list(self._children.keys()):
         for dn,v in self._children.items():
+            #v=self._children[dn] # Cannot use .items() here
+            #print(dn,v)
             v._fill_dummy_equations(problem,False,pathname=(dn if is_bulk_root else pathname+"/"+dn))
+        
 
     def _set_parent_to_equations(self,problem:"Problem"):
         if self._codegen is not None:
@@ -2227,6 +2235,14 @@ class CombinedEquations(Equations):
                 e.on_apply_boundary_conditions(mesh)
         self._rstr_final_elem(bck)
 
+    def before_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str):
+        #bck = self._bckup_final_elem()
+        #self._setup_combined_element()
+        for e in self._subelements:
+            if isinstance(e,BaseEquations): #type:ignore
+                e.before_fill_dummy_equations(problem,eqtree,pathname)
+        #self._rstr_final_elem(bck)
+        
 
     def before_finalization(self,codegen:FiniteElementCodeGenerator):
         bck = self._bckup_final_elem()

@@ -148,10 +148,12 @@ namespace pyoomph
 		Mesh *bulkmesh;
 		virtual void setup_boundary_information1d(pyoomph::Mesh *parent, const std::set<unsigned> &possible_bounds);
 		virtual void setup_boundary_information2d(pyoomph::Mesh *parent, const std::set<unsigned> &possible_bounds);
-
+		std::vector<double> opposite_offset_vector,reversed_opposite_offset_vector;
 	public:
 		InterfaceMesh();
 		virtual ~InterfaceMesh();
+		virtual void set_opposite_interface_offset_vector(const std::vector<double> & offset);
+		virtual std::vector<double>  get_opposite_interface_offset_vector() {return opposite_offset_vector;}
 		virtual void fill_internal_facet_buffers(std::vector<BulkElementBase *> &internal_elements, std::vector<int> &internal_face_dir, std::vector<BulkElementBase *> &opposite_elements, std::vector<int> &opposite_face_dir, std::vector<int> &opposite_already_at_index);
 		std::vector<oomph::FiniteElement *> opposite_interior_facets;
 		virtual double get_temporal_error_norm_contribution();

@@ -418,6 +418,9 @@ class MeshTemplateOppositeInterfaceConnection:
             pos = sorted(pos)
             posBmap[tuple(pos)] = eB
 
+        offset_vector=meshA.get_opposite_interface_offset_vector()
+        rev_offset=[-o for o in offset_vector]
+        print("OFFSET VECTOR",offset_vector)
         for eA in meshA.elements():
             pos2find: List[List[float]] = []
             for nvi in range(eA.nvertex_node()):
@@ -432,8 +435,8 @@ class MeshTemplateOppositeInterfaceConnection:
                         dist += self._match_pos_func(pos2find[i], pB[i])
                     # print(pB,len(pB),dist)
                     if dist < 1e-8:
-                        eA.set_opposite_interface_element(eB)
-                        eB.set_opposite_interface_element(eA)
+                        eA.set_opposite_interface_element(eB,offset_vector)
+                        eB.set_opposite_interface_element(eA,rev_offset)
                         found = True
                         break
             if not found:

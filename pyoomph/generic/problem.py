@@ -1076,6 +1076,7 @@ class Problem(_pyoomph.Problem):
 
 
     def _adapt_with_interfacial_errors(self) -> Tuple[int, int]:
+        
         #Resetting the element error override
         def reset(mesh:AnySpatialMesh):
             mesh._reset_elemental_error_max_override() 
@@ -1084,6 +1085,9 @@ class Problem(_pyoomph.Problem):
         for name,mesh in self._meshdict.items():
             if isinstance(mesh,ODEStorageMesh): continue
             reset(mesh)
+            errs = mesh.get_elemental_errors()
+            for i,b in enumerate(mesh.elements()):
+                b._elemental_error_max_override=errs[i]
 
         if True:
             #Now, we first have to go through all meshes at the deepest level in the tree
@@ -1097,6 +1101,7 @@ class Problem(_pyoomph.Problem):
                 elif depth>0:
                     for _,imesh in mesh._interfacemeshes.items(): 
                         get_errs(imesh,depth-1)
+                        
             def override(mesh:AnySpatialMesh,depth:int):
                 if not mesh.refinement_possible():
                     return
@@ -1122,14 +1127,15 @@ class Problem(_pyoomph.Problem):
             for name,mesh in self._meshdict.items():
                 if isinstance(mesh,ODEStorageMesh): continue
                 assert not isinstance(mesh,InterfaceMesh)
-                errs[name]=mesh._merge_my_error_with_elemental_max_override()  
-                #print("ERRS",name,errs[name])
+                errs[name]=[e._elemental_error_max_override for e in mesh.elements()]
+                #errs[name]=mesh._merge_my_error_with_elemental_max_override()   # This is done in advance now
+                
 
             # Ensure same refinement at connected interfaces
 
             for name,mesh in self._meshdict.items():
                 if isinstance(mesh,ODEStorageMesh): continue
-                for inam,imesh in mesh._interfacemeshes.items():  
+                for inam,imesh in mesh._interfacemeshes.items():                      
                     if imesh._opposite_interface_mesh is not None:  
                         if inam=="_internal_facets_":
                             raise RuntimeError("TODO: Adaption with internal facets")
@@ -1759,6 +1765,7 @@ class Problem(_pyoomph.Problem):
 
 
         self._equation_system._finalize_equations(self) 
+        
         for m in self._meshtemplate_list:
             m._connect_opposite_interfaces(self._equation_system) 
         self._equation_system._set_parent_to_equations(self) 

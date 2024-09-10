@@ -1454,7 +1454,7 @@ namespace pyoomph
         shape_info->opposite_node_index[i] = opposite_node_index[i];
       }
     }
-    virtual void analyze_opposite_orientation() { throw_runtime_error("Implement"); }
+    virtual void analyze_opposite_orientation(const std::vector<double> & offset) { throw_runtime_error("Implement"); }
     virtual void add_DG_external_data();
     virtual void interpolate_newly_constructed_additional_dof(const unsigned &lnode, const unsigned &valindex, const std::string &space);
 
@@ -1470,7 +1470,7 @@ namespace pyoomph
     bool is_internal_facet_opposite_dummy() const { return Is_internal_facet_opposite_dummy; }
 
     std::vector<int> get_attached_element_equation_mapping(const std::string &which);
-    void set_opposite_interface_element(BulkElementBase *_opposite_side)
+    void set_opposite_interface_element(BulkElementBase *_opposite_side,std::vector<double>  offset)
     {
       if (_opposite_side && !dynamic_cast<InterfaceElementBase *>(_opposite_side))
       {
@@ -1491,7 +1491,9 @@ namespace pyoomph
       }
 
       this->eleminfo.opposite_eleminfo = &(opposite_side->eleminfo);
-      this->analyze_opposite_orientation();
+      std::vector<double> offs=offset;
+      for (unsigned int i=offset.size();i<this->nodal_dimension();i++) offs.push_back(0.0);
+      this->analyze_opposite_orientation(offs);
     }
 
     double zeta_nodal(const unsigned &n, const unsigned &k, const unsigned &i) const
@@ -1635,7 +1637,7 @@ namespace pyoomph
     {
       return s;
     }
-    void analyze_opposite_orientation()
+    void analyze_opposite_orientation(const std::vector<double> & offset)
     {
       if (!dynamic_cast<InterfaceElementPoint0d *>(opposite_side))
       {
@@ -1664,7 +1666,7 @@ namespace pyoomph
       return InterfaceElement<BulkElementLine1dC1>::opposite_node_pt(i);
     }
 
-    void analyze_opposite_orientation()
+    void analyze_opposite_orientation(const std::vector<double> & offset)
     {
       if (opposite_side->dim() != 1)
       {
@@ -1682,10 +1684,10 @@ namespace pyoomph
         pyoomph::Node *nthis = dynamic_cast<pyoomph::Node *>(this->vertex_node_pt(i));
         pyoomph::Node *nopp = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(i));
         for (unsigned int k = 0; k < std::min(nthis->ndim(), nopp->ndim()); k++)
-          dist0 += (nthis->x(k) - nopp->x(k)) * (nthis->x(k) - nopp->x(k));
+          dist0 += (nthis->x(k) - nopp->x(k)+offset[k]) * (nthis->x(k) - nopp->x(k)+offset[k]);
         nopp = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(1 - i));
         for (unsigned int k = 0; k < std::min(nthis->ndim(), nopp->ndim()); k++)
-          dist1 += (nthis->x(k) - nopp->x(k)) * (nthis->x(k) - nopp->x(k));
+          dist1 += (nthis->x(k) - nopp->x(k)+offset[k]) * (nthis->x(k) - nopp->x(k)+offset[k]);
       }
       opposite_orientation = (dist0 < dist1 ? 0 : 1);
       /*      if (dynamic_cast<BulkTElementLine1dC1*>(opposite_side))
@@ -1812,7 +1814,7 @@ namespace pyoomph
     }
 
     //  void further_setup_hanging_nodes() {} //TODO: REM
-    void analyze_opposite_orientation()
+    void analyze_opposite_orientation(const std::vector<double> & offset)
     {
       if (opposite_side->dim() != 1)
       {
@@ -1828,15 +1830,15 @@ namespace pyoomph
       pyoomph::Node *nopp0 = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(0));
       pyoomph::Node *nopp1 = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(1));
       pyoomph::Node *nthis0 = dynamic_cast<pyoomph::Node *>(this->vertex_node_pt(0));
-      pyoomph::Node *nthis1 = dynamic_cast<pyoomph::Node *>(this->vertex_node_pt(1));
+      pyoomph::Node *nthis1 = dynamic_cast<pyoomph::Node *>(this->vertex_node_pt(1));            
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist0 += (nthis0->x(k) - nopp0->x(k)) * (nthis0->x(k) - nopp0->x(k));
+        dist0 += (nthis0->x(k) - nopp0->x(k)+offset[k]) * (nthis0->x(k) - nopp0->x(k)+offset[k]);
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist0 += (nthis1->x(k) - nopp1->x(k)) * (nthis1->x(k) - nopp1->x(k));
+        dist0 += (nthis1->x(k) - nopp1->x(k)+offset[k]) * (nthis1->x(k) - nopp1->x(k)+offset[k]);
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist1 += (nthis1->x(k) - nopp0->x(k)) * (nthis1->x(k) - nopp0->x(k));
+        dist1 += (nthis1->x(k) - nopp0->x(k)+offset[k]) * (nthis1->x(k) - nopp0->x(k)+offset[k]);
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist1 += (nthis0->x(k) - nopp1->x(k)) * (nthis0->x(k) - nopp1->x(k));
+        dist1 += (nthis0->x(k) - nopp1->x(k)+offset[k]) * (nthis0->x(k) - nopp1->x(k)+offset[k]);
       opposite_orientation = (dist0 < dist1 ? 0 : 1);
       if ((dist0 < dist1 ? dist0 : dist1) > 1e-14)
       {
@@ -1939,7 +1941,7 @@ namespace pyoomph
     InterfaceTElementLine1dC1(DynamicBulkElementInstance *jitcode, FiniteElement *const &bulk_el_pt, const int &face_index) : InterfaceElement<BulkTElementLine1dC1>(jitcode, bulk_el_pt, face_index)
     {
     }
-    void analyze_opposite_orientation()
+    void analyze_opposite_orientation(const std::vector<double> & offset)
     {
       if (opposite_side->dim() != 1)
       {
@@ -1959,10 +1961,10 @@ namespace pyoomph
                 {*/
         pyoomph::Node *nopp = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(i));
         for (unsigned int k = 0; k < std::min(nthis->ndim(), nopp->ndim()); k++)
-          dist0 += (nthis->x(k) - nopp->x(k)) * (nthis->x(k) - nopp->x(k));
+          dist0 += (nthis->x(k) - nopp->x(k)+offset[k]) * (nthis->x(k) - nopp->x(k)+offset[k]);
         nopp = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(1 - i));
         for (unsigned int k = 0; k < std::min(nthis->ndim(), nopp->ndim()); k++)
-          dist1 += (nthis->x(k) - nopp->x(k)) * (nthis->x(k) - nopp->x(k));
+          dist1 += (nthis->x(k) - nopp->x(k)+offset[k]) * (nthis->x(k) - nopp->x(k)+offset[k]);
         //        }
       }
       if ((dist0 < dist1 ? dist0 : dist1) > 1e-14)
@@ -2074,7 +2076,7 @@ namespace pyoomph
       }*/
 
     //  void further_setup_hanging_nodes() {} //TODO: REM
-    void analyze_opposite_orientation()
+    void analyze_opposite_orientation(const std::vector<double> & offset)
     {
       if (opposite_side->dim() != 1)
       {
@@ -2092,13 +2094,13 @@ namespace pyoomph
       pyoomph::Node *nthis0 = dynamic_cast<pyoomph::Node *>(this->vertex_node_pt(0));
       pyoomph::Node *nthis1 = dynamic_cast<pyoomph::Node *>(this->vertex_node_pt(1));
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist0 += (nthis0->x(k) - nopp0->x(k)) * (nthis0->x(k) - nopp0->x(k));
+        dist0 += (nthis0->x(k) - nopp0->x(k)+offset[k]) * (nthis0->x(k) - nopp0->x(k)+offset[k]);
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist0 += (nthis1->x(k) - nopp1->x(k)) * (nthis1->x(k) - nopp1->x(k));
+        dist0 += (nthis1->x(k) - nopp1->x(k)+offset[k]) * (nthis1->x(k) - nopp1->x(k)+offset[k]);
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist1 += (nthis1->x(k) - nopp0->x(k)) * (nthis1->x(k) - nopp0->x(k));
+        dist1 += (nthis1->x(k) - nopp0->x(k)+offset[k]) * (nthis1->x(k) - nopp0->x(k)+offset[k]);
       for (unsigned int k = 0; k < std::min(nthis0->ndim(), nopp0->ndim()); k++)
-        dist1 += (nthis0->x(k) - nopp1->x(k)) * (nthis0->x(k) - nopp1->x(k));
+        dist1 += (nthis0->x(k) - nopp1->x(k)+offset[k]) * (nthis0->x(k) - nopp1->x(k)+offset[k]);
       opposite_orientation = (dist0 < dist1 ? 0 : 1);
       if ((dist0 < dist1 ? dist0 : dist1) > 1e-14)
       {
@@ -2242,7 +2244,7 @@ namespace pyoomph
       return res;
     }
 
-    void analyze_opposite_orientation()
+    void analyze_opposite_orientation(const std::vector<double> & offset)
     {
       if (opposite_side->dim() != 2)
       {
@@ -2261,7 +2263,7 @@ namespace pyoomph
         {
           pyoomph::Node *nopp = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(perms[p][i]));
           for (unsigned int k = 0; k < std::min(nthis->ndim(), nopp->ndim()); k++)
-            pdists[p] += (nthis->x(k) - nopp->x(k)) * (nthis->x(k) - nopp->x(k));
+            pdists[p] += (nthis->x(k) - nopp->x(k)+offset[k]) * (nthis->x(k) - nopp->x(k)+offset[k]);
         }
       }
       double best_dist = pdists[0];
@@ -2379,7 +2381,7 @@ namespace pyoomph
       */
     }
 
-    void analyze_opposite_orientation()
+    void analyze_opposite_orientation(const std::vector<double> & offset)
     {
       if (opposite_side->dim() != 2)
       {
@@ -2398,7 +2400,7 @@ namespace pyoomph
         {
           pyoomph::Node *nopp = dynamic_cast<pyoomph::Node *>(opposite_side->vertex_node_pt(perms[p][i]));
           for (unsigned int k = 0; k < std::min(nthis->ndim(), nopp->ndim()); k++)
-            pdists[p] += (nthis->x(k) - nopp->x(k)) * (nthis->x(k) - nopp->x(k));
+            pdists[p] += (nthis->x(k) - nopp->x(k)+offset[k]) * (nthis->x(k) - nopp->x(k)+offset[k]);
         }
       }
       double best_dist = pdists[0];

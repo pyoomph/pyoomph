@@ -545,7 +545,7 @@ namespace pyoomph
         }
         generated_opposite_face_elems.push_back(ofe);
         dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets.push_back(ofe);
-        dynamic_cast<InterfaceElementBase *>(fe)->set_opposite_interface_element(dynamic_cast<BulkElementBase *>(ofe));
+        dynamic_cast<InterfaceElementBase *>(fe)->set_opposite_interface_element(dynamic_cast<BulkElementBase *>(ofe),std::vector<double>());
       }
 
       imesh->add_element_pt(fe);
@@ -4317,9 +4317,16 @@ namespace pyoomph
 
       InterfaceElementBase *iA = dynamic_cast<InterfaceElementBase *>(eA);
       InterfaceElementBase *iB = dynamic_cast<InterfaceElementBase *>(eB);
-      iA->set_opposite_interface_element(iB);
-      iB->set_opposite_interface_element(iA);
+      iA->set_opposite_interface_element(iB,this->opposite_offset_vector);
+      iB->set_opposite_interface_element(iA,this->reversed_opposite_offset_vector);
     }
+  }
+
+  void InterfaceMesh::set_opposite_interface_offset_vector(const std::vector<double> & offset)
+  {
+    this->opposite_offset_vector=offset;
+    this->reversed_opposite_offset_vector=offset;
+    for (unsigned int i=0;i<this->reversed_opposite_offset_vector.size();i++) this->reversed_opposite_offset_vector[i]=-this->reversed_opposite_offset_vector[i];
   }
 
   ///////

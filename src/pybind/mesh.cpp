@@ -416,12 +416,12 @@ void PyReg_Mesh(py::module &m)
 			   return ie->get_attached_element_equation_mapping(which);
 		    }
 		    )
-		.def("set_opposite_interface_element", [](oomph::GeneralisedElement *self, oomph::GeneralisedElement *opp)
+		.def("set_opposite_interface_element", [](oomph::GeneralisedElement *self, oomph::GeneralisedElement *opp,std::vector<double> offs)
 			 {
 			pyoomph::InterfaceElementBase * ie=dynamic_cast<pyoomph::InterfaceElementBase*>(self);
 			pyoomph::InterfaceElementBase * io=dynamic_cast<pyoomph::InterfaceElementBase*>(opp);
 			if (!ie || !io) { throw_runtime_error("Can only connect interface elements this way"); }
-			ie->set_opposite_interface_element(io); })
+			ie->set_opposite_interface_element(io,offs); })
 		.def(
 			"vertex_node_pt", [](oomph::GeneralisedElement *self, unsigned int i) -> pyoomph::Node *
 			{
@@ -1174,6 +1174,8 @@ void PyReg_Mesh(py::module &m)
 		.def("nullify_selected_bulk_dofs", &pyoomph::InterfaceMesh::nullify_selected_bulk_dofs)
 		.def("_connect_interface_elements_by_kdtree", &pyoomph::InterfaceMesh::connect_interface_elements_by_kdtree)
 		.def("rebuild_after_adapt", &pyoomph::InterfaceMesh::rebuild_after_adapt)
+		.def("set_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::set_opposite_interface_offset_vector)
+		.def("get_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::get_opposite_interface_offset_vector)		
 		.def("get_bulk_mesh", &pyoomph::InterfaceMesh::get_bulk_mesh)
 		.def(
 			"_get_problem", [](pyoomph::InterfaceMesh *self)
