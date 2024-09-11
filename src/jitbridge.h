@@ -76,6 +76,13 @@ float __mzerosf=-0.0;
 
 #endif
 
+
+#ifndef NULL
+#define PYOOMPH_NULL (void *)0
+#else
+#define PYOOMPH_NULL NULL
+#endif
+
 // This file defines the structures which are required to transfer the oomph-lib data (e.g. shape functions) to the C-compiled code
 
 typedef struct JITElementInfo
@@ -663,7 +670,7 @@ if (flag)\
   {\
     const double oldarg=arg_list[i];\
     arg_list[i]+=epsilon_fd;\
-    CURRENT_MULTIRET_FUNCTION(0, arg_list, res_p, NULL,nargs,nret);\
+    CURRENT_MULTIRET_FUNCTION(0, arg_list, res_p, PYOOMPH_NULL,nargs,nret);\
     for (unsigned int j=0;j<nret;j++)\
     {\
       derivative_matrix[j*nargs+i]=(res_p[j]-result_list[j])/epsilon_fd;\

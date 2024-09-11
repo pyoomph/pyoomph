@@ -1103,6 +1103,8 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
     start_index=None
     end_index=None
     skip_index=None
+    start_with_offset=True
+    end_with_offset=True
     ignore_range_contribution=False
     skip_outside=False
 
@@ -1177,7 +1179,7 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
                 numpts = int(interflength / spacing)
                 if numpts>1:
                     edgedelta=0.5*interflength/(numpts-1)
-                    interpos:NPFloatArray  = numpy.linspace(0 + edgedelta, interflength - edgedelta, numpts - 1, endpoint=True) #type:ignore
+                    interpos:NPFloatArray  = numpy.linspace(0 + edgedelta*self.start_with_offset, interflength - edgedelta*self.end_with_offset, numpts - 1, endpoint=True) #type:ignore
                 else:
                     interpos:NPFloatArray =numpy.array([0.5*interflength]) #type:ignore
 
