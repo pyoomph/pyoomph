@@ -2187,6 +2187,23 @@ namespace pyoomph
 			else
 				return heaviside(arg).hold();
 		}
+		
+		static ex heaviside_evalf(const ex &arg)
+		{
+			if (GiNaC::is_a<GiNaC::numeric>(arg))
+			{
+				double argd = GiNaC::ex_to<GiNaC::numeric>(arg).to_double();
+				//  std::cout << "HEAVISIDE " << arg << "  " << argd << std::endl;
+				if (argd > 0)
+					return 1;
+				else if (argd < 0)
+					return 0;
+				else
+					return GiNaC::numeric(1, 2);
+			}
+			else
+				return heaviside(arg).hold();
+		}
 
 		static ex heaviside_real_part(const ex &arg)
 		{
@@ -2211,7 +2228,7 @@ namespace pyoomph
 			return 0;
 		}
 
-		REGISTER_FUNCTION(heaviside, eval_func(heaviside_eval)
+		REGISTER_FUNCTION(heaviside, eval_func(heaviside_eval).evalf_func(heaviside_evalf)
 										 .print_func<print_csrc_float>(heaviside_csrc_float)
 										 .print_func<print_csrc_double>(heaviside_csrc_float)
 										 .expl_derivative_func(heaviside_expl_derivative)
