@@ -697,6 +697,19 @@ class GmshTemplate(MeshTemplate):
             self._onedims_attached_to_point[p].add(res)
         return res
 
+    def create_circle_lines(self,centre:Union[Tuple[ExpressionOrNum,...],Point],radius:ExpressionOrNum,*,mesh_size:Optional[float]=None,line_name:Optional[str]=None)->List[Line]:
+        if not isinstance(centre,Point):
+            centre=self.point(*centre)
+        corners:List[Point]=[]
+        for signs in [[1,0],[0,1],[-1,0],[0,-1]]:
+            corners.append(self.point(centre.x[0]+signs[0]*radius,centre.x[1]+signs[1]*radius,size=mesh_size))
+        corners.append(corners[0])
+        lines:List[CircleArc]=[]
+        for i in range(4):
+            lines.append(self.circle_arc(corners[i],corners[i+1],center=centre,name=line_name))
+        return lines
+            
+
     def circle_arc(self, startpt:Union[Point,Sequence[ExpressionOrNum]], endpt:Union[Point,Sequence[ExpressionOrNum]], *, center:Optional[Union[Point,Sequence[ExpressionOrNum]]]=None, through_point:Optional[Union[Point,Sequence[ExpressionOrNum]]]=None, name:Optional[str]=None, with_macro_element:bool=True)->Optional[Union[Line,CircleArc]]:
         """
         Adds a circlular arc to the mesh geometry.
