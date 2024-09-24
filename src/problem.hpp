@@ -85,6 +85,8 @@ namespace pyoomph
     std::vector<oomph::Data *> &get_required_external_data() { return elemental_data; }
   };
 
+  
+
   // I.e. load one so -> Instantiate for different fields (with different paramsets)
   class DynamicBulkElementInstance
   {
@@ -110,6 +112,7 @@ namespace pyoomph
     void sanity_check();
     DynamicBulkElementCode *get_code() { return dyn; }
     const DynamicBulkElementCode *get_code() const { return dyn; }
+    bool has_parameter_contribution(const std::string  & param);
     /*void bind_field(const std::string & internal_name,const std::string & global_name);
     void bind_field(unsigned int index,std::string name,FieldSpace space);
     void bind_field_C1(unsigned int index,std::string name) {bind_field(index,name,L1);}

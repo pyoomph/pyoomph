@@ -452,15 +452,21 @@ class RemeshMeshSize(BaseEquations):
 
 
 class ProjectExpression(Equations):
-    def __init__(self,scale:ExpressionOrNum=1,space:FiniteElementSpaceEnum="C2",**projs:ExpressionOrNum):
+    def __init__(self,scale:ExpressionOrNum=1,space:FiniteElementSpaceEnum="C2",field_type:Literal["scalar","vector"]="scalar",**projs:ExpressionOrNum):
         super(ProjectExpression, self).__init__()
         self.space:FiniteElementSpaceEnum=space
         self.scale=scale
+        self.field_type=field_type
         self.projs=projs.copy()
 
     def define_fields(self):
         for n,_ in self.projs.items():
-            self.define_scalar_field(n,self.space,scale=self.scale,testscale=1/self.scale)
+            if self.field_type=="scalar":
+                self.define_scalar_field(n,self.space,scale=self.scale,testscale=1/self.scale)
+            elif self.field_type=="vector":
+                self.define_vector_field(n,self.space,scale=self.scale,testscale=1/self.scale)
+            else:
+                raise ValueError("Unsupported field type "+self.field_type)
 
     def define_residuals(self):
         import pyoomph.expressions.generic

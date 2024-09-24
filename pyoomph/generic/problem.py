@@ -228,6 +228,8 @@ class Problem(_pyoomph.Problem):
         self.gitignore_output:bool=True
         #: Name of the logfile (or None for no logfile), relative to the output directory
         self.logfile_name:Optional[str]="_pyoomph_logfile.txt"
+        #: When set to True, we warn about unused global parameters for arclength continuation or bifurcation tracking. If set to "error", we raise an error.
+        self.warn_about_unused_global_parameters:Union[bool,Literal["error"]]="error"
         self.only_write_logfile_on_proc0:bool=True
 
         self._meshtemplate_list:List[MeshTemplate]=[]
@@ -2794,6 +2796,30 @@ class Problem(_pyoomph.Problem):
             old["globally_convergent_newton"]=False
             self._set_globally_convergent_newton_method(globally_convergent_newton)
         return old
+    
+    def is_global_parameter_used(self,param:Union[str,_pyoomph.GiNaC_GlobalParam])->bool:
+        if isinstance(param,str):
+            if param not in self.get_global_parameter_names():
+                return False
+            else:
+                param=self.get_global_parameter(param)
+                
+        def check_interfaces(m:AnySpatialMesh):
+            for _,im in m._interfacemeshes.items():
+                if im.get_code_gen().get_code().has_parameter_contribution(param.get_name()):
+                    return True
+                elif check_interfaces(im):
+                    return True                
+            return False
+        
+        for _,m in self._meshdict.items():
+            if m.get_code_gen().get_code().has_parameter_contribution(param.get_name()):
+                return True
+            if not isinstance(m,ODEStorageMesh):
+                if check_interfaces(m):
+                    return True
+                
+        return False
 
     def set_arc_length_parameter(self,desired_proportion_of_arc_length:Optional[float]=None,scale_arc_length:Optional[bool]=None,use_FD:Optional[bool]=None,use_continuation_timestepper:Optional[bool]=None,Desired_newton_iterations_ds:Optional[int]=None):
         if desired_proportion_of_arc_length is not None:
@@ -2848,6 +2874,19 @@ class Problem(_pyoomph.Problem):
 
         if isinstance(parameter, _pyoomph.GiNaC_GlobalParam):
             parameter = parameter.get_name()
+            
+        if parameter not in self.get_global_parameter_names():
+            raise RuntimeError("Cannot perform arclength continuation in parameter '" + parameter + "' since it is not part of the problem")
+        
+        if self.warn_about_unused_global_parameters and not self.is_global_parameter_used(parameter):
+            if self.warn_about_unused_global_parameters=="error":
+                raise RuntimeError("Arclength continuation in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this error.")
+            else:
+                print("WARNING: Arclength continuation in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this warning.")
+                
+        if self._bifurcation_tracking_parameter_name is not None:
+            if parameter == self._bifurcation_tracking_parameter_name:
+                raise RuntimeError("Cannot perform arclength continuation in the global parameter '" + parameter + "' since it is simultaneously used for bifurcation tracking. Continue in a different parameter or call <Problem>.deactivate_bifurcation_tracking() before")
 
         if self._last_arclength_parameter is not None:
             if self._last_arclength_parameter != parameter:
@@ -3222,6 +3261,16 @@ class Problem(_pyoomph.Problem):
             self.reapply_boundary_conditions()
         if isinstance(parameter,_pyoomph.GiNaC_GlobalParam):
             parameter=parameter.get_name()
+        
+        if not parameter in self.get_global_parameter_names():
+            raise RuntimeError("Cannot perform bifurcation tracking in parameter '"+parameter+"' since it is not part of the problem")
+            
+        if self.warn_about_unused_global_parameters and not self.is_global_parameter_used(parameter):
+            if self.warn_about_unused_global_parameters=="error":
+                raise RuntimeError("Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this error.")
+            else:
+                print("WARNING: Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this warning.")
+                
         if not self.is_quiet():
             print("Bifurcation tracking activated for "+parameter)
         self._bifurcation_tracking_parameter_name=parameter
