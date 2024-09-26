@@ -331,6 +331,13 @@ void PyReg_Mesh(py::module &m)
 			if (!be) return NULL;
 			return be->get_code_instance(); },
 			py::return_value_policy::reference)
+		.def("get_macro_element_coordinate_at_s",[](oomph::GeneralisedElement *self, std::vector<double> s) -> std::vector<double>
+		   {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return {};
+			oomph::Vector<double> so(s.size()); for (unsigned int i=0;i<s.size();i++) so[i]=s[i];
+			return be->get_macro_element_coordinate_at_s(so);			
+		   })
 		.def("evalulate_local_expression_at_s", [](oomph::GeneralisedElement *self, int index, std::vector<double> s) -> double
 			 {
 			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
@@ -620,6 +627,15 @@ void PyReg_Mesh(py::module &m)
 			if (!be) return ;
 			be->set_macro_elem_pt(m);
 			if (map_nodes) be->map_nodes_on_macro_element(); })
+		.def("local_coordinate_of_node", [](oomph::GeneralisedElement *self, unsigned int l) -> std::vector<double>
+			 {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return std::vector<double>();
+			oomph::Vector<double> s;
+			be->local_coordinate_of_node(l, s);
+			std::vector<double> res(s.size());
+			for (unsigned int i=0;i<s.size();i++) res[i]=s[i];
+			return res; })
 		.def("set_undeformed_macro_element", [](oomph::GeneralisedElement *self, oomph::MacroElement *m)
 			 {
 			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);

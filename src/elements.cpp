@@ -1964,6 +1964,20 @@ namespace pyoomph
 		return h;
 	}
 
+	std::vector<double> BulkElementBase::get_macro_element_coordinate_at_s(oomph::Vector<double> s)
+	{
+		if (!macro_elem_pt()) return {};
+		unsigned el_dim = dim();
+		oomph::QElementBase *qelem = dynamic_cast<oomph::QElementBase *>(this);
+		if (!qelem) return {};
+		std::vector<double> s_macro(el_dim,0);
+		for (unsigned i = 0; i < el_dim; i++)
+		{
+				s_macro[i] = qelem->s_macro_ll(i) + 0.5 * (s[i] + 1.0) * (qelem->s_macro_ur(i) - qelem->s_macro_ll(i));
+		}
+		return s_macro;
+	}
+
 	void BulkElementBase::map_nodes_on_macro_element() // Does only work for bulk elems
 	{
 		if (!macro_elem_pt())

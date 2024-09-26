@@ -294,6 +294,7 @@ class Problem(_pyoomph.Problem):
         self._last_step_was_stationary=None
         self._already_set_ic = False
         self._resetting_first_step=False
+        self._in_transient_newton_solve=False
         
         self._hooks:List[GenericProblemHooks]=[]
         
@@ -836,7 +837,15 @@ class Problem(_pyoomph.Problem):
             if type(v)==str:
                 continue
             elif isinstance(v,_pyoomph.Expression):
-                self.scaling[k]=v.evalf()
+                def merge_units(expr):
+                    import _pyoomph
+                    numfactor,unit,rest,success=_pyoomph.GiNaC_collect_units(expr)
+                    if not success:
+                        return expr
+                    # Merge the unit once more
+                    numfactor2,unit2,rest2,success2=_pyoomph.GiNaC_collect_units(unit)    
+                    return numfactor*rest*numfactor2*rest2*unit2
+                self.scaling[k]=merge_units(v).evalf()
             else:
                 self.scaling[k]=v
 
@@ -3559,7 +3568,9 @@ class Problem(_pyoomph.Problem):
             lastres=0
             for t in timestep: #type:ignore
                 assert isinstance(t,(float,int,Expression)) or t is None
+                self._in_transient_newton_solve=True
                 lastres=self.solve(timestep=t,spatial_adapt=spatial_adapt,shift_values=shift_values,temporal_error=temporal_error,max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor,suppress_resolve_after_adapt=suppress_resolve_after_adapt,newton_solver_tolerance=newton_solver_tolerance,globally_convergent_newton=globally_convergent_newton)
+                self._in_transient_newton_solve=False
             return lastres
 
         timestep_normalized=False
@@ -3856,13 +3867,15 @@ class Problem(_pyoomph.Problem):
             if ndouttimes is not None:
                 # Check if the current timestep would exceed the next output
                 currind:int = numpy.nonzero(ndouttimes <= tnd)[0] #type:ignore
-                currind = -1 if len(currind) == 0 else currind[-1] #type:ignore
+                currind = -1 if len(currind) == 0 else currind[-1] #type:ignore                
                 nextndout = ndouttimes[currind + 1] #type:ignore
                 if tnd + float(currentdt / TS) * 1.01 > nextndout:
                     possibly_larger_dt=currentdt
                     currentdt = (nextndout - tnd) * TS
 
+            self._in_transient_newton_solve=True
             nextdt = self.solve(timestep=currentdt, temporal_error=temporal_error,spatial_adapt=spatial_adapt,newton_solver_tolerance=newton_solver_tolerance,do_not_set_IC=do_not_set_IC,globally_convergent_newton=globally_convergent_newton,max_newton_iterations=max_newton_iterations,suppress_resolve_after_adapt=suppress_resolve_after_adapt)
+            self._in_transient_newton_solve=False
             if max_newton_to_increase_time_step is not None and float(nextdt/TS)>float(currentdt/TS*1.00001):
                 last_res=self.get_last_residual_convergence()
                 if len(last_res)>max_newton_to_increase_time_step:
@@ -3925,6 +3938,7 @@ class Problem(_pyoomph.Problem):
 
         if len(remeshers)==0:
             return
+        self.invalidate_cached_mesh_data()
         print("REMESHING")
         self.actions_before_remeshing(remeshers)
         for r in remeshers:
@@ -4001,6 +4015,7 @@ class Problem(_pyoomph.Problem):
         if num_adapt > 0:
             no_need_to_reassign = False
             for s in range(num_adapt):
+                self.map_nodes_on_macro_elements()
                 perform_interpolation()
                 if not self.is_quiet():
                     print("Remeshing adaption:", s, "of", num_adapt)
@@ -4072,7 +4087,7 @@ class Problem(_pyoomph.Problem):
                         if old.has_domain(n):
                             assert isinstance(om,(MeshFromTemplate1d,MeshFromTemplate2d,MeshFromTemplate3d))
                             old_meshes[n]=om
-                            new_meshes[n]=MeshFromTemplate(self,new,n,om._eqtree,om)  
+                            new_meshes[n]=MeshFromTemplate(self,new,n,om._eqtree,om)                              
 
         if not state.save:
             for name, newmesh in new_meshes.items():
@@ -4124,7 +4139,7 @@ class Problem(_pyoomph.Problem):
             meshname = state.string_data(lambda: mesh_name_list[nmesh], lambda s: s)
             assert meshname in self._meshdict.keys()
             mesh = self._meshdict[meshname]
-            assert not isinstance(mesh,InterfaceMesh)
+            assert not isinstance(mesh,InterfaceMesh)            
             mesh.define_state_file(state,additional_info={})
         # Global params
         gpars = list(sorted(self.get_global_parameter_names()))

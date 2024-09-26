@@ -258,6 +258,7 @@ namespace pyoomph
     const JITElementInfo_t *get_eleminfo() const { return &eleminfo; }
     JITElementInfo_t *get_eleminfo() { return &eleminfo; }
     double get_element_diam() const;
+    virtual std::vector<double> get_macro_element_coordinate_at_s(oomph::Vector<double> s);
     DynamicBulkElementInstance *get_code_instance() { return codeinst; }
     const DynamicBulkElementInstance *const get_code_instance() const { return codeinst; }
 

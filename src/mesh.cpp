@@ -184,9 +184,16 @@ namespace pyoomph
   void Mesh::_load_state(const std::vector<double> &meshdata)
   {
     size_t s = 0;
-    for (unsigned nii = 0; nii < this->nnode(); nii++)
+    bool old_ordering = true;
+    oomph::Vector<oomph::Node *> nodes;
+    this->get_node_reordering(nodes, old_ordering);
+
+    //for (unsigned nii = 0; nii < this->nnode(); nii++)
+    //{
+    //  pyoomph::Node *n = dynamic_cast<pyoomph::Node *>(this->node_pt(nii));
+    for (auto * nn : nodes)
     {
-      pyoomph::Node *n = dynamic_cast<pyoomph::Node *>(this->node_pt(nii));
+      pyoomph::Node *n = dynamic_cast<pyoomph::Node *>(nn);
       unsigned ntstor = n->ntstorage();
       for (unsigned int iv = 0; iv < n->ndim(); iv++)
       {
@@ -517,7 +524,7 @@ namespace pyoomph
       {
         if (be->get_eleminfo()->alloced)
         {
-          std::cout << "RESTR " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->bulk_eleminfo << std::endl;
+          //std::cout << "RESTR " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->bulk_eleminfo << std::endl;
           double restriction = dynamic_cast<BulkElementBase *>(fe)->eval_local_expression_at_midpoint(restriction_index);
           if (restriction <= 0)
           {
