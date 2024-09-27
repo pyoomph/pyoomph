@@ -522,9 +522,11 @@ namespace pyoomph
 
       if (restriction_index >= 0)
       {
+        std::cout << "RESTRALL " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->alloced << std::endl;
+        if (!be->get_eleminfo()->alloced) be->fill_element_info(true);
         if (be->get_eleminfo()->alloced)
         {
-          //std::cout << "RESTR " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->bulk_eleminfo << std::endl;
+          std::cout << "RESTR " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->bulk_eleminfo << std::endl;
           double restriction = dynamic_cast<BulkElementBase *>(fe)->eval_local_expression_at_midpoint(restriction_index);
           if (restriction <= 0)
           {

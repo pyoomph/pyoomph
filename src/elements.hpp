@@ -186,7 +186,7 @@ namespace pyoomph
     double initial_quality_factor = 0.0;
     virtual void fill_shape_buffer_for_integration_point(unsigned ipt, const JITFuncSpec_RequiredShapes_FiniteElement_t &required_shapes, unsigned int flag);
     virtual void set_remaining_shapes_appropriately(JITShapeInfo_t *shape_info, const JITFuncSpec_RequiredShapes_FiniteElement_t &required_shapes);
-    virtual void fill_element_info();
+    virtual void fill_element_info(bool without_equations=false);
     virtual void describe_my_dofs(std::ostream &os, const std::string &in) { this->describe_local_dofs(os, in); }
     virtual double J_Lagrangian(const oomph::Vector<double> &s);
     virtual int get_internal_local_eqn(unsigned idindex, unsigned vindex) { return this->internal_local_eqn(idindex, vindex); }
@@ -1562,9 +1562,9 @@ namespace pyoomph
       return oomph::FaceElement::zeta_nodal(n, k, i);
     }
 
-    virtual void fill_element_info()
+    virtual void fill_element_info(bool without_equations=false)
     {
-      BASE::fill_element_info();
+      BASE::fill_element_info(without_equations);
       this->fill_element_info_interface_part();
       if (this->nnode())
       {

@@ -396,6 +396,7 @@ class _OutputTxtAlongLine(_BaseOutputter):
                 del isol
 
             fields=meshdata.get_default_output_fields(rem_lagrangian=self.hide_lagrangian,rem_underscore=self.hide_underscore)
+            fields=[f for f in fields if f not in meshdata.elemental_field_inds.keys()] # Does not work for elemental fields
             dataL:List[NPFloatArray]=[]
             for f in fields:
                 inter=tri.LinearTriInterpolator(triang, meshdata.get_data(f))

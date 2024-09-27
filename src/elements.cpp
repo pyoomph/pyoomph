@@ -2655,7 +2655,7 @@ namespace pyoomph
 			return 1.0;
 	}
 
-	void BulkElementBase::fill_element_info()
+	void BulkElementBase::fill_element_info(bool without_equations)
 	{
 		free_element_info();
 
@@ -2705,6 +2705,8 @@ namespace pyoomph
 				eleminfo.pos_local_eqn[i][j] = -1;
 		}
 
+		if (without_equations) {eleminfo.alloced=true; return;}
+		
 		for (unsigned int i = 0; i < eleminfo.nnode; i++)
 		{
 			for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
@@ -2715,7 +2717,7 @@ namespace pyoomph
 				}
 				else
 				{
-					eleminfo.pos_local_eqn[i][j] = this->position_local_eqn(i, 0, j);
+						eleminfo.pos_local_eqn[i][j] = this->position_local_eqn(i, 0, j);
 				}
 			}
 		}
