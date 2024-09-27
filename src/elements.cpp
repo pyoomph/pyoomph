@@ -2680,7 +2680,6 @@ namespace pyoomph
 		if (eleminfo.nnode_DL)
 			numfields += functable->numfields_DL;
 		numfields += functable->numfields_D0 + functable->numfields_ED0;
-		// std::cout  << "ALLOCATING " << numfields << " ON ELEM OF TYPE " << codeinst->get_code()->get_file_name() << std::endl;
 		for (unsigned int i = 0; i < eleminfo.nnode; i++)
 		{
 			eleminfo.nodal_coords[i] = (double **)calloc(eleminfo.nodal_dim + functable->lagr_dim, sizeof(double *));
@@ -2704,24 +2703,26 @@ namespace pyoomph
 			for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
 				eleminfo.pos_local_eqn[i][j] = -1;
 		}
-
-		if (without_equations) {eleminfo.alloced=true; return;}
 		
-		for (unsigned int i = 0; i < eleminfo.nnode; i++)
+		
+		if (!without_equations)
 		{
-			for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
+			for (unsigned int i = 0; i < eleminfo.nnode; i++)
 			{
-				if (dynamic_cast<pyoomph::Node *>(this->node_pt(i))->is_hanging())
+				for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
 				{
-					eleminfo.pos_local_eqn[i][j] = -2; //->constrain
-				}
-				else
-				{
+					if (dynamic_cast<pyoomph::Node *>(this->node_pt(i))->is_hanging())
+					{
+						eleminfo.pos_local_eqn[i][j] = -2; //->constrain
+					}
+					else
+					{
 						eleminfo.pos_local_eqn[i][j] = this->position_local_eqn(i, 0, j);
+					}
 				}
 			}
 		}
-
+		
 		unsigned local_field_offset = 0;
 		unsigned global_offs = 0;
 
@@ -2734,7 +2735,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 			}
 		}
 	  }
@@ -2747,7 +2748,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 			}
 		}
 
@@ -2763,7 +2764,7 @@ namespace pyoomph
 				{
 					unsigned node_index = j + local_field_offset;
 					eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-					eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+					if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 				}
 			}
 		}
@@ -2777,7 +2778,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 			}
 		}
 		local_field_offset += functable->numfields_C1_basebulk;
@@ -2791,7 +2792,7 @@ namespace pyoomph
 				unsigned node_index = j + local_field_offset;
 //				std::cout << "NODE IDNEX " << node_index  << "  " << local_field_offset << " " << j << ":" << this->get_D2TB_nodal_data(j)->nvalue() << " " << this->get_D2TB_node_index(j,i) << std::endl;
 				eleminfo.nodal_data[i][node_index] =  this->get_D2TB_nodal_data(j)->value_pt(this->get_D2TB_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2TB_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2TB_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D2TB_basebulk;
@@ -2803,7 +2804,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = this->get_D2_nodal_data(j)->value_pt(this->get_D2_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D2_basebulk;		
@@ -2814,7 +2815,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = this->get_D1TB_nodal_data(j)->value_pt(this->get_D1TB_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1TB_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1TB_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D1TB_basebulk;		
@@ -2831,7 +2832,7 @@ namespace pyoomph
 				 
 			//	std::cout << "   fieldindex " << j << " vs " << functable->numfields_D1_bulk << " offs " << functable->external_offset_D1_bulk <<std::endl;
 				eleminfo.nodal_data[i][node_index] = this->get_D1_nodal_data(j)->value_pt(this->get_D1_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D1_basebulk;		
@@ -2848,7 +2849,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = this->get_DL_nodal_data( j)->value_pt(i);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_DL_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_DL_local_equation(j, i);
 			}
 		}
 
@@ -2858,7 +2859,7 @@ namespace pyoomph
 		{
 			unsigned node_index = j + local_field_offset;
 			eleminfo.nodal_data[0][node_index] = this->get_D0_nodal_data(j)->value_pt(0);
-			eleminfo.nodal_local_eqn[0][node_index] = this->get_D0_local_equation(j);
+			if (!without_equations) eleminfo.nodal_local_eqn[0][node_index] = this->get_D0_local_equation(j);
 		}
 
 		local_field_offset = functable->numfields_C2TB + functable->numfields_C2 + functable->numfields_C1+ functable->numfields_C1TB +functable->numfields_D2TB + functable->numfields_D2 + functable->numfields_D1TB+ functable->numfields_D1+ functable->numfields_DL + functable->numfields_D0;
@@ -2869,17 +2870,22 @@ namespace pyoomph
 
 			unsigned node_index = i + local_field_offset;
 
-			//		std::cout << "NODE INDEX oF " << functable->fieldnames_ED0[i] << " IS " << node_index << std::endl;
-			if (!codeinst->linked_external_data[i].data)
-				throw_runtime_error("Element has an external data contribution, which is not assigned: " + std::string(functable->fieldnames_ED0[i]));
-			int extdata_i = codeinst->linked_external_data[i].elemental_index+functable->external_offset_ED0;
-			if (extdata_i >= (int)this->nexternal_data())
-				throw_runtime_error("Somehow the external data array was not done well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + "  ext_data_index is " + std::to_string(extdata_i) + ", but only " + std::to_string((int)this->nexternal_data()) + " ext data slots present. Happened in " + codeinst->get_code()->get_file_name());
-			int value_i = codeinst->linked_external_data[i].value_index;
-			if (value_i < 0 || value_i >= (int)this->external_data_pt(extdata_i)->nvalue())
-				throw_runtime_error("Somehow the external data array was not done, i.e. wrong value index, well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + " at value " + std::to_string(value_i));
-			eleminfo.nodal_data[0][node_index] = this->external_data_pt(extdata_i)->value_pt(value_i);
-			eleminfo.nodal_local_eqn[0][node_index] = this->external_local_eqn(extdata_i, value_i);
+			if (!without_equations)
+			{
+				//		std::cout << "NODE INDEX oF " << functable->fieldnames_ED0[i] << " IS " << node_index << std::endl;
+				if (!codeinst->linked_external_data[i].data)
+					throw_runtime_error("Element has an external data contribution, which is not assigned: " + std::string(functable->fieldnames_ED0[i]));
+				int extdata_i = codeinst->linked_external_data[i].elemental_index+functable->external_offset_ED0;
+				if (extdata_i >= (int)this->nexternal_data())
+					throw_runtime_error("Somehow the external data array was not done well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + "  ext_data_index is " + std::to_string(extdata_i) + ", but only " + std::to_string((int)this->nexternal_data()) + " ext data slots present. Happened in " + codeinst->get_code()->get_file_name());
+				int value_i = codeinst->linked_external_data[i].value_index;
+				if (value_i < 0 || value_i >= (int)this->external_data_pt(extdata_i)->nvalue())
+					throw_runtime_error("Somehow the external data array was not done, i.e. wrong value index, well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + " at value " + std::to_string(value_i));
+				eleminfo.nodal_data[0][node_index] = this->external_data_pt(extdata_i)->value_pt(value_i); // This is a bit an issue. You cannot access this data if you don't need equations to be linked 
+				eleminfo.nodal_local_eqn[0][node_index] = this->external_local_eqn(extdata_i, value_i);
+
+
+			}
 		}
 
 		//	eleminfo.global_parameters=(double**)calloc(functable->numglobal_params,sizeof(double*));
