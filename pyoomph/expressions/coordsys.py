@@ -306,6 +306,8 @@ class CartesianCoordinateSystem(BaseCoordinateSystem):
         res:List[ExpressionOrNum] = []
         for a in self.get_coords(ndim, with_scales, lagrangian):
             res.append(diff(arg, a))
+        if len(res) == 0:
+            return Expression(0)
         return vector(res)
 
     def vector_divergence(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:

@@ -1074,6 +1074,7 @@ void PyReg_Mesh(py::module &m)
 			{ return dynamic_cast<pyoomph::BulkElementODE0d *>(self->get_ODE(name)); },
 			py::return_value_policy::reference);
 
+	py::class_<pyoomph::MeshTemplateElementPoint>(m, "MeshTemplateElementPoint");
 	py::class_<pyoomph::MeshTemplateElementLineC1>(m, "MeshTemplateElementLineC1");
 	py::class_<pyoomph::MeshTemplateElementLineC2>(m, "MeshTemplateElementLineC2");
 	py::class_<pyoomph::MeshTemplateElementQuadC1>(m, "MeshTemplateElementQuadC1");
@@ -1087,6 +1088,7 @@ void PyReg_Mesh(py::module &m)
 
 	py::class_<pyoomph::MeshTemplateElementCollection>(m, "MeshTemplateElementCollection")
 		.def("_get_reference_position_for_IC_and_DBC", &pyoomph::MeshTemplateElementCollection::get_reference_position_for_IC_and_DBC)
+		.def("add_point_element", &pyoomph::MeshTemplateElementCollection::add_point_element, py::return_value_policy::reference,"Adds a single point element to the domain")
 		.def("add_line_1d_C1", &pyoomph::MeshTemplateElementCollection::add_line_1d_C1, py::return_value_policy::reference,"Adds a line element by two node indices")
 		.def("add_line_1d_C2", &pyoomph::MeshTemplateElementCollection::add_line_1d_C2, py::return_value_policy::reference,"Adds a second order line element by three node indices")
 		.def("add_quad_2d_C1", &pyoomph::MeshTemplateElementCollection::add_quad_2d_C1, py::return_value_policy::reference,"Adds a quadrilateral element by four node indices")

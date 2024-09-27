@@ -55,7 +55,8 @@ namespace pyoomph
     /// Which spatial dimension are we dealing with?
     switch (dim)
     {
-
+    case 0:
+          break;
     case 1:
 
       // 1D:
@@ -163,6 +164,7 @@ namespace pyoomph
       /// Find order of recovery shape functions
       switch (recovery_order())
       {
+        
       case 1:
 
         // Complete linear polynomial in 3D:
@@ -845,6 +847,9 @@ namespace pyoomph
 
       switch (dim)
       {
+        case 0:
+        num_recovery_terms=0;
+        break;
       case 1:
         // 1D:
         num_recovery_terms = 2; // 1, x
@@ -874,6 +879,9 @@ namespace pyoomph
 
       switch (dim)
       {
+        case 0:
+        num_recovery_terms=0;
+        break;
       case 1:
         // 1D:
         num_recovery_terms = 3; // 1, x, x^2
@@ -903,6 +911,9 @@ namespace pyoomph
 
       switch (dim)
       {
+        case 0:
+        num_recovery_terms=0;
+        break;
       case 1:
         // 1D:
         num_recovery_terms = 4; // 1, x, x^2, x^3

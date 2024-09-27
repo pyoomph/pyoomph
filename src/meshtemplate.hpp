@@ -457,6 +457,19 @@ namespace pyoomph
     virtual void link_nodes_with_domain(MeshTemplateElementCollection *dom);
   };
 
+  class MeshTemplateElementPoint : public MeshTemplateElement
+  {
+  public:
+    MeshTemplateElementPoint(const nodeindex_t &n1);
+    unsigned int get_nnode_C1() const { return 1; }
+    unsigned int get_node_index_C1(const unsigned int &i) const { return 0; }
+    unsigned int get_nnode_C2() const { return 1; }
+    unsigned int get_node_index_C2(const unsigned int &i) const { return 0; }
+    unsigned int nodal_dimension() const { return 0; }
+    virtual unsigned nfacets() { return 0; }
+  };
+
+
   class MeshTemplateElementLineC1 : public MeshTemplateElement
   {
   public:
@@ -660,6 +673,7 @@ namespace pyoomph
     virtual int lagrangian_dimension();
     void set_lagrangian_dimension(int d) { Lagr_dimension = d; }
     MeshTemplateElementCollection(MeshTemplate *t, std::string n) : mesh_template(t), name(n) {}
+    MeshTemplateElementPoint *add_point_element(const nodeindex_t &n1);
     MeshTemplateElementLineC1 *add_line_1d_C1(const nodeindex_t &n1, const nodeindex_t &n2);
     MeshTemplateElementLineC2 *add_line_1d_C2(const nodeindex_t &n1, const nodeindex_t &n2, const nodeindex_t &n3);
     MeshTemplateElementQuadC1 *add_quad_2d_C1(const nodeindex_t &n1, const nodeindex_t &n2, const nodeindex_t &n3, const nodeindex_t &n4);

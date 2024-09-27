@@ -2125,6 +2125,10 @@ namespace pyoomph
 				res = new BulkElementBrick3dC2();
 			}
 		}
+		else if (el->get_geometric_type_index() == 0)
+		{
+			res= new PointElement0d();
+		}
 		else
 			throw_runtime_error("Undefined element type: " + std::to_string(el->get_geometric_type_index()));
 

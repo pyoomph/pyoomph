@@ -25,6 +25,9 @@
 // LIC//====================================================================
 // Non-inline member functions for generic elements
 
+// MODIFICATIONS FOR PYOOMPH
+// Return 1.0 for J_eulerian on a point element
+
 #include <float.h>
 
 // oomph-lib includes
@@ -4137,9 +4140,10 @@ namespace oomph
     switch (n_dim_element)
     {
       case 0:
-        throw OomphLibError("Cannot calculate J_eulerian() for point element\n",
+        return 1; // FOR PYOOMPH
+        /*throw OomphLibError("Cannot calculate J_eulerian() for point element\n",
                             OOMPH_CURRENT_FUNCTION,
-                            OOMPH_EXCEPTION_LOCATION);
+                            OOMPH_EXCEPTION_LOCATION);*/
         break;
       case 1:
         det = G(0, 0);
@@ -4206,9 +4210,11 @@ namespace oomph
     switch (n_dim_element)
     {
       case 0:
-        throw OomphLibError("Cannot calculate J_eulerian() for point element\n",
+        return 1; // FOR PYOOMPH
+        /*throw OomphLibError("Cannot calculate J_eulerian() for point element\n",
                             OOMPH_CURRENT_FUNCTION,
                             OOMPH_EXCEPTION_LOCATION);
+        */
         break;
       case 1:
         det = G(0, 0);
