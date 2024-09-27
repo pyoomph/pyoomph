@@ -2614,6 +2614,7 @@ namespace pyoomph
 				eleminfo.nodal_coords[i] = NULL;
 			}
 		}
+		//std::cout << "NODAL COORDS DEALLOCATED FOR " << this << std::endl;
 		if (eleminfo.nodal_coords)
 		{
 			free(eleminfo.nodal_coords);
@@ -2662,6 +2663,7 @@ namespace pyoomph
 		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
 
 		eleminfo.nodal_coords = (double ***)malloc(eleminfo.nnode * sizeof(double **));
+		//std::cout << "NODAL COORDS ALLOCATED FOR " << this << std::endl;
 		eleminfo.nodal_data = (double ***)calloc(eleminfo.nnode, sizeof(double **));
 		eleminfo.nodal_local_eqn = (int **)calloc(eleminfo.nnode, sizeof(int *));
 		eleminfo.pos_local_eqn = (int **)calloc(eleminfo.nnode, sizeof(int *));
@@ -4531,6 +4533,7 @@ namespace pyoomph
 		this->prepare_shape_buffer_for_integration(codeinst->get_func_table()->shapes_required_LocalExprs, 0);
 //		set_remaining_shapes_appropriately(shape_info, codeinst->get_func_table()->shapes_required_LocalExprs);
       _currently_assembled_element = this;
+	    //std::cout << "CALLING EVAL LOCAL EXPRESSION  " << this << " ELEMINFO " << &eleminfo << std::endl;
 		return functable->EvalLocalExpression(&eleminfo, this->shape_info, index);
 	}
 
@@ -11872,7 +11875,7 @@ namespace pyoomph
 		return -1;
 	}
 
-	void InterfaceElementBase::fill_element_info_interface_part()
+	void InterfaceElementBase::fill_element_info_interface_part(bool without_equations)
 	{
 		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
 		// Obtain the offset where the interface additional contiuous fields start
@@ -11895,7 +11898,7 @@ namespace pyoomph
 				unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				// std::cout << "NOO " << i << "  " << node_index << "  " << i_el << "   " << valindex << std::endl;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			}
 		}
 
@@ -11917,7 +11920,7 @@ namespace pyoomph
 				unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				// std::cout << "NOO " << i << "  " << node_index << "  " << i_el << "   " << valindex << std::endl;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			}
 		}
 
@@ -11939,7 +11942,7 @@ namespace pyoomph
 				  unsigned interf_id = interface_ids_C1TB[j];
 				  unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				  eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				  eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				  if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			  }
 		  }
 		}
@@ -11961,7 +11964,7 @@ namespace pyoomph
 				unsigned interf_id = interface_ids_C1[j];
 				unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			}
 		}
 
@@ -11974,7 +11977,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D2TB_node_index(functable->numfields_D2TB_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D2TB_local_equation(functable->numfields_D2TB_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D2TB_local_equation(functable->numfields_D2TB_basebulk+j, i);
 			}
 		}
 		for (unsigned int j=0;j<functable->numfields_D2-functable->numfields_D2_basebulk;j++)
@@ -11985,7 +11988,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D2_node_index(functable->numfields_D2_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D2_local_equation(functable->numfields_D2_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D2_local_equation(functable->numfields_D2_basebulk+j, i);
 			}
 		}
 		for (unsigned int j=0;j<functable->numfields_D1TB-functable->numfields_D1TB_basebulk;j++)
@@ -11996,7 +11999,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D1TB_node_index(functable->numfields_D1TB_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D1TB_local_equation(functable->numfields_D1TB_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D1TB_local_equation(functable->numfields_D1TB_basebulk+j, i);
 			}
 		}		
 		for (unsigned int j=0;j<functable->numfields_D1-functable->numfields_D1_basebulk;j++)
@@ -12007,7 +12010,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D1_node_index(functable->numfields_D1_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D1_local_equation(functable->numfields_D1_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D1_local_equation(functable->numfields_D1_basebulk+j, i);
 			}
 		}
 
@@ -12018,7 +12021,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + functable->buffer_offset_DL;
 				eleminfo.nodal_data[i][node_index] = internal_data_pt(functable->internal_offset_DL + j)->value_pt(i);
-				eleminfo.nodal_local_eqn[i][node_index] = this->internal_local_eqn(functable->internal_offset_DL + j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->internal_local_eqn(functable->internal_offset_DL + j, i);
 			}
 		}
 
@@ -12029,7 +12032,7 @@ namespace pyoomph
 		{
 			unsigned node_index = j + functable->buffer_offset_D0;
 			eleminfo.nodal_data[0][node_index] = internal_data_pt(functable->internal_offset_D0 + j)->value_pt(0);
-			eleminfo.nodal_local_eqn[0][node_index] = this->internal_local_eqn(functable->internal_offset_D0 + j, 0);
+			if (!without_equations) eleminfo.nodal_local_eqn[0][node_index] = this->internal_local_eqn(functable->internal_offset_D0 + j, 0);
 		}
 		//	}
 		/* ///NOTE: EXT DATA SHOULD BE ALWAYS AT THE END AT THE MOMENT

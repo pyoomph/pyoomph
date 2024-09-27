@@ -1443,7 +1443,7 @@ namespace pyoomph
     virtual void assign_additional_local_eqn_numbers();
     virtual void fill_in_jacobian_from_lagragian_by_fd(oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
     virtual void add_interface_dofs();
-    virtual void fill_element_info_interface_part();
+    virtual void fill_element_info_interface_part(bool without_equations=false);
     virtual std::vector<std::string> get_dof_names(bool not_a_root_call = false);
     virtual void get_dnormal_dcoords_at_s(const oomph::Vector<double> &s, double ***dnormal_dcoord, double *****d2normal_dcoord2) const;
     virtual void assign_additional_local_eqn_numbers_from_elem(const JITFuncSpec_RequiredShapes_FiniteElement_t *required, BulkElementBase *from_elem, std::vector<int> &eq_map);
@@ -1565,7 +1565,7 @@ namespace pyoomph
     virtual void fill_element_info(bool without_equations=false)
     {
       BASE::fill_element_info(without_equations);
-      this->fill_element_info_interface_part();
+      this->fill_element_info_interface_part(without_equations);
       if (this->nnode())
       {
         oomph::TimeStepper *tstepper = this->node_pt(0)->time_stepper_pt();

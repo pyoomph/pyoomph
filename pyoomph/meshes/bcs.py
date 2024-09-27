@@ -866,3 +866,20 @@ class PinMeshAtDistanceToInterface(PinWhere):
         self._build_where_func()
         super(PinMeshAtDistanceToInterface, self).apply()
 
+
+
+class InteriorBoundaryOrientation(InterfaceEquations):
+    """
+    Named interior boundaries within a domain are by default double-layered, i.e. interface elements are added from both sides.
+    This can usually cause problems. In order to avoid this, we have to specify the orientation of the boundary, i.e. only interface elements are added from one side, namely where the indicator function is positive.
+    For a unit circle ``"circle"`` embedded in a domain, you could e.g. add ``InteriorBoundaryOrientation(dot(var("coordinate"),var("normal)))@"circle"`` to only add interface elements with an outward pointing normal.
+
+    Args:
+        InterfaceEquations (_type_): _description_
+    """    
+    def __init__(self,indicator:ExpressionOrNum):
+        super().__init__()
+        self.indicator=indicator
+        
+    def define_residuals(self):
+        self.add_local_function("__interface_constraint",self.indicator)
