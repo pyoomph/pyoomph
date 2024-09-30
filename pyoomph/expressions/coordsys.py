@@ -644,11 +644,17 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         pcoords=self.map_to_first_order_epsilon(coords)
         for i, a in enumerate(dcoords):
             if i < ndim:
-                res.append(diff(arg, a))
+                movmesh_term=0
+                #if not lagrangian:
+                #    movmesh_term+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[i]
+                res.append(diff(arg, a)+movmesh_term)
             elif i == ndim:
                 #movmesh_term=(0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.phi)-arg)/dcoords[0]**2 * pcoords[0]
                 #movmesh_term=(0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*diff(arg,self.xadd) * pcoords[i]
-                movmesh_term=0
+                #movmesh_term+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[0],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[0]
+                movmesh_term=0 # TODO
+                #if not lagrangian:
+                #    movmesh_term+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[i]
                 res.append( diff(arg,self.xadd) +movmesh_term ) 
             else:
                 res.append(0)
@@ -660,14 +666,15 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         coords = self.get_coords(3, with_scales, lagrangian)
         dcoords=self.map_to_zero_epsilon(coords)
         pcoords=self.map_to_first_order_epsilon(coords)
+        #print(pcoords)
+        #exit()
         for i in range(ndim):
             res += diff(arg[i], dcoords[i])
+            if not lagrangian:
+                res+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[i],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[i]
+                #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[i],self.xadd))*diff(pcoords[i],self.xadd)
         res+=diff(arg[ndim],self.xadd)
-        if not lagrangian:
-            # TODO: WRONG
-            pass
-            #print("ADDING WRONG CONTRIB IN DIV")
-            #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[0],self.xadd)) * pcoords[0]
+        
         return res
     
     def tensor_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
@@ -684,12 +691,22 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             entry = arg[b]
             for a in range(ndim):
                 line.append(diff(entry, dcoords[a]))
+                #if not lagrangian:
+                    #line[-1]+=- _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]                
             line.append(diff(entry, self.xadd))
+            #if not lagrangian:
+            #        line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol
             res.append(line)
         line:List[ExpressionOrNum] = []
         for a in range(ndim):
             line.append(diff(arg[ndim], dcoords[a]))
+            #if not lagrangian:
+            #    line[-1]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[ndim],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]
         line.append(diff(arg[ndim],self.xadd))
+        
+        #if not lagrangian:
+                #line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[ndim],self.xadd))#*self.imaginary_i*self.k_symbol
+                #line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[ndim])*self.imaginary_i*self.k_symbol
         res.append(line)
         return matrix(res)
 
