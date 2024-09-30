@@ -170,7 +170,7 @@ class AdvectionDiffusionEquations(Equations):
 
 
    # Use this to either fix the average or the total integral of the field, i.e. add eqs+=AdvectionDiffusionEquations(...).with_integral_constraint(...)
-   def with_integral_constraint(self,problem:"Problem",*,average:Optional[Union[Dict[str,ExpressionOrNum],ExpressionOrNum]]=None,integral:Optional[Union[Dict[str,ExpressionOrNum],ExpressionOrNum]]=None,ode_domain_name:str="globals",lagrange_prefix:Union[str,Dict[str,str]]="lagr_intconstr_",set_zero_on_angular_eigensolve:bool=True) -> Equations:
+   def with_integral_constraint(self,problem:"Problem",*,average:Optional[Union[Dict[str,ExpressionOrNum],ExpressionOrNum]]=None,integral:Optional[Union[Dict[str,ExpressionOrNum],ExpressionOrNum]]=None,ode_domain_name:str="globals",lagrange_prefix:Union[str,Dict[str,str]]="lagr_intconstr_",set_zero_on_normal_mode_eigensolve:bool=True) -> Equations:
       eq_additions=self
       if average is None and integral is None:
          raise ValueError("Please either specify average= or integral=")
@@ -207,7 +207,7 @@ class AdvectionDiffusionEquations(Equations):
             eq_additions+=WeakContribution(var(k),testfunction(lagr_names[k],domain=ode_domain_name),dimensional_dx=True)
             eq_additions+=WeakContribution(var(lagr_names[k],domain=ode_domain_name),testfunction(k),dimensional_dx=True)
 
-      ode_additions=GlobalLagrangeMultiplier(**lagr_mults,set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve)
+      ode_additions=GlobalLagrangeMultiplier(**lagr_mults,set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve)
       problem.add_equations(ode_additions@ode_domain_name)
       return eq_additions
 

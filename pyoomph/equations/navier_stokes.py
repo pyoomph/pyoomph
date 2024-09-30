@@ -376,7 +376,7 @@ class StokesEquations(Equations):
             integral_value: The integral value of the pressure over the domain.
             ode_domain_name: Domain name for the Lagrange multiplier enforcing the pressure integral. Defaults to "globals".
             lagrange_name: Name of the global Lagrange multiplier. Defaults to "lagr_intconstr_pressure".
-            set_zero_on_angular_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
+            set_zero_on_normal_mode_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
 
         Returns:
             The (Navier-)Stokes equations with the pressure integral constraint.
@@ -385,7 +385,7 @@ class StokesEquations(Equations):
         return self+fix
 
 
-    def with_pressure_integral_constraint(self, problem:"Problem", integral_value:ExpressionOrNum=0, *, ode_domain_name:str="globals",lagrange_name:str="lagr_intconstr_pressure", set_zero_on_angular_eigensolve:bool=True) -> Equations:
+    def with_pressure_integral_constraint(self, problem:"Problem", integral_value:ExpressionOrNum=0, *, ode_domain_name:str="globals",lagrange_name:str="lagr_intconstr_pressure", set_zero_on_normal_mode_eigensolve:bool=True) -> Equations:
         """
         Instead of adding ``StokesEquation``, add ``StokesEquation.with_pressure_integral_constraint(...)`` to remove the pressure nullspace in case of pure Dirichlet boundary conditions for the normal flow.
         With this method, the integral of the pressure is constrained to a given value via a global Lagrange multiplier.
@@ -395,7 +395,7 @@ class StokesEquations(Equations):
             integral_value: The integral value of the pressure over the domain.
             ode_domain_name: Domain name for the Lagrange multiplier enforcing the pressure integral. Defaults to "globals".
             lagrange_name: Name of the global Lagrange multiplier. Defaults to "lagr_intconstr_pressure".
-            set_zero_on_angular_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
+            set_zero_on_normal_mode_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
 
         Returns:
             The (Navier-)Stokes equations with the pressure integral constraint.
@@ -404,7 +404,7 @@ class StokesEquations(Equations):
 
         eq_additions += WeakContribution(var("pressure"), testfunction(lagrange_name, domain=ode_domain_name),dimensional_dx=False)
         eq_additions += WeakContribution(var(lagrange_name, domain=ode_domain_name), testfunction("pressure"),dimensional_dx=False)
-        ode_additions = GlobalLagrangeMultiplier(**{lagrange_name:integral_value},set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve)
+        ode_additions = GlobalLagrangeMultiplier(**{lagrange_name:integral_value},set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve)
         ode_additions +=TestScaling(**{lagrange_name:1/scale_factor("pressure")})
         ode_additions += Scaling(**{lagrange_name: 1 / test_scale_factor("pressure")})
         problem.add_equations(ode_additions @ ode_domain_name)
@@ -414,8 +414,7 @@ class StokesEquations(Equations):
 ##################################
 
 class NavierStokesEquations(StokesEquations):   
-    """
-    Represents the Navier-Stokes-Equations, defined by the second-order partial differential equations (PDEs):
+    """Represents the Navier-Stokes-Equations, defined by the second-order partial differential equations (PDEs):
 
     .. math:: \\partial_t \\rho + \\nabla \\cdot (\\rho \\vec{u}) = 0 \\,
     .. math:: \\rho (\\partial_t \\vec{u} + \\vec{u} \\cdot \\nabla \\vec{u} ) = \\nabla \\cdot [-\\nabla p \\vec{\\vec{I}} + \\mu (\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T})] + f \\,
@@ -601,7 +600,8 @@ class NavierStokesFreeSurface(InterfaceEquations):
     def define_residuals(self):
         flow_eqs=self.get_parent_equations(StokesEquations)
         assert isinstance(flow_eqs,StokesEquations)
-        n = self.get_normal()
+        #n = self.get_normal()
+        n=var("normal")
         if not flow_eqs.PFEM_options or not flow_eqs.PFEM_options.active:                    
             u, u_test = var_and_test(flow_eqs.velocity_name)
             R, R_test = var_and_test("mesh")
@@ -697,6 +697,8 @@ class ConnectVelocityAtInterface(InterfaceEquations):
         fields = [flow_eqs.velocity_name+ "_x", flow_eqs.velocity_name+"_y", flow_eqs.velocity_name+"_z"]
         if isinstance(self.get_coordinate_system(),AxisymmetryBreakingCoordinateSystem):
             return fields[0:self.get_nodal_dimension()]+[flow_eqs.velocity_name+"_phi"]
+        elif isinstance(self.get_coordinate_system(),CartesianCoordinateSystemWithAdditionalNormalMode):
+            return fields[0:self.get_nodal_dimension()]+[flow_eqs.velocity_name+"_normal"]
         else:
             return fields[0:self.get_nodal_dimension()]
 
@@ -805,6 +807,10 @@ class NoSlipBC(DirichletBC):
                 if lagr:
                     raise RuntimeError("TODO")
                 self._dcs[self.veloname+"_phi"]=0
+            elif isinstance(cs,CartesianCoordinateSystemWithAdditionalNormalMode):
+                if lagr:
+                    raise RuntimeError("TODO")
+                self._dcs[self.veloname+"_normal"]=0                
         super(NoSlipBC, self).define_residuals()
 
 

@@ -32,7 +32,7 @@ from ..typings import *
 from ..expressions import *
 
 if TYPE_CHECKING:
-    from ..generic.codegen import Equations,FiniteElementCodeGenerator
+    from ..generic.codegen import Equations,FiniteElementCodeGenerator,FiniteElementSpaceEnum
 
 
 pi = 2 * _pyoomph.GiNaC_asin(1)
@@ -539,6 +539,267 @@ class AxisymmetricCoordinateSystem(BaseCoordinateSystem):
             raise RuntimeError("Not possible")
 
 
+class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSystem):
+    def __init__(self,normal_mode:Expression,map_real_part_of_mode0:bool=False):
+        super().__init__()
+        self.imaginary_i=_pyoomph.GiNaC_imaginary_i()
+        self.normal_mode=normal_mode
+        self.expansion_eps=_pyoomph.GiNaC_new_symbol("eps")
+        self.k_symbol = _pyoomph.GiNaC_new_symbol("k_normal_mode")
+        self.xadd = _pyoomph.GiNaC_new_symbol("xadd_normal_mode")
+        self.field_mode=_pyoomph.GiNaC_FakeExponentialMode(self.imaginary_i*self.k_symbol*self.xadd)
+        # Mode of the test functions
+        self.test_mode=_pyoomph.GiNaC_FakeExponentialMode(-self.imaginary_i*self.k_symbol*self.xadd)
+        self.map_real_part_of_mode0=map_real_part_of_mode0 #Normally not necessary
+        
+        self.expand_with_modes_for_python_debugging=True # If you want to use expand_expression_for_debugging, set this
+        
+        self.with_normal_component_in_mesh_coordinates=False # Actually, quite important!
+
+    def get_mode_expansion_of_var_or_test(self,code:_pyoomph.FiniteElementCode,fieldname:str,is_field:bool,is_dim:bool,expr:Expression,where:str,expansion_mode:int)->Expression:
+        if where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python"):
+            return expr # Don't do this for integral expressions, fluxes, initial and dirichlets
+        
+        base_flag=1
+        pert_flag=1
+        if expansion_mode!=0:
+            if expansion_mode==-1:
+                pert_flag=0
+                expr=_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(0))
+            elif expansion_mode==-2:
+                base_flag=0
+                expr=_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(0))
+            
+        
+        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z"}
+        if not code._coordinates_as_dofs:
+            ignore_fields=ignore_fields.union({"coordinate_x","coordinate_y","coordinate_z","mesh_x","mesh_y","mesh_z"})
+        if fieldname in ignore_fields:
+            return expr # Do not modify these
+        
+        # Each field and test function are expanded with a mode perturbation
+        if is_field:
+            # Expand fields as Ubase+epsilon*Upert*exp(I*m*phi)
+            return base_flag*expr+pert_flag*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(1))*self.field_mode
+        else:
+            # Test functions are not required to be expanded. They only enter linearly
+            return expr*self.test_mode
+
+    def map_residual_on_base_mode(self,residual:Expression)->Expression:
+        zero=_pyoomph.Expression(0)
+        # The base equations are obtained by setting epsilon and m to zero
+        res=_pyoomph.GiNaC_SymSubs(_pyoomph.GiNaC_SymSubs(residual,self.k_symbol,zero),self.expansion_eps,zero)
+        if self.map_real_part_of_mode0:
+            res=_pyoomph.GiNaC_get_real_part(res)
+        return res
+
+    def _map_residal_on_additional_eigenproblem(self,residual:Expression,re_im_mapping:Callable[[Expression],Expression])->Expression:
+        zero = _pyoomph.Expression(0)
+        # First order in epsilon is just derive by epsilon and set epsilon to zero afterwards
+        first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
+        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)
+        # Map on the real/imag part part
+        real_or_imag = re_im_mapping(replaced_m)
+        # Remove any contributions of the base mode from the Jacobian and mass matrix
+        # The Jacobian arises by deriving with respect to all degrees of freedom.
+        # Here, we must ensure that we only derive with respect to the perturbed mode, not to the base mode (mode zero)
+        # For the Hessian, we just want the zero mode terms, i.e. getting the second derivatives with respect to the base mode with the correct I*m-terms
+        rem_jacobian_flag = _pyoomph.Expression(1)
+        azimode = _pyoomph.Expression(1)
+        rem_hessian_flag = _pyoomph.Expression(2)
+        no_jacobian_entries_from_base_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(real_or_imag, zero,rem_jacobian_flag)
+        #no_hessian_entries_from_azimuthal_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(no_jacobian_entries_from_base_mode, azimode,rem_hessian_flag)
+        no_hessian_entries_from_normal_mode=no_jacobian_entries_from_base_mode
+        return _pyoomph.GiNaC_collect_common_factors(no_hessian_entries_from_normal_mode)
+
+    def map_residual_on_normal_mode_eigenproblem_real(self,residual:Expression)->Expression:
+        real_part=_pyoomph.GiNaC_get_real_part
+        return self._map_residal_on_additional_eigenproblem(residual,real_part)
+
+    def map_residual_on_normal_mode_eigenproblem_imag(self,residual:Expression)->Expression:
+        imag_part=_pyoomph.GiNaC_get_imag_part
+        return self._map_residal_on_additional_eigenproblem(residual,imag_part)
+
+    def get_id_name(self)->str:
+        raise RuntimeError("Is this required?")
+        return "Cartesian"
+
+    def map_to_zero_epsilon(self,input):
+        if isinstance(input,list):
+            return [self.map_to_zero_epsilon(i) for i in input]
+        else:
+            return  _pyoomph.GiNaC_SymSubs(input,self.expansion_eps,Expression(0))
+        
+    def map_to_first_order_epsilon(self,input,with_epsilon:bool=True):
+        if isinstance(input,list):
+            return [self.map_to_first_order_epsilon(i,with_epsilon) for i in input]
+        else:
+            return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
+
+    def scalar_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
+        # TODO MOVING COORDINATES
+        res:List[ExpressionOrNum] = []
+        coords = self.get_coords(3, with_scales, lagrangian)
+        dcoords=self.map_to_zero_epsilon(coords)
+        pcoords=self.map_to_first_order_epsilon(coords)
+        for i, a in enumerate(dcoords):
+            if i < ndim:
+                res.append(diff(arg, a))
+            elif i == ndim:
+                #movmesh_term=(0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.phi)-arg)/dcoords[0]**2 * pcoords[0]
+                #movmesh_term=(0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*diff(arg,self.xadd) * pcoords[i]
+                movmesh_term=0
+                res.append( diff(arg,self.xadd) +movmesh_term ) 
+            else:
+                res.append(0)
+        return vector(res)
+
+    def vector_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
+        print("vector divergence",arg,ndim,edim,with_scales,lagrangian)
+        res:Expression = Expression(0)
+        coords = self.get_coords(3, with_scales, lagrangian)
+        dcoords=self.map_to_zero_epsilon(coords)
+        pcoords=self.map_to_first_order_epsilon(coords)
+        for i in range(ndim):
+            res += diff(arg[i], dcoords[i])
+        res+=diff(arg[ndim],self.xadd)
+        if not lagrangian:
+            # TODO: WRONG
+            pass
+            #print("ADDING WRONG CONTRIB IN DIV")
+            #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[0],self.xadd)) * pcoords[0]
+        return res
+    
+    def tensor_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
+        raise RuntimeError("Not implemented")
+    
+    def vector_gradient(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
+        res:List[List[ExpressionOrNum]] = []
+        # TODO MOVING COORDINATES
+        coords=self.get_coords(ndim, with_scales, lagrangian)
+        dcoords=self.map_to_zero_epsilon(coords)
+        pcoords=self.map_to_first_order_epsilon(coords)
+        for b in range(ndim):
+            line:List[ExpressionOrNum] = []
+            entry = arg[b]
+            for a in range(ndim):
+                line.append(diff(entry, dcoords[a]))
+            line.append(diff(entry, self.xadd))
+            res.append(line)
+        line:List[ExpressionOrNum] = []
+        for a in range(ndim):
+            line.append(diff(arg[ndim], dcoords[a]))
+        line.append(diff(arg[ndim],self.xadd))
+        res.append(line)
+        return matrix(res)
+
+    def tensor_divergence(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
+        raise RuntimeError("Implement the tensor_divergence for this coordinate system. Occured upon taking the div of " + str(arg))
+
+    def directional_tensor_derivative(self,T:Expression,direct:Expression,lagrangian:bool,dimensional:bool,ndim:int,edim:int)->Expression:
+        raise RuntimeError("Implement the directional tensor derivative for this coordinate system")
+
+    def expand_coordinate_or_mesh_vector(self,cg:"FiniteElementCodeGenerator", name:str,dimensional:bool,no_jacobian:bool,no_hessian:bool):        
+        if not cg._coordinates_as_dofs:
+            return super().expand_coordinate_or_mesh_vector(cg,name,dimensional,no_jacobian,no_hessian)
+        else:
+            dim=cg.get_nodal_dimension()
+            if dimensional:
+                vr=lambda n : var(n,no_jacobian=no_jacobian,no_hessian=no_hessian) # TODO: Apply at domain=cg?
+            else:
+                vr=lambda n : nondim(n,no_jacobian=no_jacobian,no_hessian=no_hessian) # TODO: Apply at domain=cg?
+            if self.with_normal_component_in_mesh_coordinates:
+                if dim == 1:
+                    return vector([vr(name+"_normal")])
+                elif dim == 1:
+                    return vector([vr(name+"_x"),vr(name+"_normal")])
+                elif dim == 2:
+                    return vector([vr(name+"_x"), vr(name+"_y"),vr(name+"_normal")])
+                elif dim == 3:
+                    raise RuntimeError("Cannot use normal mode expansion coordinate system in 3d")
+            else:
+                if dim==0:
+                    return 0
+                if dim == 1:
+                    return vector([vr(name+"_x"),0])
+                elif dim == 2:
+                    return vector([vr(name+"_x"), vr(name+"_y"),0])
+                elif dim == 3:
+                    raise RuntimeError("Cannot use normal mode expansion coordinate system in 3d")
+        
+    def define_vector_field(self, name:str, space:"FiniteElementSpaceEnum", ndim:int, element:"Equations") -> Tuple[List[Expression], List[Expression], List[str]]:
+        inds = ["x", "y", "z"]
+        namelist:List[str] = []
+        if ndim==3:
+            raise RuntimeError("Cannot use a normal mode in 3D")
+        for i in range(ndim):
+            namelist.append(name + "_" + inds[i])
+        namelist.append(name + "_normal")
+        
+        v:List[Expression] = []
+        vtest:List[Expression] = []
+        s = scale_factor(name)
+        S = test_scale_factor(name)
+        for i, f in enumerate(namelist):
+            if i >= ndim+1: break
+            element.set_scaling(**{f: name})
+            vc = element.define_scalar_field(f, space)
+            vc = var(f)
+            v.append(vc / s)
+            element.set_test_scaling(**{f: name})
+            vtest.append(testfunction(f) / S)
+        return v, vtest, namelist
+    
+    def get_normal_vector_or_component(self,cg:"FiniteElementCodeGenerator",component:Optional[int]=None,only_base_mode:bool=False,only_perturbation_mode:bool=False,where:str="Residual"):
+        dim = cg.get_nodal_dimension()
+        if not cg._coordinates_as_dofs or (where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python")):
+            return super().get_normal_vector_or_component(cg,component,only_base_mode,only_perturbation_mode,where=where)
+        
+        if dim not in [1,2]:
+            RuntimeError("Cannot use this coordinate system with a nodal dimension of "+str(dim))
+        if component is None:
+            comp=lambda s : nondim(s,only_base_mode=only_base_mode,only_perturbation_mode=only_perturbation_mode)
+            if dim==0:
+                return vector(comp("normal_x"),0,0)
+            elif dim==1:
+                return vector(comp("normal_x"),comp("normal_y"),0)
+            else:
+                return vector(comp("normal_x"),comp("normal_y"),comp("normal_z")) #TODO: Normal z here?
+        else:
+            # Normal expansion            
+            base_factor=0 if only_perturbation_mode else 1
+            pert_factor=0 if only_base_mode else 1
+            
+            
+            if component<dim: 
+                
+                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component_eigenexpansion(component),Expression(1))*self.field_mode
+            elif component==dim:                
+
+                #return base_factor*cg._get_normal_component(component)
+                nr0=cg._get_normal_component(0)
+                #rm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_x"),_pyoomph.Expression(1))*self.field_mode
+                rm=var("mesh_x",only_perturbation_mode=True)
+                n0_dot_xeigen=nr0*rm
+                if dim==2:
+                    nz0=cg._get_normal_component(1)
+                    zm=var("mesh_y",only_perturbation_mode=True)
+                    #zm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_y"),_pyoomph.Expression(1))*self.field_mode
+                    n0_dot_xeigen+=nz0*zm
+                if self.with_normal_component_in_mesh_coordinates:
+                    raise RuntimeError("Not implemented")
+                    xadd_shift=var("mesh_normal",only_perturbation_mode=True)                     
+                else:
+                    xadd_shift=0
+                #return pert_factor*self.expansion_eps*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))*self.field_mode
+                #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
+                #exit()
+                #return pert_factor*(nr0*phim-self.imaginary_i*self.normal_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
+                return pert_factor*(-self.imaginary_i*self.normal_mode*(n0_dot_xeigen))
+                
+            else:
+                raise RuntimeError("Normal component "+str(component)+" not available")
+        
 
 
 class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
@@ -563,8 +824,6 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         
 
     def get_mode_expansion_of_var_or_test(self,code:_pyoomph.FiniteElementCode,fieldname:str,is_field:bool,is_dim:bool,expr:Expression,where:str,expansion_mode:int)->Expression:
-        #print("MODE EXPANSION",fieldname,is_field)
-        #print("EEXXX",where)
         if where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python"):
             return expr # Don't do this for integral expressions, fluxes, initial and dirichlets
         
@@ -705,7 +964,7 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             res:List[List[ExpressionOrNum]]=[[ df(arg[0],dr),df(arg[0],dz),df(arg[0],self.phi)/dr-arg[2]/dr],
                  [df(arg[1],dr),df(arg[1],dz),df(arg[1],self.phi)/dr],
                  [df(arg[2],dr) ,df(arg[2],dz),df(arg[2],self.phi)/dr+arg[0]/dr]]
-            if not lagrangian:
+            if not lagrangian:                
                 res[0][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[0],self.phi)-arg[2])/dr**2 * pr
                 res[1][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[1],self.phi))/dr**2 * pr
                 res[2][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[2],self.phi)+arg[0])/dr**2 * pr
@@ -731,6 +990,7 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             #if cg._coordinates_as_dofs and (where=="Residual" or (not self.expand_with_modes_for_python_debugging or where!="Python")):
             # Derive the u_r/r term by the denominator 
             # Only on a moving mesh:
+            #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[0]+ diff(arg[ndim],self.phi))/dcoords[0]**2 * pcoords[0]
             res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[0]+ diff(arg[ndim],self.phi))/dcoords[0]**2 * pcoords[0]
             #if ndim==1:
                 

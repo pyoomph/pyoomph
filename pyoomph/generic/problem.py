@@ -100,6 +100,13 @@ class _AzimuthalStabilityInfo:
         self.real_contribution_name="real_contrib_azimuthal_stability"
         self.imag_contribution_name="imag_contrib_azimuthal_stability"
         self.azimuthal_param_m_name = "azimuthal_m"
+        
+class _CartesianNormalModeStabilityInfo:
+    def __init__(self):
+        super(_CartesianNormalModeStabilityInfo, self).__init__()
+        self.real_contribution_name="real_contrib_normal_mode_stability"
+        self.imag_contribution_name="imag_contrib_normal_mode_stability"
+        self.normal_mode_param_k_name = "normal_mode_k"        
 
 
 class GenericProblemHooks:
@@ -281,12 +288,15 @@ class Problem(_pyoomph.Problem):
         self._last_eigenvectors:NPComplexArray=numpy.array([],dtype=numpy.complex128) #type:ignore
         self._last_eigenvalues_m:Optional[NPIntArray]=None
         self._azimuthal_mode_param_m=None
+        self._normal_mode_param_k=None
         self._azimuthal_stability=_AzimuthalStabilityInfo()
+        self._cartesian_normal_mode_stability=_CartesianNormalModeStabilityInfo()
         self._bifurcation_tracking_parameter_name:Optional[str]=None
         self._improved_pitchfork_tracking_coordinate_system:"OptionalCoordinateSystem"=None
         self._improved_pitchfork_tracking_position_coordinate_system:"OptionalCoordinateSystem"=None
         self._shared_shapes_for_multi_assemble=False
         self._setup_azimuthal_stability_code=False
+        self._setup_additional_cartesian_stability_code=False
         self._solve_in_arclength_conti=None
 
         self._last_arclength_parameter=None
@@ -374,7 +384,7 @@ class Problem(_pyoomph.Problem):
             return False
         
     # Shortcut to add a (GlobalLagrangeMultiplier(name=equation_contribution)+Scaling(name=scaling)+TestScaling(name=testscaling))@domain and return var(name,domain=domain),testfunction(name,domain=domain)
-    def add_global_dof(self,name:str,equation_contribution:ExpressionOrNum=0,*,scaling:ExpressionNumOrNone=None,testscaling:ExpressionNumOrNone=None,domain:str="globals",only_for_stationary_solve:bool=False,initial_condition:ExpressionNumOrNone=None):
+    def add_global_dof(self,name:str,equation_contribution:ExpressionOrNum=0,*,scaling:ExpressionNumOrNone=None,testscaling:ExpressionNumOrNone=None,domain:str="globals",only_for_stationary_solve:bool=False,initial_condition:ExpressionNumOrNone=None,set_zero_on_normal_mode_eigensolve:bool=True):
         """
         Add a global degree of freedom, e.g. a global Lagrange multiplier to the problem.
 
@@ -386,13 +396,14 @@ class Problem(_pyoomph.Problem):
             domain (str, optional): The domain to which the degree of freedom belongs. Defaults to "globals".
             only_for_stationary_solve (bool, optional): Whether the degree of freedom is only used for stationary solves, if set, it will be 0 and pinned during transient solves. Defaults to False.
             initial_condition (ExpressionNumOrNone, optional): The initial condition for the degree of freedom. Defaults to None.
+            set_zero_on_normal_mode_eigensolve: Deactivate this dof for normal mode eigensolves. Defaults to True.
 
         Returns:
             tuple: A tuple containing the variable and test function associated with the degree of freedom.
         """            
         from ..generic.codegen import GlobalLagrangeMultiplier,var,testfunction
         from ..equations.generic import Scaling,TestScaling,InitialCondition
-        neweqs=GlobalLagrangeMultiplier(**{name:equation_contribution},only_for_stationary_solve=only_for_stationary_solve)
+        neweqs=GlobalLagrangeMultiplier(**{name:equation_contribution},only_for_stationary_solve=only_for_stationary_solve,set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve)
         if scaling is not None:
             neweqs+=Scaling(**{name:scaling})
         if testscaling is not None:
@@ -1277,9 +1288,15 @@ class Problem(_pyoomph.Problem):
                 eqs.add_residual(weak(u,utest,coordinate_system=cs),destination="_simple_mass_matrix_of_defined_fields")
             # Residuals not writtten to C, wont be used
             eqs.get_current_code_generator().set_ignore_residual_assembly("_simple_mass_matrix_of_defined_fields")
+            
+        # We cannot write the residuals for the normal modes, since e.g. some eigenexpansions are there in linear, which cannot be calculated in the C code
+        # We must suppress the generation of the residual code and only add Jacobian code, where all these terms will vanish
         if self._azimuthal_mode_param_m is not None:
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._azimuthal_stability.real_contribution_name)
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._azimuthal_stability.imag_contribution_name)
+        if self._normal_mode_param_k is not None:
+            eqs.get_current_code_generator().set_ignore_residual_assembly(self._cartesian_normal_mode_stability.real_contribution_name)
+            eqs.get_current_code_generator().set_ignore_residual_assembly(self._cartesian_normal_mode_stability.imag_contribution_name)
 
     def set_custom_assembler(self,assm:Optional["CustomAssemblyBase"]) -> None:
         self._custom_assembler=assm
@@ -2035,7 +2052,11 @@ class Problem(_pyoomph.Problem):
         self.before_defining_problem()
         self.define_problem()
         if self._setup_azimuthal_stability_code:
+            if  self._setup_additional_cartesian_stability_code:
+                raise RuntimeError("Cannot set up both azimuthal and additional cartesian coordinate stability simultaneously yet")
             self.define_problem_for_axial_symmetry_breaking_investigation()
+        elif self._setup_additional_cartesian_stability_code:
+            self.define_problem_for_additional_cartesian_stability_investigation()
         if self.additional_equations != 0:
             self.add_equations(self.additional_equations)
 
@@ -2642,7 +2663,7 @@ class Problem(_pyoomph.Problem):
         else:
             return tuple([*res])
         
-    def setup_for_stability_analysis(self,analytic_hessian:bool=True,use_hessian_symmetry:bool=True,improve_pitchfork_on_unstructured_mesh:bool=False,improve_pitchfork_coordsys:"OptionalCoordinateSystem"=None,improve_pitchfork_position_coordsys:"OptionalCoordinateSystem"=None,shared_shapes_for_multi_assemble:Optional[bool]=None,azimuthal_stability:Optional[bool]=None):
+    def setup_for_stability_analysis(self,analytic_hessian:bool=True,use_hessian_symmetry:bool=True,improve_pitchfork_on_unstructured_mesh:bool=False,improve_pitchfork_coordsys:"OptionalCoordinateSystem"=None,improve_pitchfork_position_coordsys:"OptionalCoordinateSystem"=None,shared_shapes_for_multi_assemble:Optional[bool]=None,azimuthal_stability:Optional[bool]=None,additional_cartesian_mode:Optional[bool]=None):
         """
         Sets up the problem for stability analysis, e.g. for improved pitchfork tracking on unsymmetric meshes, azimuthal stability, etc.
         Arguments which are None are not changed.
@@ -2669,6 +2690,9 @@ class Problem(_pyoomph.Problem):
             self._shared_shapes_for_multi_assemble=shared_shapes_for_multi_assemble
         if azimuthal_stability:
             self._setup_azimuthal_stability_code=azimuthal_stability
+        if additional_cartesian_mode:
+            self._setup_additional_cartesian_stability_code=additional_cartesian_mode
+        
 
 
 
@@ -2720,7 +2744,7 @@ class Problem(_pyoomph.Problem):
         # 
         return eigenvectors
 
-    def solve_eigenproblem(self, n:int, shift:Union[float,complex,None]=0, quiet:bool=False, azimuthal_m:Optional[Union[int,List[int]]]=None,report_accuracy:bool=False,sort:bool=True,which:"EigenSolverWhich"="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPFloatArray,NPComplexArray]]=None,filter:Optional[Callable[[complex],bool]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
+    def solve_eigenproblem(self, n:int, shift:Union[float,complex,None]=0, quiet:bool=False, azimuthal_m:Optional[Union[int,List[int]]]=None,normal_mode_k:Optional[Union[ExpressionOrNum,List[ExpressionOrNum]]]=None,normal_mode_L:Optional[Union[ExpressionOrNum,List[ExpressionOrNum]]]=None,report_accuracy:bool=False,sort:bool=True,which:"EigenSolverWhich"="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPFloatArray,NPComplexArray]]=None,filter:Optional[Callable[[complex],bool]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
         """
         Solves the associated generalized eigenproblem for the given number of eigenvalues and eigenvectors.
 
@@ -2729,6 +2753,8 @@ class Problem(_pyoomph.Problem):
             shift (Union[float, complex, None], optional): The shift applied for shift-inverted approaches to solve the eigenproblem. Defaults to 0.
             quiet (bool, optional): If True, suppresses the output. Defaults to False.
             azimuthal_m (Optional[Union[int, List[int]]], optional): The azimuthal mode number(s) for axial symmetry breaking. Defaults to None, i.e. the axisymmetric mode.
+            normal_mode_k: The wave number(s) for an additional direction in Cartesian coordinates. Defaults to None, i.e. the base mode.            
+            normal_mode_L: The periodic length for an additional direction in Cartesian coordinates. Defaults to None, i.e. the base mode.            
             report_accuracy (bool, optional): If True, reports the accuracy of the computed eigenvalues. Defaults to False.
             sort (bool, optional): If True, sorts the eigenvalues in ascending order. Defaults to True.
             which ("EigenSolverWhich", optional): The type of eigenvalues to compute. Defaults to "LM".
@@ -2742,8 +2768,28 @@ class Problem(_pyoomph.Problem):
         """
         if not self.is_initialised():
             self.initialise()
+            
+        if normal_mode_L is not None:
+            if normal_mode_k is not None:
+                raise ValueError("Cannot specify both normal_mode_L and normal_mode_k")
+            if isinstance(normal_mode_L,(list,tuple)):
+                normal_mode_k=[2*pi/L for L in normal_mode_L]
+            else:
+                normal_mode_k=2*pi/normal_mode_L
+            normal_mode_L=None
+            
         if azimuthal_m is not None:
-            return self.solve_axial_symmetry_breaking_eigenproblem(n, azimuthal_m, shift, quiet,filter=filter,report_accuracy=report_accuracy)
+            if normal_mode_k is not None:
+                raise ValueError("Cannot specify both azimuthal_m and normal_mode_k")
+            if normal_mode_L is not None:
+                raise ValueError("Cannot specify both azimuthal_m and normal_mode_L")
+            return self._solve_normal_mode_eigenproblem(n, azimuthal_m=azimuthal_m, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy)
+        elif normal_mode_k is not None:
+            if isinstance(normal_mode_k,(list,tuple)):
+                normal_mode_k=[float(k*self.get_scaling("spatial")) for k in normal_mode_k]
+            else:
+                normal_mode_k=float(normal_mode_k*self.get_scaling("spatial"))
+            return self._solve_normal_mode_eigenproblem(n, cartesian_k=normal_mode_k, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy)
         if self._dof_selector_used is not self._dof_selector:
             self.reapply_boundary_conditions()
         if self.get_bifurcation_tracking_mode()!="":
@@ -3066,7 +3112,7 @@ class Problem(_pyoomph.Problem):
         if azimuthal_m is None or azimuthal_m==0:
             evals0, _ = self.solve_eigenproblem(neigen, shift=shift)
         else:
-            evals0, _ = self.solve_axial_symmetry_breaking_eigenproblem(neigen, azimuthal_m, shift=shift)
+            evals0, _ = self._solve_normal_mode_eigenproblem(neigen, azimuthal_m, shift=shift)
         self.invalidate_cached_mesh_data()
         param0 = parameter.value
         sign0 = evals0[eigenindex].real
@@ -3105,7 +3151,7 @@ class Problem(_pyoomph.Problem):
             if azimuthal_m is None:
                 evals1, _ = self.solve_eigenproblem(neigen, shift=shift)
             else:
-                evals1,_=self.solve_axial_symmetry_breaking_eigenproblem(neigen, azimuthal_m, shift=shift)
+                evals1,_=self._solve_normal_mode_eigenproblem(neigen, azimuthal_m, shift=shift)
             self.invalidate_cached_mesh_data()
             param1 = parameter.value
             if abs(evals1[eigenindex].real) < epsilon:
@@ -3367,8 +3413,8 @@ class Problem(_pyoomph.Problem):
             if must_reapply_bcs:
                 self.reapply_boundary_conditions() # Equation numbering might have been changed. Update it here!
                 self._last_bc_setting="eigen"
-            base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),0) 
-            eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),azimuthal_mode) 
+            base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),0,None) 
+            eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),azimuthal_mode,None) 
 
             # These are sets of strings, we must convert them into lists of equations. We reuse the same class as for the eigenproblem
             def dof_strings_to_global_equations(string_dof_set:Set[str]):
@@ -3421,7 +3467,7 @@ class Problem(_pyoomph.Problem):
         """
         return self._last_eigenvalues_m
 
-    # MUST BE CALLED FROM define_problem(), at best towards the end
+    
     def define_problem_for_axial_symmetry_breaking_investigation(self):
         from ..expressions.coordsys import AxisymmetryBreakingCoordinateSystem
         self._azimuthal_mode_param_m = self.get_global_parameter(self._azimuthal_stability.azimuthal_param_m_name)
@@ -3437,16 +3483,34 @@ class Problem(_pyoomph.Problem):
 
 
 
+    def define_problem_for_additional_cartesian_stability_investigation(self):
+        from ..expressions.coordsys import CartesianCoordinateSystemWithAdditionalNormalMode
+        self._normal_mode_param_k = self.get_global_parameter(self._cartesian_normal_mode_stability.normal_mode_param_k_name)
+        coordsys = CartesianCoordinateSystemWithAdditionalNormalMode(self._normal_mode_param_k.get_symbol())
+        self.set_coordinate_system(coordsys)
+
+        if len(self._residual_mapping_functions) != 0:
+            raise RuntimeError("TODO: combine it with more residual mapping functions")
+        self._residual_mapping_functions = [
+            lambda dest, expr: {dest: coordsys.map_residual_on_base_mode(expr),
+                                self._cartesian_normal_mode_stability.real_contribution_name+dest: coordsys.map_residual_on_normal_mode_eigenproblem_real(expr),
+                                self._cartesian_normal_mode_stability.imag_contribution_name+dest: coordsys.map_residual_on_normal_mode_eigenproblem_imag(expr)}]
+
 
     def setup_forced_zero_dof_list_for_eigenproblems(self):
+        m,normal_k=None,None
         if self._azimuthal_mode_param_m is not None:
+            if self._normal_mode_param_k is not None:
+                raise RuntimeError("Cannot use both azimuthal and cartesian normal mode at the same time")
             mv=self._azimuthal_mode_param_m.value
             m=round(mv)
             if abs(m-mv)>1e-6:
                 raise RuntimeError("Angular mode m is not an integer! "+str(mv))
+        elif self._normal_mode_param_k is not None:
+            normal_k=self._normal_mode_param_k.value
         else:
             m=None
-        to_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),m) 
+        to_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),m,normal_k) 
         if len(to_zero_dofs) and _pyoomph.get_verbosity_flag()!=0:
             print("For the eigenvalues "+("" if m is None else "[azimuthal_m="+str(int(m))+"]")+" we set following fields to zero: "+str(to_zero_dofs))        
         from ..solvers.generic import EigenMatrixSetDofsToZero
@@ -3456,18 +3520,34 @@ class Problem(_pyoomph.Problem):
             # And add a Matrix manipulator that sets the constrained degrees of freedom to zero
             esolve.add_matrix_manipulator(EigenMatrixSetDofsToZero(self, *to_zero_dofs))
 
-    def solve_axial_symmetry_breaking_eigenproblem(self, n:int, m:Union[List[int],Tuple[int],int], shift:Optional[Union[float,complex]]=0,quiet:bool=False,filter:Optional[Callable[[complex],bool]]=None,report_accuracy:bool=False)->Tuple[NPComplexArray,NPComplexArray]:
-        if self._azimuthal_mode_param_m is None:
-            raise RuntimeError(
-                "Must call define_problem_for_axial_symmetry_breaking_investigation towards the end of define_problem before using this")
-        if isinstance(m,(list,tuple)):
+    def solve_axial_symmetry_breaking_eigenproblem(self,*args,**kwargs):
+        raise RuntimeError("solve_axial_symmetry_breaking_eigenproblem is deprecated. Use solve_eigenproblem with corresponding kwargs, e.g. azimuthal_m=...")
+
+    def _solve_normal_mode_eigenproblem(self, n:int, azimuthal_m:Optional[Union[List[int],Tuple[int],int]]=None, cartesian_k:Optional[Union[List[float],Tuple[float],float]]=None, shift:Optional[Union[float,complex]]=0,quiet:bool=False,filter:Optional[Callable[[complex],bool]]=None,report_accuracy:bool=False)->Tuple[NPComplexArray,NPComplexArray]:
+        
+        if azimuthal_m and (self._azimuthal_mode_param_m is None):
+            raise RuntimeError("Must use setup_for_stability_analysis(azimuthal_stability=True) before initialialising the problem")
+        if cartesian_k and (self._normal_mode_param_k is None):
+            raise RuntimeError("Must use setup_for_stability_analysis(additional_cartesian_mode=True) before initialialising the problem")
+        
+        if cartesian_k is not None and azimuthal_m is not None:
+            raise RuntimeError("TODO: Both simultaneously")
+        elif cartesian_k is not None:
+            param=self._normal_mode_param_k
+            vlist=cartesian_k
+        elif azimuthal_m is not None:
+            param=self._azimuthal_mode_param_m
+            vlist=azimuthal_m
+            
+        
+        if isinstance(vlist,(list,tuple)):
             if report_accuracy:
-                raise RuntimeError("report_accuracy=True for azimuthal symmetry breaking only works if you select a single azimuthal mode, not a list like "+str(m))
+                raise RuntimeError("report_accuracy=True for normal mode eigenproblems only works if you select a single mode, not a list like "+str(vlist))
             alleigenvals:NPComplexArray=numpy.array([],dtype=numpy.complex128) #type:ignore
             alleigenvects:NPComplexArray=numpy.array([],dtype=numpy.complex128) #type:ignore
             minfoL:List[int]=[]
-            for ms in m:
-                self._azimuthal_mode_param_m.value = ms
+            for ms in vlist:
+                param.value = ms
                 self.actions_before_eigen_solve()
                 self.solve_eigenproblem(n, shift,quiet=True,filter=filter,report_accuracy=report_accuracy)
                 if len(alleigenvals)==0:
@@ -3478,9 +3558,6 @@ class Problem(_pyoomph.Problem):
                 if len(alleigenvects)==0:
                     alleigenvects:NPComplexArray= numpy.array(self.get_last_eigenvectors()).copy() #type:ignore
                 else:
-                    #print(alleigenvects)
-                    #print(self.get_last_eigenvectors())
-                    #print(alleigenvects.shape,self.get_last_eigenvectors().shape)
                     alleigenvects:NPComplexArray=numpy.vstack([alleigenvects,numpy.array(self.get_last_eigenvectors()).copy()]) #type:ignore
 
             srt = numpy.argsort(-alleigenvals) #type:ignore
@@ -3494,13 +3571,13 @@ class Problem(_pyoomph.Problem):
                 for i, l in enumerate(self._last_eigenvalues):
                     m=minfo[i]
                     print("Eigenvalue [m="+str(m)+"]", i, ":", l)
-            self._azimuthal_mode_param_m.value = 0
+            param.value = 0
         else:
-            self._azimuthal_mode_param_m.value = m
+            param.value = vlist
             self.actions_before_eigen_solve()
             self.solve_eigenproblem(n, shift,filter=filter,report_accuracy=report_accuracy)
-            self._azimuthal_mode_param_m.value = 0
-            self._last_eigenvalues_m=numpy.array([m]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore
+            param.value = 0
+            self._last_eigenvalues_m=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore
 
         return self._last_eigenvalues, self._last_eigenvectors
 
@@ -3525,14 +3602,21 @@ class Problem(_pyoomph.Problem):
 
     # will be called when an eigenproblem is about to be solved
     def actions_before_eigen_solve(self,force_reassign_eqs:bool=False): 
-        eigen_m=None
+        eigen_m,eigen_k=None,None
         if self._azimuthal_mode_param_m is not None:
+            if self._normal_mode_param_k is not None:
+                raise RuntimeError("Cannot use both azimuthal and additional cartesian modes simultaneously")
             mv=self._azimuthal_mode_param_m.value
             eigen_m=round(mv)
             if abs(eigen_m-mv)>1e-6:
                 raise RuntimeError("Angular mode m is not an integer! "+str(mv))
-        must_reassign_eqs = self._equation_system._before_eigen_solve(self.get_eigen_solver(),eigen_m) 
+        if self._normal_mode_param_k is not None:
+            kv=self._normal_mode_param_k.value
+            eigen_k=kv
+            
+        must_reassign_eqs = self._equation_system._before_eigen_solve(self.get_eigen_solver(),eigen_m,eigen_k) 
         if must_reassign_eqs or force_reassign_eqs:
+
             self.reapply_boundary_conditions()
             self.relink_external_data()
             self.reapply_boundary_conditions()
@@ -3540,6 +3624,8 @@ class Problem(_pyoomph.Problem):
 
         if eigen_m is not None and int(eigen_m)!=0:
             self.get_eigen_solver().setup_matrix_contributions(self._azimuthal_stability.real_contribution_name,self._azimuthal_stability.imag_contribution_name)
+        elif eigen_k is not None and eigen_k!=0:
+            self.get_eigen_solver().setup_matrix_contributions(self._cartesian_normal_mode_stability.real_contribution_name,self._cartesian_normal_mode_stability.imag_contribution_name)
         else:
             self.get_eigen_solver().setup_matrix_contributions("",None)
 

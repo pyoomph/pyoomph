@@ -137,16 +137,16 @@ class EnforcedBC(InterfaceEquations):
 
     Args:
         only_for_stationary_solve (bool, optional): Flag indicating if the enforced boundary conditions should only be applied during stationary solves. Defaults to False.
-        set_zero_on_angular_eigensolve (bool, optional): Flag indicating if the enforced boundary conditions should be set to zero during azimuthal eigensolves. Defaults to False.
+        set_zero_on_normal_mode_eigensolve (bool, optional): Flag indicating if the enforced boundary conditions should be set to zero during azimuthal eigensolves. Defaults to False.
         **constraints (Expression): Keyword arguments representing the enforced boundary conditions as pair of variable name to adjust and constraint expression to fulfill in residual form.
     """
  
-    def __init__(self,*, only_for_stationary_solve:bool=False, set_zero_on_angular_eigensolve=False,**constraints:Expression):
+    def __init__(self,*, only_for_stationary_solve:bool=False, set_zero_on_normal_mode_eigensolve=False,**constraints:Expression):
         super(EnforcedBC, self).__init__()
         self.constraints = constraints.copy()
         self.lagrangian:bool = False
         self.only_for_stationary_solve=only_for_stationary_solve
-        self.set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve
+        self.set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve
 
     def get_lagrange_multiplier_name(self, varname:str)->str:
         return "_lagr_enf_bc_" + varname
@@ -251,7 +251,7 @@ class EnforcedBC(InterfaceEquations):
 
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         must_reapply=False
-        if self.set_zero_on_angular_eigensolve:
+        if self.set_zero_on_normal_mode_eigensolve:
             if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
                 #if self.get_mesh()._problem._azimuthal_mode_param_m.value!=0:
                 return False  # Don't do anything in this case. It would mess up everything!
@@ -269,16 +269,19 @@ class EnforcedBC(InterfaceEquations):
                     must_reapply=True
         return must_reapply
     
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver", angular_mode:Optional[int])->Set[Union[str,int]]:
-        if (not self.set_zero_on_angular_eigensolve) or (angular_mode is None):
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver", angular_mode:Optional[int],normal_k:Optional[float])->Set[Union[str,int]]:
+        if (not self.set_zero_on_normal_mode_eigensolve) or (angular_mode is None and normal_k is None):
             return cast(Set[str],set())
         else:
-            angular_mode=int(angular_mode)
+            if angular_mode is not None and normal_k is not None:
+                raise RuntimeError("Cannot have both angular and normal mode set")
+            if angular_mode is not None:
+                mode=int(angular_mode)
+            elif normal_k is not None:
+                mode=normal_k
             fullpath = eqtree.get_full_path().lstrip("/")
-            if angular_mode == 0:
+            if mode == 0:
                 return cast(Set[str],set())
-            elif angular_mode == 1 or angular_mode == -1:                
-                for_my_m = [self.get_lagrange_multiplier_name(k) for k in self.constraints.keys()]
             else:
                 for_my_m = [self.get_lagrange_multiplier_name(k) for k in self.constraints.keys()]
             lst=[fullpath + "/" + k for k in for_my_m]
@@ -450,7 +453,7 @@ class AxisymmetryBC(DirichletBC):
         super(AxisymmetryBC, self).define_residuals()
 
     # For axial symmetry breaking eigenanalysis, we must deactivate the DirichletBCs at r=0
-    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[float]) -> bool:
+    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[float]=None,normal_k:Optional[float]=None) -> bool:
         if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
             return False # Nothing must be reassigned
         if angular_m is None or angular_m==0:
@@ -478,7 +481,7 @@ class AxisymmetryBC(DirichletBC):
                 must_reapply = True # Dirichlets have changed => reassign the equations
         return must_reapply
 
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[float])->Set[Union[str,int]]:
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[float],normal_k:Optional[float])->Set[Union[str,int]]:
         #print("GETTING SET FOR:"+eqtree.get_full_path())
         if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
             #print("RET EMPY")
@@ -507,7 +510,7 @@ class AxisymmetryBCForScalarD0Field(InterfaceEquations):
         super().__init__()
         self.fields=[f for f in fields]
 
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree: "EquationTree", eigensolver: "GenericEigenSolver", angular_mode: Union[int,None]) -> Set[Union[str,int]]:
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree: "EquationTree", eigensolver: "GenericEigenSolver", angular_mode: Union[int,None],normal_k:Optional[float]) -> Set[Union[str,int]]:
         eqs=set()
         if angular_mode!=0:
             for ie in eqtree._mesh.elements():

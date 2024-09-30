@@ -504,7 +504,7 @@ namespace pyoomph
 			std::tuple<std::string, const bool, const GiNaC::ex, FiniteElementCode *, bool, bool, std::string> cache_key = std::make_tuple(fieldname, true, inp, code, taginfo.no_jacobian, taginfo.no_hessian, where);
 			GiNaC::ex res;
 			bool add_to_cache;
-			if (mycode->expanded_additional_field_cache.count(cache_key))
+			if (false && mycode->expanded_additional_field_cache.count(cache_key)) //Do not use the cache for the moment
 			{
 				res = mycode->expanded_additional_field_cache[cache_key];
 				add_to_cache = false;
@@ -574,7 +574,7 @@ namespace pyoomph
 			std::tuple<std::string, const bool, const GiNaC::ex, FiniteElementCode *, bool, bool, std::string> cache_key = std::make_tuple(fieldname, false, inp, code, taginfo.no_jacobian, taginfo.no_hessian, where);
 			GiNaC::ex res;
 			bool add_to_cache;
-			if (mycode->expanded_additional_field_cache.count(cache_key))
+			if (false && mycode->expanded_additional_field_cache.count(cache_key)) // Do not use the cache for the moment
 			{
 				res = mycode->expanded_additional_field_cache[cache_key];
 				add_to_cache = false;

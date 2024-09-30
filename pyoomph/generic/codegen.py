@@ -225,6 +225,8 @@ class FiniteElementCodeGenerator(_pyoomph.FiniteElementCode):
             return self._problem.get_coordinate_system()
 
     def expand_additional_field(self, name:str, dimensional:bool, expression:_pyoomph.Expression,in_domain:_pyoomph.FiniteElementCode,no_jacobian:bool,no_hessian:bool,where:str)->"Expression":
+        
+        #print("CODEGEN: Expand additional field", name, dimensional, expression, in_domain, no_jacobian, no_hessian, where)
         eqs=self.get_equations()
         oldcg = eqs._get_current_codegen()
         eqs._set_current_codegen(self)
@@ -393,10 +395,10 @@ class BaseEquations(_pyoomph.Equations):
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         return False # Return whether the equations have to be renumbered
 
-    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[int])->bool:
+    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[int]=None,normal_k:Optional[float]=None)->bool:
         return False # Return whether the equations have to be renumbered
 
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[int])->Set[Union[str,int]]:
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[int],normal_k:Optional[float])->Set[Union[str,int]]:
         return set()
 
     def _init_output(self,eqtree:"EquationTree",continue_info:Optional[Dict[str,Any]],rank:int):
@@ -551,7 +553,8 @@ class BaseEquations(_pyoomph.Equations):
         if ndim == 0:
             raise RuntimeError(
                 "Normal cannot be used here... Element has no nodal dimension or is not initialised yet for normals")
-        return vector([cg._get_normal_component(i) for i in range(ndim)])
+        #return vector([cg._get_normal_component(i) for i in range(ndim)])
+        return var("normal",domain=cg)
 
     def _get_combined_element(self)->"BaseEquations":
         if self._final_element is None:
@@ -796,8 +799,7 @@ class BaseEquations(_pyoomph.Equations):
             assert master._problem is not None
             return master._problem.get_coordinate_system()
 
-    def expand_additional_field(self, name:str, dimensional:bool, expression:_pyoomph.Expression,in_domain:_pyoomph.FiniteElementCode,no_jacobian:bool,no_hessian:bool,where:str)->"Expression":
-
+    def expand_additional_field(self, name:str, dimensional:bool, expression:_pyoomph.Expression,in_domain:_pyoomph.FiniteElementCode,no_jacobian:bool,no_hessian:bool,where:str)->"Expression":        
         #msh=self.get_mesh()
         #if msh is not None:
         #    msh=msh._name
@@ -1423,28 +1425,28 @@ class EquationTree:
             must_reapply=child._before_stationary_or_transient_solve(stationary=stationary) or must_reapply
         return must_reapply
 
-    def _before_eigen_solve(self, eigensolver:"GenericEigenSolver",angular_m:Optional[int])->bool:
+    def _before_eigen_solve(self, eigensolver:"GenericEigenSolver",angular_m:Optional[int]=None,normal_k:Optional[float]=None)->bool:
         must_reapply = False
         if self._equations:
             oldcg = self._equations._get_current_codegen()
             self._equations._set_current_codegen(self._codegen)
-            res = self._equations._before_eigen_solve(self, eigensolver,angular_m) 
+            res = self._equations._before_eigen_solve(self, eigensolver,angular_m,normal_k) 
             if res is True:
                 must_reapply = True
             self._equations._set_current_codegen(oldcg)
         for _, child in self._children.items():
-            must_reapply = child._before_eigen_solve(eigensolver,angular_m) or must_reapply
+            must_reapply = child._before_eigen_solve(eigensolver,angular_m,normal_k) or must_reapply
         return must_reapply
 
-    def _get_forced_zero_dofs_for_eigenproblem(self,eigensolver:"GenericEigenSolver",angular_mode:Optional[int])->Set[Union[str,int]]:
+    def _get_forced_zero_dofs_for_eigenproblem(self,eigensolver:"GenericEigenSolver",angular_mode:Optional[int],normal_k:Optional[float])->Set[Union[str,int]]:
         res:Set[str]=set()
         if self._equations:
             oldcg = self._equations._get_current_codegen()
             self._equations._set_current_codegen(self._codegen)
-            res.update(self._equations._get_forced_zero_dofs_for_eigenproblem(self, eigensolver,angular_mode)) 
+            res.update(self._equations._get_forced_zero_dofs_for_eigenproblem(self, eigensolver,angular_mode,normal_k)) 
             self._equations._set_current_codegen(oldcg)
         for _, child in self._children.items():
-            res.update(child._get_forced_zero_dofs_for_eigenproblem(eigensolver,angular_mode))
+            res.update(child._get_forced_zero_dofs_for_eigenproblem(eigensolver,angular_mode,normal_k))
         return res
 
     def _do_output(self,step:int,stage:str):
@@ -2209,18 +2211,18 @@ class CombinedEquations(Equations):
                 must_reapply=must_reapply or e._before_stationary_or_transient_solve(eqtree, stationary)
         return must_reapply
 
-    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[int]) -> bool:
+    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[int]=None,normal_k:Optional[float]=None) -> bool:
         must_reapply=False
         for e in self._subelements:
             if isinstance(e,BaseEquations):  #type:ignore
-                must_reapply=must_reapply or e._before_eigen_solve(eqtree, eigensolver,angular_m)
+                must_reapply=must_reapply or e._before_eigen_solve(eqtree, eigensolver,angular_m,normal_k)
         return must_reapply
 
-    def _get_forced_zero_dofs_for_eigenproblem(self,eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_mode:Optional[int])->Set[Union[str,int]]:
+    def _get_forced_zero_dofs_for_eigenproblem(self,eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_mode:Optional[int],normal_k:Optional[float])->Set[Union[str,int]]:
         res:Set[str] = set()
         for e in self._subelements:
             if isinstance(e, BaseEquations): #type:ignore
-                upd=e._get_forced_zero_dofs_for_eigenproblem(eqtree, eigensolver,angular_mode)
+                upd=e._get_forced_zero_dofs_for_eigenproblem(eqtree, eigensolver,angular_mode,normal_k)
                 #print("UPDATE WITH",upd)
                 res.update(upd)
                 #print("UPDATE IS",res)
@@ -2728,11 +2730,13 @@ class GlobalLagrangeMultiplier(ODEEquations):
     """
     This class allows to define a global Lagrange multiplier that are used to enforce global constraints. It is just a normal :py:class:`~pyoomph.generic.codegen.ODEEquations` but with some additional features, i.e. it can be e.g. deactivated on transient solves.
     """
-    def __init__(self,*args:str,only_for_stationary_solve:bool=False,set_zero_on_angular_eigensolve:bool=True,**kwargs:"ExpressionOrNum"):
+    def __init__(self,*args:str,only_for_stationary_solve:bool=False,set_zero_on_normal_mode_eigensolve:bool=True,**kwargs:"ExpressionOrNum"):
         super(GlobalLagrangeMultiplier, self).__init__()
         self._entries:Dict[str,ExpressionOrNum]=OrderedDict({})
+        if "set_zero_on_angular_eigensolve" in kwargs.keys():
+            raise RuntimeError("set_zero_on_angular_eigensolve is not supported anymore. Please use set_zero_on_normal_mode_eigensolve instead")
         self.only_for_stationary_solve=only_for_stationary_solve
-        self.set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve
+        self.set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve
         for a in args:
             self._entries[a]=0
         for a,v in kwargs.copy().items():
@@ -2762,7 +2766,7 @@ class GlobalLagrangeMultiplier(ODEEquations):
 
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         must_reapply=False
-        if self.set_zero_on_angular_eigensolve:
+        if self.set_zero_on_normal_mode_eigensolve:
             if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
                 #if self.get_mesh()._problem._azimuthal_mode_param_m.value!=0:
                 return False  # Don't do anything in this case. It would mess up everything!
@@ -2779,10 +2783,10 @@ class GlobalLagrangeMultiplier(ODEEquations):
                     must_reapply=True
         return must_reapply
 
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver", angular_mode:Optional[int])->Set[Union[str,int]]:
-        if (not self.set_zero_on_angular_eigensolve) or (angular_mode is None):
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver", angular_mode:Optional[int],normal_k:Optional[float])->Set[Union[str,int]]:
+        if (not self.set_zero_on_normal_mode_eigensolve) or (angular_mode is None and normal_k is None):
             return cast(Set[str],set())
-        else:
+        elif angular_mode is not None:
             angular_mode=int(angular_mode)
             fullpath = eqtree.get_full_path().lstrip("/")
             if angular_mode == 0:
@@ -2794,6 +2798,14 @@ class GlobalLagrangeMultiplier(ODEEquations):
             lst=[fullpath + "/" + k for k in for_my_m]
             res:Set[str] = set(lst) 
             return res
+        elif normal_k is not None:
+            if normal_k == 0:
+                return cast(Set[str],set())
+            else:                
+                fullpath = eqtree.get_full_path().lstrip("/")
+                lst=[fullpath + "/" + k for k in self._entries.keys()]
+                res:Set[str] = set(lst) 
+                return res
 
     def get_information_string(self) -> str:
         return ", ".join([str(n) + " with contrib. " + str(v) for n, v in self._entries.items()])
@@ -2891,13 +2903,23 @@ class ForceZeroOnEigenSolve(BaseEquations):
         self.default=default
         self.for_nonzero_angular=for_nonzero_angular
 
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:EquationTree,eigensolver:"GenericEigenSolver", angular_mode:Optional[int]):
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:EquationTree,eigensolver:"GenericEigenSolver", angular_mode:Optional[int],normal_k:Optional[float])->Set[Union[str,int]]:
         if angular_mode is not None:
+            if normal_k is not None:
+                raise RuntimeError("Cannot set both angular_mode and normal_k")
             angular_mode=int(angular_mode)
-        if angular_mode is None or angular_mode==0 or (self.for_nonzero_angular is None):
-            topin:Set[str]=set(*self.default)
+            if angular_mode==0:
+                topin:Set[str]=set(*self.default)
+            else:
+                topin:Set[str]=set(*self.for_nonzero_angular)
+        elif normal_k is not None:
+            if normal_k==0.0:
+                topin:Set[str]=set(*self.default)
+            else:
+                topin:Set[str]=set(*self.for_nonzero_angular)
         else:
-            topin:Set[str]=set(*self.for_nonzero_angular)
+            topin:Set[str]=set(*self.default)
+        
 
         fullpath=eqtree.get_full_path().lstrip("/")
         if isinstance(topin,str):

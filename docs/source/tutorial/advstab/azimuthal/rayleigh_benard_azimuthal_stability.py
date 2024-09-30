@@ -57,7 +57,7 @@ class RBConvectionProblem(Problem):
         # but this yields problems in the azimuthal stability analysis then 
         # The pressure integral constraint is automatically deactivated when m!=0, since <p>=0 
         # holds automatically when p = p^(m)*exp(I*m*phi) for m!=0
-        eqs = NS.with_pressure_integral_constraint(self,integral_value=0,set_zero_on_angular_eigensolve=True)
+        eqs = NS.with_pressure_integral_constraint(self,integral_value=0,set_zero_on_normal_mode_eigensolve=True)
         
         # And advection-diffusion for temperature
         eqs += AdvectionDiffusionEquations(fieldnames="T",diffusivity=1, space="C1")

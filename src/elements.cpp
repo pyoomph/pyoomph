@@ -1668,6 +1668,39 @@ namespace pyoomph
 
 					  
 		}
+		else if (eldim==0 && nodal_dim==1)
+		{ 
+           //Actually, this does not mean anything, but we can set the derivative to zero
+		   for (unsigned int i = 0; i < nodal_dim; i++)
+			{
+				for (unsigned l = 0; l < n_node; l++)
+				{
+					for (unsigned int k = 0; k < nodal_dim; k++)
+					{
+						dnormal_dcoord[i][l][k] = 0.0;
+					}
+				}
+			}
+			if (d2normal_dcoord2)
+			{			
+				for (unsigned int i = 0; i < nodal_dim; i++)
+			   {
+					for (unsigned l = 0; l < n_node; l++)
+					{
+						for (unsigned int j = 0; j < nodal_dim; j++)
+						{
+							for (unsigned lp = 0; lp < n_node; lp++)
+							{
+								for (unsigned int jp = 0; jp < nodal_dim; jp++)
+								{		
+								 d2normal_dcoord2[i][l][j][lp][jp]=0.0;
+								}												
+							}
+						}
+					}
+				}
+			}
+		}
 		else
 		{
 
@@ -1738,6 +1771,10 @@ namespace pyoomph
 				l = 1;
 			l = sqrt(l);
 			for (unsigned int d = 0; d < nodal_dim; d++) n[d] /=l;
+		}
+		else if (nodal_dim==1 && eldim==0)
+		{
+			n[0]=1.0; // Makes only partially sense, but for PointMesh with a Cartesian normal mode expansion, it matters
 		}
 		else
 		{

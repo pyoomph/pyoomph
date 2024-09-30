@@ -67,7 +67,7 @@ class BaseMovingMeshEquations(Equations):
         self.get_mesh().set_lagrangian_nodal_coordinates()
         self.get_mesh().invalidate_lagrangian_kdtree()
 
-    def with_average_position_constraint(self, problem:"Problem", *, act_on:str="mesh",ode_domain_name:str="globals",lagrange_prefix:str="lagr_intconstr_mesh_", set_zero_on_angular_eigensolve:bool=True, **avg_pos:ExpressionOrNum)->Equations:
+    def with_average_position_constraint(self, problem:"Problem", *, act_on:str="mesh",ode_domain_name:str="globals",lagrange_prefix:str="lagr_intconstr_mesh_", set_zero_on_normal_mode_eigensolve:bool=True, **avg_pos:ExpressionOrNum)->Equations:
 
         lagrs:Dict[str,ExpressionOrNum]={}
         for c,v in avg_pos.items():
@@ -75,7 +75,7 @@ class BaseMovingMeshEquations(Equations):
                 raise RuntimeError("can only set average positions of x,y,z, but not "+str(c))
             lagrs[c]=v
 
-        ode_additions = GlobalLagrangeMultiplier(**{lagrange_prefix+c:0 for c,_ in lagrs.items()},set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve)
+        ode_additions = GlobalLagrangeMultiplier(**{lagrange_prefix+c:0 for c,_ in lagrs.items()},set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve)
         #ode_additions +=TestScaling(**{lagrange_name:1/scale_factor("pressure")})
         #ode_additions += Scaling(**{lagrange_name: 1 / test_scale_factor("pressure")})
 
