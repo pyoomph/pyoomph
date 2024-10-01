@@ -46,6 +46,11 @@ and the corresponding implementation could look like this:
    		self.add_residual(weak(p-self.disjoining_pressure,q)-weak(self.sigma*grad(h),grad(q)))
 
 
+.. note::
+
+   It can be beneficial to solve the height evolution equation on the test function of the pressure field and the pressure definition on the test functions of the height field, i.e. swap ``eta`` and ``q`` in the :py:meth:`~pyoomph.generic.codegen.BaseEquations.add_residual` calls. This approach respects the fact that we then choose the test function according to the field with the highest spatial derivative. It is also beneficial if e.g. a Dirichlet condition for the height is imposed somewhere, since it does not require any appropriate Neumann term for the pressure.  
+
+
 With this equation class, we will discuss a few examples in the following:
 
 .. toctree::
