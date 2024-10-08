@@ -57,8 +57,9 @@ class LubricationEquations(Equations):
       swap_test_functions (bool): Swap test functions between pressure and height. Default is False.
       scheme (TimeSteppingScheme): Time stepping scheme. Default is "BDF2".
       pfactor (ExpressionOrNum): Multiplicative factor for pressure. Default is 1.
+      use_subexpressions (bool): Use subexpressions to speed up. Might be incompatible with some features. Default is True.
    """
-   def __init__(self, *, space:FiniteElementSpaceEnum="C2", mu:ExpressionOrNum=1.0, disjoining_pressure:Union[ExpressionNumOrNone,Dict[str,ExpressionOrNum]]=None, sigma:ExpressionOrNum=1, fluid_props:Optional[AnyLiquidProperties]=None,use_exact_pressure:bool=False,height_source:ExpressionOrNum=0,dt_h_factor:ExpressionOrNum=1,mu0:ExpressionNumOrNone=None,sigma0:ExpressionNumOrNone=None,swap_test_functions:bool=False,scheme:TimeSteppingScheme="BDF2", pfactor:ExpressionOrNum=1):
+   def __init__(self, *, space:FiniteElementSpaceEnum="C2", mu:ExpressionOrNum=1.0, disjoining_pressure:Union[ExpressionNumOrNone,Dict[str,ExpressionOrNum]]=None, sigma:ExpressionOrNum=1, fluid_props:Optional[AnyLiquidProperties]=None,use_exact_pressure:bool=False,height_source:ExpressionOrNum=0,dt_h_factor:ExpressionOrNum=1,mu0:ExpressionNumOrNone=None,sigma0:ExpressionNumOrNone=None,swap_test_functions:bool=False,scheme:TimeSteppingScheme="BDF2", pfactor:ExpressionOrNum=1,use_subexpressions:bool=True):
       super().__init__()
       self.space:FiniteElementSpaceEnum = space
       self.mu = mu
@@ -68,7 +69,7 @@ class LubricationEquations(Equations):
       self.dt_h_factor=dt_h_factor
       self.scheme=scheme
       self.pfactor=pfactor
-      self.use_subexpressions=True
+      self.use_subexpressions=use_subexpressions
 
       if fluid_props is not None:
          self.fluid_props = fluid_props

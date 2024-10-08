@@ -488,6 +488,7 @@ class MeshTemplate(_pyoomph.MeshTemplate):
         self._interior_boundaries: Set[str] = set()
         self._macrobounds: List[_pyoomph.MeshTemplateCurvedEntityBase] = []
         self._fntrunk:Optional[str]=None # To be set for remeshing
+        self.all_nodes_as_boundary_nodes:bool=False
 
     def get_problem(self) -> "Problem":
         return self._problem
@@ -621,6 +622,8 @@ class MeshTemplate(_pyoomph.MeshTemplate):
         else:
             raise RuntimeError("Domain with name '" + name +
                                "' already in the mesh template")
+        if self.all_nodes_as_boundary_nodes:
+            self._domains[name].set_all_nodes_as_boundary_nodes()
         return self._domains[name]
 
     @overload

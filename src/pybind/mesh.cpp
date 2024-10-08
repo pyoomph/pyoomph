@@ -209,6 +209,8 @@ void PyReg_Mesh(py::module &m)
 		.def("is_hanging", (bool(pyoomph::Node::*)(const int &) const) & pyoomph::Node::is_hanging, "index"_a = -1)
 		.def("variable_position_pt", &pyoomph::Node::variable_position_pt, py::return_value_policy::reference)
 		.def("is_on_boundary", (bool(pyoomph::Node::*)() const) & pyoomph::Node::is_on_boundary)
+		.def("set_obsolete", &pyoomph::Node::set_obsolete)
+		.def("is_obsolete", &pyoomph::Node::is_obsolete)
 		.def("remove_from_boundary",&pyoomph::Node::remove_from_boundary)
 		.def("add_to_boundary", &pyoomph::Node::add_to_boundary)						
 		//	.def("is_on_boundary_index",(bool (pyoomph::Node::*,const unsigned )() const) &pyoomph::Node::is_on_boundary)
@@ -627,6 +629,14 @@ void PyReg_Mesh(py::module &m)
 			if (!be) return ;
 			be->set_macro_elem_pt(m);
 			if (map_nodes) be->map_nodes_on_macro_element(); })
+		.def("create_interpolated_node",[](oomph::GeneralisedElement *self, const std::vector<double> & s,bool as_boundary_node) -> pyoomph::Node *
+		   {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return NULL;			
+			oomph::Vector<double> soomph(s.size());
+			for (unsigned int i=0;i<s.size();i++) soomph[i]=s[i];
+			return be->create_interpolated_node(soomph,as_boundary_node);
+		   },py::return_value_policy::reference)
 		.def("local_coordinate_of_node", [](oomph::GeneralisedElement *self, unsigned int l) -> std::vector<double>
 			 {
 			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
@@ -708,6 +718,15 @@ void PyReg_Mesh(py::module &m)
 			"as_pyoomph_mesh", [](oomph::Mesh *self)
 			{ return dynamic_cast<pyoomph::Mesh *>(self); },
 			py::return_value_policy::reference)
+		.def("add_node_to_mesh",[](oomph::Mesh *self,pyoomph::Node *n)
+			 {
+				self->add_node_pt(n);
+			 })
+		.def("prune_dead_nodes",[](oomph::Mesh *self,bool with_bounds) 
+			{
+				if (with_bounds) self->prune_dead_nodes();
+				else dynamic_cast<pyoomph::TemplatedMeshBase*>(self)->prune_dead_nodes_without_respecting_boundaries();				
+			})
 		.def("output_paraview", [](oomph::Mesh *self, const std::string &fname, const unsigned &order)
 			 { std::ofstream f(fname); self->output_paraview(f,order); })
 		.def("nelement", &oomph::Mesh::nelement)

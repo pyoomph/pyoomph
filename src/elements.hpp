@@ -325,6 +325,8 @@ namespace pyoomph
     double eval_local_expression_at_node(unsigned index, unsigned node_index);
     double eval_local_expression_at_midpoint(unsigned index);
 
+    pyoomph::Node * create_interpolated_node(const oomph::Vector<double> & s,bool as_boundary_node);
+
     bool eval_tracer_advection_in_s_space(unsigned index, double time_frac, const oomph::Vector<double> &s, oomph::Vector<double> &svelo);
 
     //  void assign_local_eqn_numbers(const bool &store_local_dof_pt);

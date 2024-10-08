@@ -315,7 +315,7 @@ class GmshTemplate(MeshTemplate):
         self._pointhash:Dict[Tuple[float,float,float],Point] = {}
         self._point_size_hash:Dict[Point,float] = {}
         self._onedims_attached_to_point:Dict[Point,Set[Union[Line,Spline,BSpline,CircleArc]]]={}
-        self.all_nodes_as_boundary_nodes:bool=False
+        
 
         self._mesh_size_callback=None
 
@@ -605,23 +605,27 @@ class GmshTemplate(MeshTemplate):
             self.plane_surface(*lines,name="box") # Create the surface of the box
 
         Args:
-            *args: Variable number of arguments representing the points and names of the lines. Each argument should be in the format: p1, <name>, p2, <name>, p3, <name>, p4, ...
+            *args: Variable number of arguments representing the points and names of the lines. Each argument should be in the format: p1, <name>, p2, <name>, p3, <name>, p4, ... If it stops with a name, not a point, it will close the line loop to the first point
 
         Returns:
             A list of Line objects representing the created lines.
 
         Raises:
-            ValueError: If the number of arguments is not odd.
             ValueError: If the arguments are not in the correct format.
         """
+        closed_loop=False
         if len(args) % 2 != 1:
-            raise ValueError("create line needs arguments like p1, <name>, p2, <name>, p3, <name>, p4 ,...")
+            closed_loop=True
+            #raise ValueError("create line needs arguments like p1, <name>, p2, <name>, p3, <name>, p4 ,...")
         NL = len(args) // 2
         res:List[Line] = []
         for i in range(NL):
             pstart = args[2 * i]
             name = args[2 * i + 1]
-            pend = args[2 * i + 2]
+            if closed_loop and 2*i+2==len(args):
+                pend=args[0]
+            else:
+                pend = args[2 * i + 2]
             if (not isinstance(pstart, (Point,list,tuple))) or (not isinstance(pend, (Point,list,tuple))) or not (isinstance(name, str)):
                 raise ValueError("create line needs arguments like p1, <name>, p2, <name>, p3, <name>, p4 ,...")
             if isinstance(pstart,(list,tuple)):

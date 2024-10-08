@@ -6294,7 +6294,41 @@ namespace pyoomph
 		return eval_local_expression_at_s(index, s);
 	}
 
-	oomph::Vector<double> BulkElementBase::get_Eulerian_midpoint_from_local_coordinate() // Set s=[0.5*(smin+smax), ... ] and evaluate the position
+    pyoomph::Node *BulkElementBase::create_interpolated_node(const oomph::Vector<double> &s,bool as_boundary_node)
+    {
+		if (this->nnode()==0) return 0;
+		pyoomph::Node *res;
+		if (as_boundary_node)
+		{
+		 	res= new pyoomph::BoundaryNode(this->node_pt(0)->time_stepper_pt(),this->nlagrangian(), this->nnodal_lagrangian_type(), this->nodal_dimension(), this->nnodal_position_type(), this->required_nvalue(0));
+		}
+		else
+		{
+			res= new pyoomph::Node(this->node_pt(0)->time_stepper_pt(),this->nlagrangian(), this->nnodal_lagrangian_type(), this->nodal_dimension(), this->nnodal_position_type(), this->required_nvalue(0));	
+		}
+		
+
+		oomph::Vector<double> xibuff(this->lagrangian_dimension(),0.0);
+		this->interpolated_xi(s,xibuff);	
+		for (unsigned i = 0; i < this->lagrangian_dimension(); i++) res->xi(i) = xibuff[i];
+
+		for (unsigned ti = 0; ti < res->time_stepper_pt()->ntstorage(); ti++)
+		{
+			oomph::Vector<double> xbuff(this->nodal_dimension(),0.0);
+			this->interpolated_x(ti,s,xbuff);	
+			for (unsigned i = 0; i < this->nodal_dimension(); i++)
+				res->x(ti, i) = xbuff[i];
+
+			oomph::Vector<double> vbuff(res->nvalue(),0.0);
+			this->get_interpolated_values(ti,s,vbuff);
+			for (unsigned int i=0;i<vbuff.size();i++) res->set_value(ti,i,vbuff[i]);
+			
+		}
+        
+		return res;
+    }
+
+    oomph::Vector<double> BulkElementBase::get_Eulerian_midpoint_from_local_coordinate() // Set s=[0.5*(smin+smax), ... ] and evaluate the position
 	{
 		oomph::Vector<double> res(this->nodal_dimension(), 0.0);
 		if (this->nnode() == 1)

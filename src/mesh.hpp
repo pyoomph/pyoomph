@@ -343,6 +343,25 @@ namespace pyoomph
 				updated_errors[i] = errors[i];
 			TreeBasedRefineableMeshBase::adapt(updated_errors);
 		}
+
+		void prune_dead_nodes_without_respecting_boundaries()
+		{
+			oomph::Vector<oomph::Node*> new_node_pt;
+    		unsigned long n_node = this->nnode();
+    		for (unsigned long n = 0; n < n_node; n++)
+			{	
+				if (!(this->Node_pt[n]->is_obsolete()))
+				{
+					new_node_pt.push_back(this->Node_pt[n]);
+				}
+				else
+				{
+					delete this->Node_pt[n];
+					this->Node_pt[n]=NULL;
+				}
+			}
+			this->Node_pt = new_node_pt;
+		}		
 	};
 
 	class MeshKDTree

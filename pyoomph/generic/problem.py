@@ -1693,9 +1693,14 @@ class Problem(_pyoomph.Problem):
         for hook in self._hooks:
             hook.actions_before_newton_solve()
 
-    def actions_after_newton_solve(self):
+    def last_newton_step_failed(self):
         last_res=self.get_last_residual_convergence()
         if len(last_res)==0 or last_res[-1]>self.newton_solver_tolerance:
+            return True
+        return False
+
+    def actions_after_newton_solve(self):
+        if self.last_newton_step_failed():
             return # Don't do this if it has not converged
         self._equation_system._after_newton_solve() 
         for ism in range(self.nsub_mesh()):
