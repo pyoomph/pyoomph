@@ -287,6 +287,7 @@ class Problem(_pyoomph.Problem):
         self._last_eigenvalues:NPComplexArray=numpy.array([],dtype=numpy.complex128) #type:ignore
         self._last_eigenvectors:NPComplexArray=numpy.array([],dtype=numpy.complex128) #type:ignore
         self._last_eigenvalues_m:Optional[NPIntArray]=None
+        self._last_eigenvalues_k:Optional[NPFloatArray]=None
         self._azimuthal_mode_param_m=None
         self._normal_mode_param_k=None
         self._azimuthal_stability=_AzimuthalStabilityInfo()
@@ -3065,6 +3066,7 @@ class Problem(_pyoomph.Problem):
         self._last_eigenvectors:NPComplexArray=numpy.array([],dtype=numpy.complex128) #type:ignore
         self._last_eigenvalues:NPComplexArray=numpy.array([],dtype=numpy.complex128) #type:ignore
         self._last_eigenvalues_m=None
+        self._last_eigenvalues_k=None
 
     # Warning: This must be used with "for parameter, eigenvalue in find_bifurcation_via_eigenvalues(...):"
     def find_bifurcation_via_eigenvalues(self, parameter:Union[str,_pyoomph.GiNaC_GlobalParam], initstep:float, shift:Union[None,float,complex]=0, neigen:int=6, spatial_adapt:int=0, epsilon:float=1e-8, reset_arclength:bool=False, max_ds:Optional[Union[float,Callable[[float],float]]]=None, stay_stable_file:Optional[str]=None, before_eigensolving:Optional[Callable[[float],None]]=None, do_solve:bool=True, azimuthal_m:Optional[Union[int,List[int]]]=None, eigenindex:int=0):
@@ -3471,6 +3473,14 @@ class Problem(_pyoomph.Problem):
             Optional[NPIntArray]: Array containing the azimuthal mode numbers corresponding to the eigenvalues.
         """
         return self._last_eigenvalues_m
+    
+    def get_last_eigenmodes_k(self)->Optional[NPFloatArray]:
+        """Get the cartesian normal mode numbers for the last computed eigenvalues.
+
+        Returns:
+            Optional[NPFloatArray]: Array containing the cartesian normal mode numbers corresponding to the eigenvalues.
+        """
+        return self._last_eigenvalues_k
 
     
     def define_problem_for_axial_symmetry_breaking_investigation(self):
@@ -3571,7 +3581,12 @@ class Problem(_pyoomph.Problem):
             alleigenvects:NPComplexArray = alleigenvects[srt,:] #type:ignore
             minfo:NPIntArray=numpy.array(minfoL)[srt] #type:ignore
 
-            self._last_eigenvalues, self._last_eigenvectors,self._last_eigenvalues_m = alleigenvals,alleigenvects,minfo
+            self._last_eigenvalues, self._last_eigenvectors = alleigenvals,alleigenvects
+            if self.azimuthal_m is not None:
+                self._last_eigenvalues_m=minfo
+            else:
+                self._last_eigenvalues_k=minfo
+            
             if (not self.is_quiet()) and (not quiet):
                 for i, l in enumerate(self._last_eigenvalues):
                     m=minfo[i]
@@ -3582,7 +3597,10 @@ class Problem(_pyoomph.Problem):
             self.actions_before_eigen_solve()
             self.solve_eigenproblem(n, shift,filter=filter,report_accuracy=report_accuracy)
             param.value = 0
-            self._last_eigenvalues_m=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore
+            if azimuthal_m is not None:
+                self._last_eigenvalues_m=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore
+            else:
+                self._last_eigenvalues_k=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.float64) #type:ignore
 
         return self._last_eigenvalues, self._last_eigenvectors
 

@@ -205,8 +205,7 @@ class PFEMMeshUpdater:
 
         
         dom.flush_element_storage()        
-        dom.prune_dead_nodes(False)
-        
+        dom.prune_dead_nodes(False)        
         self.define_new_mesh(coords)
         
         

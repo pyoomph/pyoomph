@@ -32,6 +32,6 @@ The following elementary mathematical functions are implemented:and work on scal
     *   - ``cosh(x)``
         - Hyperbolic cosine :math:`\cosh(x)`
     *   - ``tanh(x)``        
-        - Hyperbolic tangent :math:`\tanh(x)`     
+        - Hyperbolic tangent :math:`\tanh(x)`
 
 Further functions can be implemented using the :py:class:`~pyoomph.expressions.cb.CustomMathExpression` class from the module :py:mod:`pyoomph.expressions.cb`, see :numref:`sectemporalcustommath`.

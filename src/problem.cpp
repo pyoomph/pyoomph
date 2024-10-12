@@ -402,14 +402,14 @@ namespace pyoomph
 		{
 			if (!strcmp(name.c_str(), dyn->functable->fieldnames_C2[i]))
 			{
-				return i;
+				return i+ dyn->functable->numfields_C2TB_basebulk;
 			}
 		}
 		for (unsigned int i = 0; i < dyn->functable->numfields_C1_basebulk; i++)
 		{
 			if (!strcmp(name.c_str(), dyn->functable->fieldnames_C1[i]))
 			{
-				return i + dyn->functable->numfields_C2_basebulk;
+				return i + dyn->functable->numfields_C2_basebulk+ dyn->functable->numfields_C2TB_basebulk;
 			}
 		}
 		return -1;

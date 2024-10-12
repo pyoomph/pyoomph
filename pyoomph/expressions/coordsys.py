@@ -579,7 +579,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         
         # Each field and test function are expanded with a mode perturbation
         if is_field:
-            # Expand fields as Ubase+epsilon*Upert*exp(I*m*phi)
+            # Expand fields as Ubase+epsilon*Upert*exp(I*m*phi)            
             return base_flag*expr+pert_flag*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(1))*self.field_mode
         else:
             # Test functions are not required to be expanded. They only enter linearly

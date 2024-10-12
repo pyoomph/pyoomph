@@ -157,6 +157,7 @@ class _MeshFileOutput(_BaseNumpyOutput):
 
 		#eleminds,elemtypes,D0_data,DL_data,elemental_fields,nodal_data,field_names=self.get_nodal_values(self.mesh,with_elem_indices=True,with_discontinuous=True,tesselate_tri=self.tesselate_tri,hide_fields=self.hide_fields,eigenvector=self.eigenvector,eigenvector_mode=self.eigenvector_mode,nondimensional=self.nondimensional)
 		cache=self.get_cached_mesh_data(self.mesh,nondimensional=self.nondimensional,tesselate_tri=self.tesselate_tri,eigenvector=evarg_for_cache,eigenmode=self.eigenmode,history_index=self.history_index,operator=self.operator,discontinuous=self.discontinuous,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
+		#print("GEETING CACHE",self.operator,cache,cache.operator)
 		#print("GOT CACHE",cache,cache.nodal_values)
 		nodal_data=cache.nodal_values
 		field_names=cache.nodal_field_inds
@@ -166,8 +167,10 @@ class _MeshFileOutput(_BaseNumpyOutput):
 		numDL=cache.DL_data.shape[1]
 		numD0 = cache.D0_data.shape[1] #type:ignore
 
-
-		x:NPFloatArray=nodal_data[:,field_names["coordinate_x"]] 
+		if "coordinate_x" in field_names.keys():
+			x:NPFloatArray=nodal_data[:,field_names["coordinate_x"]] 
+		else:
+			x:NPFloatArray = numpy.zeros(len(nodal_data)) #type:ignore	
 		if "coordinate_y" in field_names.keys():
 			y:NPFloatArray = nodal_data[:, field_names["coordinate_y"]] #type:ignore
 		else:

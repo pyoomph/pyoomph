@@ -426,7 +426,7 @@ class MeshDataCacheStorage:
         remkeys:List[str]=[]
         for k,v in self._storage.items():
             if only_eigens:
-                if k[2] is not None:
+                if k[2] is not None or (k[6] is not None and k[6].depends_on_eigen()):
                     v.clear()
                     remkeys.append(k) #type:ignore
             else:
@@ -460,6 +460,9 @@ class MeshDataCacheOperatorBase:
 
     def apply(self,base:MeshDataCacheEntry)->None:
         raise RuntimeError("Specify")
+    
+    def depends_on_eigen(self)->bool:
+        return False
 
     def __add__(self, other:"MeshDataCacheOperatorBase")->"MeshDataCacheCombinedOperator":
         return MeshDataCacheCombinedOperator(self,other)
@@ -499,6 +502,12 @@ class MeshDataCacheCombinedOperator(MeshDataCacheOperatorBase):
         for op in self._lst:
             op.apply(base)
 
+    def depends_on_eigen(self)->bool:
+        for op in self._lst:
+            if op.depends_on_eigen():
+                return True
+        return False
+
 class MeshDataCombineWithEigenfunction(MeshDataCacheOperatorBase):
     def __init__(self,eigenindex:Union[int,Sequence[int]],eigen_prefix_real:str="EigenRe_",eigen_prefix_imag:str="EigenIm_",eigen_prefix_merged:str="Eigen_",add_eigen_to_mesh_positions=False):
         super(MeshDataCombineWithEigenfunction, self).__init__()
@@ -511,6 +520,9 @@ class MeshDataCombineWithEigenfunction(MeshDataCacheOperatorBase):
         self.eigen_prefix_imag=eigen_prefix_imag
         self.eigen_prefix_merged=eigen_prefix_merged
         self.add_eigen_to_mesh_positions=add_eigen_to_mesh_positions
+        
+    def depends_on_eigen(self) -> bool:
+        return True
 
     def apply(self,base:MeshDataCacheEntry):
         hidden_fields={"lagrangian_x","lagrangian_y","lagrangian_z"}
@@ -610,6 +622,442 @@ class MeshDataCombineWithEigenfunction(MeshDataCacheOperatorBase):
 
 
 
+class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
+    def __init__(self,n_segments:int=32,default_length=1,phase:float=0.0,apply_k_mode_expansion:bool=True,use_k_for_length:bool=True,numperiods:float=1):
+        super(MeshDataCartesianExtrusion, self).__init__()
+        self.n_segments=n_segments
+        self.default_length=default_length
+        self.phase=phase
+        self.apply_k_mode_expansion=apply_k_mode_expansion
+        self.use_k_for_length=use_k_for_length
+        self.numperiods=numperiods
+        
+    def apply(self,base:MeshDataCacheEntry):
+        n_segments=self.n_segments
+        phi_increm=1
+        if base.mesh._eqtree.get_code_gen()._coordinate_space not in {"C1","C1TB"}: 
+            n_segments*=2        
+            phi_increm=2
+        
+            
+
+        # Getting the length
+        L=self.default_length
+        if base.mesh._problem.get_last_eigenmodes_k() is not None:
+            if self.use_k_for_length:                
+                kcommon=None
+                for eigenindex,prefixPair in base._additional_eigendata.items(): #type:ignore
+                    if eigenindex<len(base.mesh._problem.get_last_eigenmodes_k()):
+                        k=base.mesh._problem.get_last_eigenmodes_k()[eigenindex] #type:ignore
+                        if kcommon is None:
+                            kcommon=k
+                        elif kcommon!=k:
+                            kcommon=None
+                            break
+                if kcommon is not None:
+                    L=2*numpy.pi/kcommon*self.numperiods
+        #print("GOT L",L,"k",2*numpy.pi/L,kcommon)
+        zs=numpy.linspace(0,L,n_segments+1,endpoint=True)
+        
+        
+        stride = base.nodal_values.shape[0]
+
+        new_nodal_values=[]
+        new_nodal_field_inds=base.nodal_field_inds.copy()
+        field_operators={}
+
+        new_D0_data=[]
+        new_DL_data=[]
+        
+        
+        vector_fields=base.vector_fields.copy()
+#        vector_fields["coordinate"]=["coordinate_x","coordinate_y"]
+        rev_vector_fields={}
+        for a, b in vector_fields.items():
+            for c in b:
+                rev_vector_fields[c] = a
+
+
+        if "coordinate_y" in base.nodal_field_inds:
+            new_nodal_field_inds["coordinate_z"]=max(new_nodal_field_inds.values())+1
+            if "lagrangian_z" in base.nodal_field_inds:
+                new_nodal_field_inds["lagrangian_z"] = max(new_nodal_field_inds.values()) + 1
+            if "normal_x" in base.nodal_field_inds:
+                new_nodal_field_inds["normal_z"] = max(new_nodal_field_inds.values()) + 1
+            
+
+            field_operators["coordinate_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "coordinate_y"] #type:ignore
+            if "lagrangian_z" in base.nodal_field_inds:
+                field_operators["lagrangian_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "lagrangian_y"] #type:ignore
+            field_operators["normal_z"] = [lambda ny: numpy.tile(ny,n_segments+1), "normal_y"] #type:ignore
+        elif "coordinate_x" not in base.nodal_field_inds:
+            # 0d to 1d
+            new_nodal_field_inds["coordinate_x"] = max(new_nodal_field_inds.values()) + 1
+            new_nodal_field_inds["lagrangian_x"] = max(new_nodal_field_inds.values()) + 1
+            #if "normal_x" in base.nodal_field_inds:
+            #    new_nodal_field_inds["normal_x"] = max(new_nodal_field_inds.values()) + 1
+            field_operators["coordinate_x"] = [lambda : numpy.repeat(zs,len(base.nodal_values[:,0])).flatten()] #type:ignore
+            field_operators["lagrangian_x"] = field_operators["coordinate_x"]
+        else:
+            new_nodal_field_inds["coordinate_y"] = max(new_nodal_field_inds.values()) + 1
+            new_nodal_field_inds["lagrangian_y"] = max(new_nodal_field_inds.values()) + 1
+            if "normal_x" in base.nodal_field_inds:
+                new_nodal_field_inds["normal_y"] = max(new_nodal_field_inds.values()) + 1
+            field_operators["coordinate_y"] = [lambda : numpy.repeat(zs,len(base.nodal_values[:,0])).flatten()] #type:ignore
+            field_operators["lagrangian_y"] = field_operators["coordinate_y"]
+
+
+        completed_eigen_vector_fields=set() #type:ignore
+        if self.apply_k_mode_expansion and base.mesh._problem.get_last_eigenmodes_k() is not None: #type:ignore
+            for eigenindex,prefixPair in base._additional_eigendata.items(): #type:ignore
+                prefixRe=prefixPair[0]
+                prefixIm = prefixPair[1]
+                prefixRes = prefixPair[2]
+                for fn,findex in base.nodal_field_inds.items(): #type:ignore
+                    if fn.startswith(prefixRe):
+                        fnRe=fn
+                        fnIm=prefixIm+fn[len(prefixRe):]
+                        fnRes=prefixRes+fn[len(prefixRe):]
+                        del new_nodal_field_inds[fnRe]
+                        del new_nodal_field_inds[fnIm]
+                        newindex = 0
+                        for name, index in sorted(new_nodal_field_inds.items(), key=lambda item: item[1]): #type:ignore
+                            new_nodal_field_inds[name] = newindex
+                            newindex += 1
+                        new_nodal_field_inds[fnRes]=max(new_nodal_field_inds.values()) + 1
+                        k=base.mesh._problem.get_last_eigenmodes_k()[eigenindex] #type:ignore
+                        phis=numpy.linspace(0,2*numpy.pi*self.numperiods/k,n_segments+1,endpoint=True)
+                        
+                        
+                        field_operators[fnRes] = [lambda RealPart,ImagPart : numpy.outer(numpy.cos(k*phis), RealPart).flatten() + numpy.outer(numpy.sin(k*phis), ImagPart).flatten(), fnRe,fnIm] #type:ignore
+
+                        if fnRe in rev_vector_fields:
+                            ReVector=rev_vector_fields[fnRe] #type:ignore
+                            ImVector=rev_vector_fields[fnIm] #type:ignore
+                            ResVector=prefixRes+rev_vector_fields[fnRe][len(prefixRe):] #type:ignore
+                            vector_fields[ResVector]=[prefixRes+compofn[len(prefixRe):] for compofn in vector_fields[ReVector]] #type:ignore
+                            del vector_fields[ReVector] #type:ignore
+                            del vector_fields[ImVector] #type:ignore
+                            rev_vector_fields = {}
+                            for a, b in vector_fields.items():
+                                for c in b:
+                                    rev_vector_fields[c] = a
+                            #print(vector_fields[ResVector])
+                            #raise RuntimeError("HEREH")
+                            #field_operators[fnRes] = [lambda RealPart, ImagPart: numpy.outer(numpy.cos(m * phis),RealPart).flatten() + numpy.outer(numpy.sin(m * phis), ImagPart).flatten(), fnRe, fnIm]
+                # Second iteration to patch the vectors
+                for vecname,veccompos in vector_fields.items():
+                    if vecname.startswith(prefixRes):
+                        composRes = [fn for fn in veccompos]
+                        composIm = [prefixIm + fn[len(prefixRes):] for fn in veccompos]
+                        composRe = [prefixRe + fn[len(prefixRes):] for fn in veccompos]
+                        r_index=None
+                        phi_index=None
+                        #print("PATCHING VECTOR",vecname)
+                        for cindex,componame in enumerate(composRes):
+                            if componame.endswith("_x"):
+                                r_index=cindex
+                            elif componame.endswith("_normal"):
+                                phi_index=cindex
+
+                        k=base.mesh._problem.get_last_eigenmodes_k()[eigenindex] #type:ignore
+                        if r_index is not None and phi_index is not None:
+                            #print("RINDEX",r_index,phi_index)
+                            #print("K",eigenindex,k)
+                            phis=numpy.linspace(0,2*numpy.pi*self.numperiods/k,n_segments+1,endpoint=True)
+                            def get_x_component(ReR,ImR,ReP,ImP): #type:ignore
+                                #print("XCOMPONENT",vecname, len(ReR),len(ImR),len(ReP),len(ImP))
+                                
+                                return numpy.outer(numpy.cos(k * phis),ReR).flatten()-numpy.outer(numpy.sin(k * phis),ImR).flatten()
+                                #Vr_cos_phi=numpy.outer(numpy.cos(k * phis)*numpy.cos(phis),ReR).flatten()+numpy.outer(numpy.sin(k * phis)*numpy.cos(phis),ImR).flatten() #type:ignore
+                                #Vphi_sin_phi=numpy.outer(numpy.cos(k * phis)*numpy.sin(phis),ReP).flatten()+numpy.outer(numpy.sin(k * phis)*numpy.sin(phis),ImP).flatten() #type:ignore
+                                #return Vr_cos_phi+0*Vphi_sin_phi #type:ignore
+                            def get_y_component(ReR,ImR,ReP,ImP): #type:ignore
+                                #print("YCOMPONENT",vecname,len(ReR),len(ImR),len(ReP),len(ImP))             
+                                #print("MAGS YCOMPONENT",vecname,numpy.amax(numpy.absolute(ReR)),numpy.amax(numpy.absolute(ImR)),numpy.amax(numpy.absolute(ReP)),numpy.amax(numpy.absolute(ImP)))
+                                return numpy.outer(numpy.cos(k * phis),ReP).flatten()-numpy.outer(numpy.sin(k * phis),ImP).flatten()
+                                #Vr_sin_phi=numpy.outer(numpy.cos(k * phis)*numpy.sin(phis),ReR).flatten()+numpy.outer(numpy.sin(k * phis)*numpy.sin(phis),ImR).flatten() #type:ignore
+                                #Vphi_cos_phi=numpy.outer(numpy.cos(k * phis)*numpy.cos(phis),ReP).flatten()+numpy.outer(numpy.sin(k * phis)*numpy.cos(phis),ImP).flatten() #type:ignore
+                                #return Vr_sin_phi-Vphi_cos_phi #type:ignore
+                            field_operators[composRes[r_index]]=[get_x_component,composRe[r_index],composIm[r_index],composRe[phi_index],composIm[phi_index]] 
+                            field_operators[composRes[phi_index]] = [get_y_component, composRe[r_index],composIm[r_index], composRe[phi_index],composIm[phi_index]]
+                            yname=vecname+"_y"
+                            #print("YNAME",yname)
+                            field_operators[yname]=field_operators.pop(composRes[phi_index]) #type:ignore
+                            new_nodal_field_inds[yname]=new_nodal_field_inds.pop(composRes[phi_index])
+                            completed_eigen_vector_fields.add(vecname) #type:ignore
+                            if len(composRes)>2:
+                                new_nodal_field_inds[vecname + "_z"] = max(new_nodal_field_inds.values()) + 1
+                                field_operators[vecname+"_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),prefixRe + veccompos[0][len(prefixRes):-len("_x")] + "_y",prefixIm + veccompos[0][len(prefixRes):-len("_x")] + "_y"] #type:ignore
+                            vector_fields[vecname]=[vecname+component for component in ["_x","_y","_z"][0:len(composRes)]]
+                            #print(new_nodal_field_inds,vector_fields)
+                    else:
+                        field_operators[vecname+"_y"]=[lambda a:numpy.tile(a,n_segments+1),vecname+"_normal"] 
+                        #print("SKIPPING VECTOR",vecname)
+                        pass
+
+
+        if False:
+            for vfield,components in vector_fields.items(): #type:ignore
+                if vfield in completed_eigen_vector_fields:
+                    continue
+                if vfield+"_x" in new_nodal_field_inds:
+                    if vfield+"_y" in new_nodal_field_inds:
+                        new_nodal_field_inds[vfield+"_z"] = max(new_nodal_field_inds.values()) + 1
+                        field_operators[vfield+"_z"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_y"] #type:ignore
+                    else:
+                        new_nodal_field_inds[vfield + "_y"] = max(new_nodal_field_inds.values()) + 1
+                    if vfield+"_normal" in new_nodal_field_inds:
+                        print(field_operators,"for",vfield)
+                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(phis), vx).flatten()-numpy.outer(numpy.sin(phis), vphi).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
+                        #field_operators[vfield + "_y"] = [lambda vx,vphi: numpy.outer(numpy.sin(phis), vx).flatten()+numpy.outer(numpy.cos(phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
+                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(k*phis), vx).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
+                        #field_operators[vfield + "_y"] = [lambda vx,vphi: numpy.outer(numpy.cos(k*phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
+                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(phis), vx).flatten()-0*numpy.outer(numpy.sin(phis), vphi).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
+                        #field_operators[vfield + "_y"] = [lambda vx,vphi: 0*numpy.outer(numpy.sin(phis), vx).flatten()+numpy.outer(numpy.cos(phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
+
+                        if vfield+"_normal" in new_nodal_field_inds:
+                            del new_nodal_field_inds[vfield+"_normal"]
+                            newindex=0
+                            for name, index in sorted(new_nodal_field_inds.items(), key=lambda item: item[1]): #type:ignore
+                                new_nodal_field_inds[name]=newindex
+                                newindex+=1
+
+                    else:
+                        raise RuntimeError("Normal field not found for "+vfield)
+                        field_operators[vfield + "_x"] = [lambda vx: vx,vfield + "_x"] #type:ignore
+                        field_operators[vfield + "_y"] = [lambda vx: vx,vfield + "_x"] #type:ignore
+
+        
+                
+
+        for name,index in sorted(new_nodal_field_inds.items(),key=lambda item: item[1]): #type:ignore
+            if name in field_operators.keys():
+                op=field_operators[name] #type:ignore
+                #print("Applying operator for "+name,op)
+                if op is not None:
+                    for arg in op[1:]: #type:ignore
+                        if arg not in base.nodal_field_inds:
+                            raise RuntimeError("Cannot resolve argument "+arg+" for tranformation of "+name+"\n"+str(op)+"\nAvailable: "+str(base.nodal_field_inds)) #type:ignore
+                    args=[base.nodal_values[:,base.nodal_field_inds[n]] for n in op[1:]] #type:ignore
+                    newdata=op[0](*args) #type:ignore
+                else:
+                    newdata=None
+            else:
+                newdata=numpy.tile(base.nodal_values[:,base.nodal_field_inds[name]], n_segments+1) #type:ignore
+            if new_nodal_values is not None:
+                new_nodal_values.append(newdata) #type:ignore
+
+        base.nodal_field_inds=new_nodal_field_inds
+        base.nodal_values=numpy.transpose(numpy.array(new_nodal_values)) #type:ignore        
+        base.vector_fields=vector_fields
+        
+
+
+        if base.tesselate_tri:
+            raise RuntimeError("Cartesian extrusion cannot be combined with tesselate_tri=True yet")
+        if base.discontinuous and (base.D0_data.shape[1]>0 or base.DL_data.shape[1]>0):
+            raise RuntimeError("Cartesian extrusion does not work with discontinuous=True, at least if D0 or DL fields are defined")
+        elem_types=base.elem_types
+
+
+        upper_limit=n_segments#-phi_increm
+
+        mod_length=base.nodal_values.shape[0]
+        new_elem_types=[]
+        new_elem_indices=[]
+        elemental_phis=numpy.zeros((0,))
+        
+        mp = lambda i, o: (i + o * stride) #% mod_length #type:ignore
+        for d0dl_index,(elemtype,eis) in enumerate(zip(elem_types,base.elem_indices)):            
+            old_num_elems=len(new_elem_types)       
+            if elemtype==1: # LineC1                         
+                raise RuntimeError("Cartesian extrusion does not work with LineC1 elements")
+            elif elemtype == 2:  # LineC2                
+                    for offs in range(0,upper_limit,2):
+                        new_elem_indices.append([mp(eis[0], offs), mp(eis[1], offs), mp(eis[1], offs + 1)]) #type:ignore
+                        new_elem_indices.append([mp(eis[0], offs+1), mp(eis[0], offs), mp(eis[1], offs + 1)]) #type:ignore
+                        new_elem_indices.append([mp(eis[0], offs + 2), mp(eis[0], offs+1), mp(eis[1], offs + 1)]) #type:ignore
+                        new_elem_indices.append([mp(eis[0], offs + 2), mp(eis[1], offs + 1),mp(eis[1], offs + 2)]) #type:ignore
+                        #new_elem_types+=[3,3,3,3] #type:ignore
+                        new_elem_indices.append([mp(eis[1], offs + 1),mp(eis[1], offs), mp(eis[2], offs) ]) #type:ignore
+                        new_elem_indices.append([mp(eis[1], offs + 1), mp(eis[2], offs), mp(eis[2], offs+1)]) #type:ignore
+                        new_elem_indices.append([mp(eis[1], offs + 1), mp(eis[2], offs+1), mp(eis[2], offs + 2)]) #type:ignore
+                        new_elem_indices.append([mp(eis[1], offs + 1), mp(eis[2], offs + 2), mp(eis[1], offs + 2)]) #type:ignore
+                        #print(new_elem_indices[-1],mod_length)
+                    #raise RuntimeError("This causes troubles ")
+                        new_elem_types += [3,3,3,3,3,3,3,3] #type:ignore
+                        elemental_phi_row=numpy.linspace(0,2*numpy.pi,upper_limit//2,endpoint=True)+self.phase  
+                        elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
+            elif elemtype==0: # Point -> Line
+                for offs in range(0, upper_limit, phi_increm):
+                    if phi_increm==2: # second order
+                        new_elem_indices.append([mp(eis[0], offs), mp(eis[0], offs+1), mp(eis[0], offs + 2)]) #type:ignore
+                        new_elem_types.append(2) #type:ignore
+                    else:
+                        new_elem_indices.append([mp(eis[0], offs), mp(eis[0], offs + 1)]) #type:ignore
+                        new_elem_types.append(1) #type:ignore
+                    elemental_phi_row=numpy.linspace(0,2*numpy.pi,upper_limit//phi_increm,endpoint=True)+self.phase  
+                    elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
+            elif elemtype==8: # Quad9 -> Tris at the center and hex27 in bulk
+                for offs in range(0, upper_limit, phi_increm):
+                    #if zero_radial_index in eis:
+                    #    pass
+                    #else:
+                    hex27inds=[]
+                    for i in range(3):
+                        hex27inds += [mp(eis[6], offs + i), mp(eis[7], offs + i), mp(eis[8], offs + i)] #type:ignore
+                        hex27inds += [mp(eis[3], offs + i), mp(eis[4], offs + i), mp(eis[5], offs + i)] #type:ignore
+                        hex27inds+=[mp(eis[0], offs+i), mp(eis[1], offs +i), mp(eis[2], offs+i)] #type:ignore
+                    new_elem_indices.append(hex27inds) #type:ignore
+                    new_elem_types.append(14) #type:ignore
+                elemental_phi_row=numpy.linspace(0,self.angle,upper_limit//phi_increm,endpoint=not closed)+self.start_angle  
+                elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
+            elif elemtype==6: # Quad4 -> Tris at the center and hex in bulk
+                for offs in range(0, upper_limit, phi_increm):
+                        # TODO: Tri at center
+                        hexinds=[]
+                        for i in range(2):
+                            hexinds += [mp(eis[2], offs + i), mp(eis[3], offs + i)] #type:ignore
+                            hexinds+=[mp(eis[0], offs+i), mp(eis[1], offs +i)] #type:ignore
+                        new_elem_indices.append(hexinds) #type:ignore
+                        new_elem_types.append(11) #type:ignore
+                elemental_phi_row=numpy.linspace(0,self.angle,upper_limit//phi_increm,endpoint=not closed)+self.start_angle  
+                elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
+            elif elemtype==3 or elemtype==66: # Tri3 -> Tetras
+                for offs in range(0, upper_limit, phi_increm):
+                        # TODO: Special tetra at center
+                        new_elem_indices.append([mp(eis[0], offs+1),mp(eis[1], offs+1),mp(eis[2], offs+1),mp(eis[0],offs),mp(eis[1],offs),mp(eis[2], offs)]) #type:ignore
+                        new_elem_types+=[7] #type:ignore
+                elemental_phi_row=numpy.linspace(0,self.angle,upper_limit//phi_increm,endpoint=not closed)+self.start_angle  
+                elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
+            elif elemtype==9 or elemtype==99:
+                for offs in range(0, upper_limit, phi_increm):
+                        new_elem_indices.append([mp(eis[0],offs),mp(eis[1],offs),mp(eis[2], offs), #type:ignore
+                                                 mp(eis[0], offs + 2), mp(eis[1], offs + 2), mp(eis[2], offs + 2),
+                                                 mp(eis[3],offs),mp(eis[4],offs),mp(eis[5], offs),
+                                                 mp(eis[3], offs + 2), mp(eis[4], offs + 2), mp(eis[5], offs + 2),
+                                                 mp(eis[0], offs + 1), mp(eis[1], offs + 1), mp(eis[2], offs + 1)
+                                                 ]) #type:ignore
+                        new_elem_types+=[77] #type:ignore
+                elemental_phi_row=numpy.linspace(0,self.angle,upper_limit//phi_increm,endpoint=not closed)+self.start_angle  
+                elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
+            else:
+                raise RuntimeError("Implement element type "+str(elemtype))
+            
+            # DL/D0 Data
+            num_created_elems=len(new_elem_types)-old_num_elems            
+            #print(num_created_elems//upper_limit,eis,elemtype)
+            if num_created_elems % len(elemental_phi_row)!=0:
+                print("ERROR NUM CREATED ELEMENTS:",num_created_elems,"LEN OF THE ELEMENTAL ANGLE ROW",len(elemental_phi_row),"UPPER LIMIT",upper_limit)
+                #raise RuntimeError("See above")
+            
+            new_elemental_phis=numpy.repeat(elemental_phi_row,num_created_elems//len(elemental_phi_row))
+            #print("LENS",len(new_elemental_phis),num_created_elems,num_created_elems//len(elemental_phi_row),num_created_elems)
+            #print(num_created_elems,len(new_elemental_phis),len(elemental_phi_row),elemtype)
+            elemental_phis=numpy.r_[elemental_phis,new_elemental_phis] #type:ignore
+            #start=0 # elemental_phis[-1] if len(elemental_phis)>0 else 0
+            #end=start+1
+            #elemental_phis=numpy.r_[elemental_phis,numpy.linspace(start,end,num_created_elems)]
+
+            #print(len(numpy.repeat(elemental_phi_row,num_created_elems//upper_limit)),num_created_elems)
+
+            if base.DL_data.shape[1]>0:
+                dlrow=[]
+                for dlfield in range(base.DL_data.shape[1]):  
+                    dlrow+=[[base.DL_data[d0dl_index][dlfield]]*len(new_elemental_phis)]
+                dlrow=numpy.transpose(numpy.array(dlrow))
+                if len(new_DL_data)==0:
+                    new_DL_data=dlrow
+                else:
+                    new_DL_data=numpy.concatenate((new_DL_data,dlrow),axis=1)
+
+            if base.D0_data.shape[1]>0:
+                d0row=[]
+                for d0field in range(base.D0_data.shape[1]):            
+                    d0row+=[[base.D0_data[d0dl_index][d0field]]*len(new_elemental_phis)]
+                d0row=numpy.transpose(numpy.array(d0row))
+                if len(new_D0_data)==0:
+                    new_D0_data=d0row
+                else:
+                    new_D0_data=numpy.r_[new_D0_data,d0row]
+
+
+
+        base.elem_types=numpy.array(new_elem_types) #type:ignore
+        maxl=0
+        for l in new_elem_indices: #type:ignore
+            maxl=max(maxl,len(l)) #type:ignore
+        base.elem_indices=numpy.zeros((len(new_elem_indices),maxl),dtype=int) #type:ignore
+        for i,ne in enumerate(new_elem_indices): #type:ignore
+            for j,e in enumerate(ne): #type:ignore
+                base.elem_indices[i,j]=e #type:ignore
+
+        if len(new_DL_data)>0:
+            base.DL_data=numpy.transpose(new_DL_data,axes=(1,2,0))
+            
+        if len(new_D0_data)>0:            
+            base.D0_data=new_D0_data
+            assert base.D0_data.shape[0]==len(elemental_phis)
+
+        # Rotate DL and D0 with m if necessary:        
+        if self.apply_k_mode_expansion and base.mesh._problem.get_last_eigenmodes_k() is not None: #type:ignore
+            remove_indices=[]
+            remove_indices_DL=[]
+            remove_indices_D0=[]
+            rename_indices={}
+            for eigenindex,prefixPair in base._additional_eigendata.items(): #type:ignore
+                prefixRe=prefixPair[0]
+                prefixIm = prefixPair[1]
+                prefixRes = prefixPair[2]
+                k=base.mesh._problem.get_last_eigenmodes_k()[eigenindex] #type:ignore
+                cs=numpy.cos(k*elemental_phis)
+                sn=numpy.sin(k*elemental_phis)
+                for dgfieldname,dgfieldind in base.elemental_field_inds.items():
+                    if dgfieldname.startswith(prefixRe):
+                        imfieldindex=base.elemental_field_inds[prefixIm+dgfieldname[len(prefixRe):]]
+                        
+                        #raise RuntimeError("Strange, but for some reason the D0/DL without discontinuous=True is broken")
+                        if dgfieldind<base.DL_data.shape[1]:
+                            # DL field                                                                       
+                            base.DL_data[:,dgfieldind,0]=base.DL_data[:,dgfieldind,0]*cs+base.DL_data[:,imfieldindex,0]*sn                            
+                            remove_indices_DL.append(imfieldindex)
+                            #base.DL_data[:,dgfieldind,0]=cs
+                            #base.DL_data[:,dgfieldind,0]=elemental_phis
+                        else:
+                            base.D0_data[:,dgfieldind-base.DL_data.shape[1]]=base.D0_data[:,dgfieldind-base.DL_data.shape[1]]*cs+base.D0_data[:,imfieldindex-base.DL_data.shape[1]]*sn
+                            remove_indices_D0.append(imfieldindex-base.DL_data.shape[1])
+                            #base.D0_data[:,dgfieldind-base.DL_data.shape[1]]=cs
+                            #base.D0_data[:,dgfieldind-base.DL_data.shape[1]]=elemental_phis
+                        # Rename to the result
+                        rename_indices[prefixRes+dgfieldname[len(prefixRe):]]=dgfieldname
+                        remove_indices.append(imfieldindex)
+            for new_name,old_name in rename_indices.items():
+                base.elemental_field_inds[new_name]=base.elemental_field_inds.pop(old_name)
+            if len(remove_indices_D0)>0:
+                base.D0_data=numpy.delete(base.D0_data,numpy.array(remove_indices_D0),axis=1)
+            if len(remove_indices_DL)>0:
+                base.DL_data=numpy.delete(base.DL_data,numpy.array(remove_indices_DL),axis=1)
+            if len(remove_indices)>0:
+                new_inds={}
+                rev_inds={i:n for n,i in base.elemental_field_inds.items()}
+                cnt=0
+                for i in range(max(rev_inds.keys())):
+                    if i in remove_indices:
+                        continue
+                    new_inds[rev_inds[i]]=cnt
+                    cnt+=1                
+                base.elemental_field_inds=new_inds
+                
+        
+        
+
+        #print(field_operators)
+        #print("DONE HRE",base.nodal_field_inds)
+        #exit()
+        
+        
+        
 
 class MeshDataRotationalExtrusion(MeshDataCacheOperatorBase):
     def __init__(self,n_segments:int=32,angle:float=2*numpy.pi,start_angle:float=0.0,rotate_eigendata_with_mode_m:bool=True):
