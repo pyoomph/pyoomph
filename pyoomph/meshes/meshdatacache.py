@@ -781,14 +781,15 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                                 #return Vr_sin_phi-Vphi_cos_phi #type:ignore
                             field_operators[composRes[r_index]]=[get_x_component,composRe[r_index],composIm[r_index],composRe[phi_index],composIm[phi_index]] 
                             field_operators[composRes[phi_index]] = [get_y_component, composRe[r_index],composIm[r_index], composRe[phi_index],composIm[phi_index]]
-                            yname=vecname+"_y"
+                            missing_dir=["x","y","z"][len(composRes)-1]
+                            yname=vecname+"_"+missing_dir
                             #print("YNAME",yname)
                             field_operators[yname]=field_operators.pop(composRes[phi_index]) #type:ignore
                             new_nodal_field_inds[yname]=new_nodal_field_inds.pop(composRes[phi_index])
                             completed_eigen_vector_fields.add(vecname) #type:ignore
-                            if len(composRes)>2:
-                                new_nodal_field_inds[vecname + "_z"] = max(new_nodal_field_inds.values()) + 1
-                                field_operators[vecname+"_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),prefixRe + veccompos[0][len(prefixRes):-len("_x")] + "_y",prefixIm + veccompos[0][len(prefixRes):-len("_x")] + "_y"] #type:ignore
+                            #if len(composRes)>2:
+                            #    new_nodal_field_inds[vecname + "_z"] = max(new_nodal_field_inds.values()) + 1
+                            #    field_operators[vecname+"_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),prefixRe + veccompos[0][len(prefixRes):-len("_x")] + "_y",prefixIm + veccompos[0][len(prefixRes):-len("_x")] + "_y"] #type:ignore
                             vector_fields[vecname]=[vecname+component for component in ["_x","_y","_z"][0:len(composRes)]]
                             #print(new_nodal_field_inds,vector_fields)
                     else:
@@ -940,7 +941,7 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                                                  mp(eis[0], offs + 1), mp(eis[1], offs + 1), mp(eis[2], offs + 1)
                                                  ]) #type:ignore
                         new_elem_types+=[77] #type:ignore
-                elemental_phi_row=numpy.linspace(0,self.angle,upper_limit//phi_increm,endpoint=not closed)+self.start_angle  
+                elemental_phi_row=numpy.linspace(0,2*numpy.pi,upper_limit//phi_increm,endpoint=True)+self.phase  
                 elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
             else:
                 raise RuntimeError("Implement element type "+str(elemtype))
@@ -1053,7 +1054,7 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
         
 
         #print(field_operators)
-        #print("DONE HRE",base.nodal_field_inds)
+        print("DONE HRE",base.nodal_field_inds)
         #exit()
         
         
