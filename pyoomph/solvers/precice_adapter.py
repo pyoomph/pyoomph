@@ -139,9 +139,9 @@ class PreciceReadData(BaseEquations):
         provider=provider[0]
         assert isinstance(provider,PreciceProvideMesh)
         vertex_ids=mesh._precice_vertex_ids
-        for pyoomph_name,precise_name in self.entries.items():
-            buffer=interface.read_data(provider.name, precise_name, vertex_ids, precice_dt)
-            print("READ",provider.name,precise_name,buffer)
+        for pyoomph_name,precice_name in self.entries.items():
+            buffer=interface.read_data(provider.name, precice_name, vertex_ids, precice_dt)
+            print("READ",provider.name,precice_name,buffer)
             if mesh.has_interface_dof_id(pyoomph_name)>=0:
                 index=mesh.has_interface_dof_id(pyoomph_name)
                 for i,n in enumerate(mesh.nodes()):
@@ -151,12 +151,12 @@ class PreciceReadData(BaseEquations):
                 for i,n in enumerate(mesh.nodes()):
                     n.set_value(index,buffer[i])
 
-    def before_precice_solve(self, eqtree: EquationTree, precise_dt: float):
-        self._do_read_data(precise_dt)
+    def before_precice_solve(self, eqtree: EquationTree, precice_dt: float):
+        self._do_read_data(precice_dt)
              
 
 _pyoomph_precice_adapter=_PyoomphPreciceAdapater()
-def get_pyoomph_precise_adapter():
+def get_pyoomph_precice_adapter():
     return _pyoomph_precice_adapter
     
 

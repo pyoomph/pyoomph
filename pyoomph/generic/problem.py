@@ -4404,16 +4404,16 @@ class Problem(_pyoomph.Problem):
             raise ValueError("precice_participant not set")
         if self.precice_config_file is None:
             raise ValueError("precice_config_file not set")
-        from ..solvers.precice_adapter import get_pyoomph_precise_adapter
-        get_pyoomph_precise_adapter().initialize_problem(self)
+        from ..solvers.precice_adapter import get_pyoomph_precice_adapter
+        get_pyoomph_precice_adapter().initialize_problem(self)
      
         
         
-    def precise_run(self):
+    def precice_run(self):
         if not self.is_precice_initialised():
             self.precice_initialise()
-        from ..solvers.precice_adapter import get_pyoomph_precise_adapter
-        get_pyoomph_precise_adapter().coupled_run(self)
+        from ..solvers.precice_adapter import get_pyoomph_precice_adapter
+        get_pyoomph_precice_adapter().coupled_run(self)
 
 
 ############## DOF SELECTOR ###################
