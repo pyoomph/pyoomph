@@ -346,6 +346,11 @@ class Problem(_pyoomph.Problem):
         self.default_ccode_expression_mode:str="" # Try to factor all expressions with "factor"
         self.extra_compiler_flags:List[str]=[]
 
+
+        self.precice_participant:Optional[str]=None
+        self.precice_config_file:Optional[str]=None
+        self._precice_interface=None #type:ignore
+
     # Use weak(u,psi) instead of vectorial U*Psi for the symmetry-breaking constraint
     def improve_pitchfork_tracking_on_unstructured_meshes(self,coord_sys:"OptionalCoordinateSystem"=None,pos_coord_sys:"OptionalCoordinateSystem"=None):
         self._improved_pitchfork_tracking_on_unstructured_meshes=True
@@ -4383,6 +4388,32 @@ class Problem(_pyoomph.Problem):
     def select_dofs(self) -> "_DofSelector":
         return _DofSelector(self)
 
+
+
+
+    def is_precice_initialised(self):
+        return self._precice_interface is not None
+
+        
+    def precice_initialise(self):
+        if self._precice_interface is not None:
+            raise ValueError("Precice interface already initialised")
+        if not self.is_initialised():
+            self.initialise()
+        if self.precice_participant is None:
+            raise ValueError("precice_participant not set")
+        if self.precice_config_file is None:
+            raise ValueError("precice_config_file not set")
+        from ..solvers.precice_adapter import get_pyoomph_precise_adapter
+        get_pyoomph_precise_adapter().initialize_problem(self)
+     
+        
+        
+    def precise_run(self):
+        if not self.is_precice_initialised():
+            self.precice_initialise()
+        from ..solvers.precice_adapter import get_pyoomph_precise_adapter
+        get_pyoomph_precise_adapter().coupled_run(self)
 
 
 ############## DOF SELECTOR ###################

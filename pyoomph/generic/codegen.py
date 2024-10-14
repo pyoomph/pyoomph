@@ -353,6 +353,16 @@ class BaseEquations(_pyoomph.Equations):
         else:
             raise exception
 
+
+    def before_precice_initialise(self,eqtree:"EquationTree"):
+        pass
+
+    def before_precice_solve(self,eqtree:"EquationTree",precise_dt:float):
+        pass
+
+    def after_precice_solve(self,eqtree:"EquationTree",precise_dt:float):
+        pass
+
     def __init__(self):
         super().__init__()
         self._created_at:Optional[str]
@@ -1403,6 +1413,34 @@ class EquationTree:
         return res
 
 
+    def _before_precice_initialise(self):
+        if self._equations is not None:
+            oldcg = self._equations._get_current_codegen()
+            self._equations._set_current_codegen(self._codegen)
+            self._equations.before_precice_initialise(self)
+            self._equations._set_current_codegen(oldcg)
+        for _,c in self._children.items():
+            c._before_precice_initialise()
+
+    def _before_precice_solve(self,precice_dt:float):
+        if self._equations is not None:
+            oldcg = self._equations._get_current_codegen()
+            self._equations._set_current_codegen(self._codegen)
+            self._equations.before_precice_solve(self,precice_dt)
+            self._equations._set_current_codegen(oldcg)
+        for _,c in self._children.items():
+            c._before_precice_solve(precice_dt)
+
+    def _after_precice_solve(self,precice_dt:float):
+        if self._equations is not None:
+            oldcg = self._equations._get_current_codegen()
+            self._equations._set_current_codegen(self._codegen)
+            self._equations.after_precice_solve(self,precice_dt)
+            self._equations._set_current_codegen(oldcg)
+        for _,c in self._children.items():
+            c._after_precice_solve(precice_dt)
+
+
     def _init_output(self,continue_info:Optional[Dict[str,Any]]=None,rank:int=0):
         if self._equations:
             oldcg = self._equations._get_current_codegen()
@@ -2153,6 +2191,20 @@ class CombinedEquations(Equations):
     def after_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str,elem_dim:Optional[int]=None):
         for e in self._subelements:
             e.after_fill_dummy_equations(problem,eqtree,pathname,elem_dim)
+
+    def before_precice_initialise(self,eqtree:"EquationTree"):
+        for e in self._subelements:
+            e.before_precice_initialise(eqtree)
+
+
+    def before_precice_solve(self,eqtree:"EquationTree",precise_dt:float):
+        for e in self._subelements:
+            e.before_precice_solve(eqtree,precise_dt)
+
+    def after_precice_solve(self,eqtree:"EquationTree",precise_dt:float):
+        for e in self._subelements:
+            e.after_precice_solve(eqtree,precise_dt)
+
 
     def calculate_error_overrides(self):
         for e in self._subelements:
