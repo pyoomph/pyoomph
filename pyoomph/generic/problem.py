@@ -4409,11 +4409,11 @@ class Problem(_pyoomph.Problem):
      
         
         
-    def precice_run(self):
+    def precice_run(self,maxstep:Optional[float]=None):
         if not self.is_precice_initialised():
             self.precice_initialise()
         from ..solvers.precice_adapter import get_pyoomph_precice_adapter
-        get_pyoomph_precice_adapter().coupled_run(self)
+        get_pyoomph_precice_adapter().coupled_run(self,maxstep=maxstep)
 
 
 ############## DOF SELECTOR ###################

@@ -10,7 +10,7 @@ class _PyoomphPreciceAdapater:
         problem._equation_system._before_precice_initialise()
         problem._precice_interface.initialize()
 
-    def coupled_run(self,problem:Problem):
+    def coupled_run(self,problem:Problem,maxstep:Optional[float]=None):
         problem._activate_solver_callback()
         
         while problem._precice_interface.is_coupling_ongoing():
@@ -18,7 +18,9 @@ class _PyoomphPreciceAdapater:
                 problem.save_state(problem.get_output_directory("precice_checkpoint.dump"))
                 
             precice_dt = problem._precice_interface.get_max_time_step_size()
-            dt = min(precice_dt, problem.outstep)
+            dt=precice_dt
+            if maxstep:
+                dt = min(precice_dt, maxstep)
 
             problem._equation_system._before_precice_solve(dt)
          
@@ -33,8 +35,8 @@ class _PyoomphPreciceAdapater:
                             
             if problem._precice_interface.requires_reading_checkpoint():
                 problem.load_state(problem.get_output_directory("precice_checkpoint.dump"))
-                    
-            problem.output()
+            else:                    
+                problem.output()
             
 
 
@@ -112,9 +114,10 @@ class PreciceWriteData(BaseEquations):
             
 
 class PreciceReadData(BaseEquations):
-    def __init__(self,**kwargs:str):
+    def __init__(self,*,scaling:ExpressionNumOrNone=None,**kwargs:str):
         super().__init__()
         self.entries=kwargs.copy()
+        self.scaling=scaling
 
     def define_fields(self):
         if self.get_combined_equations()._is_ode():
@@ -122,7 +125,7 @@ class PreciceReadData(BaseEquations):
         for name in self.entries.keys():
             # This is a bit dirty, but I cannot see how it can be done differently, except for providing different classes for ODEEquations and Equations
             # TODO: Vector fields
-            Equations.define_scalar_field(self,name,self.get_current_code_generator()._coordinate_space)
+            Equations.define_scalar_field(self,name,self.get_current_code_generator()._coordinate_space,scale=self.scaling)
 
     def define_residuals(self):
         for name in self.entries.keys():
