@@ -14,4 +14,5 @@ To use the preCICE coupling, you require the preCICE library (see `installation 
    :hidden:
 
    precice/coupled_heat.rst
+   precice/coupled_heat_circle.rst   
 
