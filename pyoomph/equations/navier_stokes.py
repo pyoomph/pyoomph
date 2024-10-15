@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from _pyoomph import Node
     from ..solvers.generic import GenericEigenSolver
     from ..generic.codegen import EquationTree
-    from ..materials.generic import AnyFluidProperties
+    from ..materials.generic import AnyFluidProperties,PureLiquidProperties
     from ..generic.problem import Problem
 
 

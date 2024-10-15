@@ -10,6 +10,7 @@ Submodules
    pyoomph.solvers.generic
    pyoomph.solvers.load_solver_from_cmd_line
    pyoomph.solvers.pardiso
+   pyoomph.solvers.precice_adapter   
    pyoomph.solvers.scipy
 
 Module contents

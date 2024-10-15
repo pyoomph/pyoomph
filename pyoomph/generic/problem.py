@@ -347,8 +347,10 @@ class Problem(_pyoomph.Problem):
         self.extra_compiler_flags:List[str]=[]
 
 
-        self.precice_participant:Optional[str]=None
-        self.precice_config_file:Optional[str]=None
+        #: Must be set to the participant name when using preCICE. Default is an empty string, if you do not use preCICE.
+        self.precice_participant:str=""
+        #: Must be set to the config file when using preCICE
+        self.precice_config_file:str=""
         self._precice_interface=None #type:ignore
 
     # Use weak(u,psi) instead of vectorial U*Psi for the symmetry-breaking constraint
@@ -4396,24 +4398,36 @@ class Problem(_pyoomph.Problem):
 
         
     def precice_initialise(self):
+        """Initializes the preCICE adapter for the problem.
+        You must set precice_participant and precice_config_file in the Problem class.
+        """
         if self._precice_interface is not None:
             raise ValueError("Precice interface already initialised")
         if not self.is_initialised():
             self.initialise()
-        if self.precice_participant is None:
+        if self.precice_participant is None and self.precice_participant!="":
             raise ValueError("precice_participant not set")
-        if self.precice_config_file is None:
+        if self.precice_config_file is None and self.precice_config_file!="":
             raise ValueError("precice_config_file not set")
         from ..solvers.precice_adapter import get_pyoomph_precice_adapter
         get_pyoomph_precice_adapter().initialize_problem(self)
      
         
         
-    def precice_run(self,maxstep:Optional[float]=None):
+    def precice_run(self,maxstep:Optional[float]=None,temporal_error:Optional[float]=None,output_initially:bool=True):
+        """
+        Runs a simulation with the precice adapter. To that end, you must set precice_participant and precice_config_file in the Problem class.
+        There is less control compared to the normal py:meth:`pyoomph.generic.problem.Problem.run` (i.e. without preCICE), but a lot of settings can be adjusted in the preCICE configuration file.
+
+        Args:
+            maxstep: Maximum nondimensional time step. Defaults to None.
+            temporal_error: Use temporal adaptivity with this given error factor. Defaults to None.
+            output_initially: Outputs before the simulation starts. Defaults to True.
+        """
         if not self.is_precice_initialised():
             self.precice_initialise()
         from ..solvers.precice_adapter import get_pyoomph_precice_adapter
-        get_pyoomph_precice_adapter().coupled_run(self,maxstep=maxstep)
+        get_pyoomph_precice_adapter().coupled_run(self,maxstep=maxstep,temporal_error=temporal_error,output_initially=output_initially)
 
 
 ############## DOF SELECTOR ###################
