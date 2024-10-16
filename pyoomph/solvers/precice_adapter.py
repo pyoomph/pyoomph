@@ -94,6 +94,7 @@ class PreciceProvideMesh(BaseEquations):
         mesh=eqtree.get_mesh()
         pr=mesh.get_problem()
         interface=pr._precice_interface
+        
         xml_dimension = interface.get_mesh_dimensions(self.name)
         my_nodes=[n for n in mesh.nodes()]
         
@@ -118,6 +119,73 @@ class PreciceProvideMesh(BaseEquations):
         mesh._precice_vertex_ids=interface.set_mesh_vertices(self.name, grid)
         if not isinstance(mesh._precice_vertex_ids,numpy.ndarray):
             mesh._precice_vertex_ids=numpy.array(mesh._precice_vertex_ids)
+            
+        if interface.requires_mesh_connectivity_for(self.name):
+            for e in mesh.elements():
+                all_nodes_have_vertex_id=True
+                for ni in range(e.nnode()):
+                    n=e.node_pt(ni)
+                    if n not in mesh._precice_node_to_vertex_id:
+                        all_nodes_have_vertex_id=False
+                        break
+                if not all_nodes_have_vertex_id:
+                    raise RuntimeError("Not all nodes in element have vertex id...")
+                typus=e.get_meshio_type_index()
+                if typus==2: # LineC2
+                    interface.set_mesh_edge(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)])
+                    interface.set_mesh_edge(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)])                    
+                elif typus==1: # LineC1
+                    interface.set_mesh_edge(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)])
+                elif typus==0: # Points have no edges
+                    pass 
+                elif typus==3: # TriC1
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)])
+                elif typus==9: # TriC2
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(5)])                    
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(5)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                    
+                    # Strange order, no matter how I permute the nodes, it is always backface in preCICE vtu out
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(5)],mesh._precice_node_to_vertex_id[e.node_pt(2)])                                        
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(1)])                                        
+                elif typus==99: # TriC2TB
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(6)])                                        
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(6)])                                        
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(5)],mesh._precice_node_to_vertex_id[e.node_pt(6)])                                                            
+                    # Strange order, no matter how I permute the nodes, it is always backface in preCICE vtu out
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(6)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                    
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(6)])                                                            
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(5)],mesh._precice_node_to_vertex_id[e.node_pt(6)])                                                                                
+                elif typus==66: # TriC1TB
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                                        
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                                        
+                    interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                                                            
+                    
+                    
+                elif typus==8: # QuadC2
+                    if xml_dimension==3:
+                        #interface.set_mesh_quad(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(3)])
+                        raise RuntimeError("Check Quads here")
+                    else:
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(3)])
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(4)])                        
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(5)])                                                
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(5)])                                                                        
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(7)],mesh._precice_node_to_vertex_id[e.node_pt(6)])
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(7)],mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(3)])
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(7)],mesh._precice_node_to_vertex_id[e.node_pt(5)],mesh._precice_node_to_vertex_id[e.node_pt(8)])
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(7)],mesh._precice_node_to_vertex_id[e.node_pt(5)],mesh._precice_node_to_vertex_id[e.node_pt(4)])
+                elif typus==6: # QuadC1
+                    if xml_dimension==3:
+                        #interface.set_mesh_quad(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(3)])
+                        raise RuntimeError("Check Quads here")
+                    else:
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)])                                        
+                        interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                                                            
+                else:
+                    raise RuntimeError("Only mesh edges are implemented, not type index "+str(typus))
+                
+                    
+                                
+            
         
 
 

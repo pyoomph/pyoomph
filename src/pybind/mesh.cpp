@@ -279,6 +279,11 @@ void PyReg_Mesh(py::module &m)
 			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
 			if (!be) { throw_runtime_error("Not a BulkelementBase"); return;	   }
 			be->debug_hessian(Y,C,epsilon); })
+		.def("get_meshio_type_index", [](oomph::GeneralisedElement *self) -> unsigned int
+			 {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return -1;
+			return be->get_meshio_type_index(); })
 		.def("assemble_hessian_and_mass_hessian",[](oomph::GeneralisedElement *self)
 		   {
 			  pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
