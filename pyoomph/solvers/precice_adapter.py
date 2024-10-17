@@ -41,14 +41,17 @@ class _PyoomphPreciceAdapater:
         problem._equation_system._before_precice_initialise()
         problem._precice_interface.initialize()
 
-    def coupled_run(self,problem:Problem,maxstep:Optional[float]=None,temporal_error:Optional[float]=None,output_initially:bool=True):
+    def coupled_run(self,problem:Problem,maxstep:Optional[float]=None,temporal_error:Optional[float]=None,output_initially:bool=True,fast_dof_backup:bool=False):
         problem._activate_solver_callback()
         
         if output_initially:
             problem.output()
         while problem._precice_interface.is_coupling_ongoing():
             if problem._precice_interface.requires_writing_checkpoint():
-                problem.save_state(problem.get_output_directory("precice_checkpoint.dump"))
+                if fast_dof_backup:
+                    raise RuntimeError("Fast dof backup not implemented yet")
+                else:
+                    problem.save_state(problem.get_output_directory("precice_checkpoint.dump"))
                 
             precice_dt = problem._precice_interface.get_max_time_step_size()
             dt=precice_dt

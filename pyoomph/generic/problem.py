@@ -4414,7 +4414,7 @@ class Problem(_pyoomph.Problem):
      
         
         
-    def precice_run(self,maxstep:Optional[float]=None,temporal_error:Optional[float]=None,output_initially:bool=True):
+    def precice_run(self,maxstep:Optional[float]=None,temporal_error:Optional[float]=None,output_initially:bool=True,fast_dof_backup:bool=False):
         """
         Runs a simulation with the precice adapter. To that end, you must set precice_participant and precice_config_file in the Problem class.
         There is less control compared to the normal py:meth:`pyoomph.generic.problem.Problem.run` (i.e. without preCICE), but a lot of settings can be adjusted in the preCICE configuration file.
@@ -4423,11 +4423,12 @@ class Problem(_pyoomph.Problem):
             maxstep: Maximum nondimensional time step. Defaults to None.
             temporal_error: Use temporal adaptivity with this given error factor. Defaults to None.
             output_initially: Outputs before the simulation starts. Defaults to True.
+            fast_dof_backup: If True, only the DoFs  will be backed up, nothing else. Defaults to False.
         """
         if not self.is_precice_initialised():
             self.precice_initialise()
         from ..solvers.precice_adapter import get_pyoomph_precice_adapter
-        get_pyoomph_precice_adapter().coupled_run(self,maxstep=maxstep,temporal_error=temporal_error,output_initially=output_initially)
+        get_pyoomph_precice_adapter().coupled_run(self,maxstep=maxstep,temporal_error=temporal_error,output_initially=output_initially,fast_dof_backup=fast_dof_backup)
 
 
 ############## DOF SELECTOR ###################

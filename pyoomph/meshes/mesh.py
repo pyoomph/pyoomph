@@ -648,14 +648,14 @@ class MeshTemplate(_pyoomph.MeshTemplate):
                 resL.append(self.nondim_size(b))
             return resL
         res: float
-        if isinstance(a, float) or isinstance(a, int) or isinstance(a,_pyoomph.GiNaC_GlobalParam):
+        if isinstance(a, float) or isinstance(a, int) or isinstance(a,_pyoomph.GiNaC_GlobalParam) or isinstance(a,numpy.floating) or isinstance(a,numpy.integer):
             assert self._problem is not None
             res = (float(a / self._problem.get_scaling("spatial")))
         elif isinstance(a, _pyoomph.Expression):  # type:ignore
             assert self._problem is not None
             res = ((a / self._problem.get_scaling("spatial")).float_value())        
         else:
-            raise ValueError("Strange spatial argument for a mesh:"+str(a))
+            raise ValueError("Strange spatial argument for a mesh:"+str(a)+" of type "+str(type(a)))
         return res
 
     def add_nodes(self, *args: Sequence[float]) -> Optional[Union[int , Tuple[int, ...]]]:

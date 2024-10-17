@@ -192,7 +192,7 @@ class RectangularQuadMesh(MeshTemplate):
             raise ValueError("Mesh size must be a positive integer, but got " + str(nN))
 
         lower_left = self.lower_left
-        if isinstance(lower_left, list) or isinstance(lower_left, tuple):
+        if isinstance(lower_left, list) or isinstance(lower_left, tuple) or isinstance(lower_left, numpy.ndarray):
             lower_left=list(lower_left)
             lower_left = [self.nondim_size(x) for x in lower_left]
         else:

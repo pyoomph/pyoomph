@@ -46,9 +46,10 @@ class KuramotoSivashinskyEquations(Equations):
 			c (ExpressionOrNum): Coefficient of h^2.
 			space (FiniteElementSpaceEnum): Finite element space.
 			curvspace (FiniteElementSpaceEnum): Finite element space for the curvature.
+			swap_test_functions: Swap the test functions of height and curvature.
 	"""
 		
-	def __init__(self,*,a1:ExpressionOrNum=-1,a2:ExpressionOrNum=-1,a3:ExpressionOrNum=1,b:ExpressionOrNum=0,c:ExpressionOrNum=0,space:FiniteElementSpaceEnum="C2",curvspace:Optional[FiniteElementSpaceEnum]=None):
+	def __init__(self,*,a1:ExpressionOrNum=-1,a2:ExpressionOrNum=-1,a3:ExpressionOrNum=1,b:ExpressionOrNum=0,c:ExpressionOrNum=0,space:FiniteElementSpaceEnum="C2",curvspace:Optional[FiniteElementSpaceEnum]=None,swap_test_functions:bool=False):
 		super().__init__() #Really important, otherwise it will crash
 		self.a1=a1
 		self.a2=a2
@@ -57,6 +58,7 @@ class KuramotoSivashinskyEquations(Equations):
 		self.c=c
 		self.space:FiniteElementSpaceEnum=space
 		self.curvspace:FiniteElementSpaceEnum=curvspace if curvspace is not None else self.space
+		self.swap_test_functions=swap_test_functions
 
 	def define_fields(self):
 		self.define_scalar_field("height",space=self.space)
@@ -65,6 +67,8 @@ class KuramotoSivashinskyEquations(Equations):
 	def define_residuals(self):
 		h,h_test=var_and_test("height")
 		curv,curv_test=var_and_test("curvature")
+		if self.swap_test_functions:
+			h_test,curv_test=curv_test,h_test
 		self.add_residual( weak(partial_t(h) - self.b*h - self.c*h**2 - self.a1*curv - self.a3*dot(grad(h),grad(h)), h_test) + self.a2*weak(grad(curv),grad(h_test)) )
 		self.add_residual( weak(curv,curv_test) + weak(grad(h),grad(curv_test)) )
 
