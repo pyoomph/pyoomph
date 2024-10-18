@@ -62,6 +62,7 @@ build-frontend = { name = "pip", args = ["--no-build-isolation", "--verbose"] }
 [tool.cibuildwheel.linux]
 environment={
 PYOOMPH_CONFIG_FILE="/project/citools/pyoomph_config_linuxwheel.env"
+CIBW_SKIP="cp36-* cp37-* cp-38* cp-313* pp-* *-manylinux_i686 *-musllinux* *_ppc64le *_s390x *_universal2 *_arm64" 
 }
 
 before-all = [
