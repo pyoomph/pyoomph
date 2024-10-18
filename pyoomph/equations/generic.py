@@ -452,15 +452,21 @@ class RemeshMeshSize(BaseEquations):
 
 
 class ProjectExpression(Equations):
-    def __init__(self,scale:ExpressionOrNum=1,space:FiniteElementSpaceEnum="C2",**projs:ExpressionOrNum):
+    def __init__(self,scale:ExpressionOrNum=1,space:FiniteElementSpaceEnum="C2",field_type:Literal["scalar","vector"]="scalar",**projs:ExpressionOrNum):
         super(ProjectExpression, self).__init__()
         self.space:FiniteElementSpaceEnum=space
         self.scale=scale
+        self.field_type=field_type
         self.projs=projs.copy()
 
     def define_fields(self):
         for n,_ in self.projs.items():
-            self.define_scalar_field(n,self.space,scale=self.scale,testscale=1/self.scale)
+            if self.field_type=="scalar":
+                self.define_scalar_field(n,self.space,scale=self.scale,testscale=1/self.scale)
+            elif self.field_type=="vector":
+                self.define_vector_field(n,self.space,scale=self.scale,testscale=1/self.scale)
+            else:
+                raise ValueError("Unsupported field type "+self.field_type)
 
     def define_residuals(self):
         import pyoomph.expressions.generic
@@ -758,13 +764,13 @@ class ElementSpace(Equations):
 # Used for Average and Integral constraints
 # If physical dimensions are set, it only works if the these are set on problem level by problem.set_scaling(...=...), not if set in the equations
 class _AverageOrIntegralConstraintBase(Equations):
-    def __init__(self,*,ode_storage_domain:Optional[str]=None,only_for_stationary_solve:bool=False,set_zero_on_angular_eigensolve:bool=True,scaling_factor:Union[str,ExpressionNumOrNone]=None, **kwargs:"ExpressionOrNum"):
+    def __init__(self,*,ode_storage_domain:Optional[str]=None,only_for_stationary_solve:bool=False,set_zero_on_normal_mode_eigensolve:bool=True,scaling_factor:Union[str,ExpressionNumOrNone]=None, **kwargs:"ExpressionOrNum"):
         super().__init__()
         self.ode_storage_domain=ode_storage_domain        
         self.constraints=kwargs.copy()
         self.dimensional_dx=False
         self.only_for_stationary_solve=only_for_stationary_solve
-        self.set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve
+        self.set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve
         self.scaling_factor=scaling_factor
         if isinstance(self.scaling_factor,str):
             self.scaling_factor=scale_factor(self.scaling_factor)
@@ -793,7 +799,7 @@ class _AverageOrIntegralConstraintBase(Equations):
                 testscale/=(0+coordsys.volumetric_scaling(problem.get_scaling("spatial"),elem_dim))
                         
             
-            new_eq=GlobalLagrangeMultiplier(only_for_stationary_solve=self.only_for_stationary_solve,set_zero_on_angular_eigensolve=self.set_zero_on_angular_eigensolve, **{field:self.get_global_residual_contribution(field)/scale_correction})+Scaling(**{field:1})+TestScaling(**{field:testscale})
+            new_eq=GlobalLagrangeMultiplier(only_for_stationary_solve=self.only_for_stationary_solve,set_zero_on_normal_mode_eigensolve=self.set_zero_on_normal_mode_eigensolve, **{field:self.get_global_residual_contribution(field)/scale_correction})+Scaling(**{field:1})+TestScaling(**{field:testscale})
             add_eqs=new_eq if add_eqs is None else add_eqs+new_eq
             
         problem._equation_system+=add_eqs@odestorage
@@ -827,12 +833,12 @@ class IntegralConstraint(_AverageOrIntegralConstraintBase):
         dimensional_dx (bool): Flag indicating whether the constraint is defined in dimensional or non-dimensional form.
         ode_storage_domain (Optional[str]): The storage domain for the ODEs, will default to some generated name.
         only_for_stationary_solve (bool): Flag indicating whether the constraint is only applied during stationary solves.
-        set_zero_on_angular_eigensolve (bool): Flag indicating whether the constraint is set to zero during angular eigensolves.
+        set_zero_on_normal_mode_eigensolve (bool): Flag indicating whether the constraint is set to zero during angular eigensolves.
         scaling_factor (Union[str, ExpressionNumOrNone]): The scaling factor for the constraint.
         **kwargs (ExpressionOrNum): Constraints as name=value pairs.
     """       
-    def __init__(self, *, dimensional_dx:bool=True,ode_storage_domain: Optional[str] = None, only_for_stationary_solve: bool = False, set_zero_on_angular_eigensolve: bool = True, scaling_factor:Union[str,ExpressionNumOrNone]=None, **kwargs: ExpressionOrNum):
-        super().__init__(ode_storage_domain=ode_storage_domain, only_for_stationary_solve=only_for_stationary_solve, set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve, scaling_factor=scaling_factor, **kwargs)
+    def __init__(self, *, dimensional_dx:bool=True,ode_storage_domain: Optional[str] = None, only_for_stationary_solve: bool = False, set_zero_on_normal_mode_eigensolve: bool = True, scaling_factor:Union[str,ExpressionNumOrNone]=None, **kwargs: ExpressionOrNum):
+        super().__init__(ode_storage_domain=ode_storage_domain, only_for_stationary_solve=only_for_stationary_solve, set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve, scaling_factor=scaling_factor, **kwargs)
         self.dimensional_dx=dimensional_dx
     
     def get_global_residual_contribution(self,field:str) -> ExpressionOrNum:
@@ -852,7 +858,7 @@ class AverageConstraint(_AverageOrIntegralConstraintBase):
         dimensional_dx (bool): Flag indicating whether the constraint is defined in dimensional or non-dimensional form.
         ode_storage_domain (Optional[str]): The storage domain for the ODEs, will default to some generated name.
         only_for_stationary_solve (bool): Flag indicating whether the constraint is only applied during stationary solves.
-        set_zero_on_angular_eigensolve (bool): Flag indicating whether the constraint is set to zero during angular eigensolves.
+        set_zero_on_normal_mode_eigensolve (bool): Flag indicating whether the constraint is set to zero during angular eigensolves.
         scaling_factor (Union[str, ExpressionNumOrNone]): The scaling factor for the constraint.
         **kwargs (ExpressionOrNum): Constraints as name=value pairs.
     """           

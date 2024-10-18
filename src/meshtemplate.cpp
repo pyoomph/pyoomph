@@ -291,6 +291,11 @@ namespace pyoomph
 		}
 	}
 
+
+	MeshTemplateElementPoint::MeshTemplateElementPoint(const nodeindex_t &n1) : MeshTemplateElement(0)
+  	{
+		node_indices.push_back(n1);
+  	}
 	/////////////////
 	MeshTemplateElementLineC1::MeshTemplateElementLineC1(const nodeindex_t &n1, const nodeindex_t &n2) : MeshTemplateElement(1)
 	{
@@ -935,6 +940,20 @@ namespace pyoomph
 			Lagr_dimension = elements[0]->nodal_dimension();
 		}
 		return Lagr_dimension;
+	}
+
+	MeshTemplateElementPoint *MeshTemplateElementCollection::add_point_element(const nodeindex_t &n1)
+	{
+		if (dim == -1)
+		{
+			dim = 0;
+		}
+		else if (dim != 0)
+			throw_runtime_error("Tried to add a 0d point element to a Mesh template which has already elements of dimension " + std::to_string(mesh_template->dim));
+		MeshTemplateElementPoint *res = new MeshTemplateElementPoint(n1);
+		elements.push_back(res);
+		res->link_nodes_with_domain(this);
+		return res;
 	}
 
 	MeshTemplateElementLineC1 *MeshTemplateElementCollection::add_line_1d_C1(const nodeindex_t &n1, const nodeindex_t &n2)
@@ -1588,25 +1607,32 @@ namespace pyoomph
 
 		std::vector<nodeindex_t> nodeindices = el->get_node_indices();
 		std::string domspace = coll->code_instance->get_func_table()->dominant_space;
-		if (el->get_geometric_type_index() == 8 && domspace == "C1")
+		if (el->get_geometric_type_index() == 8 && (domspace == "C1" || domspace=="C1TB")) // QC2 -> QC1
 		{
 			// Reduce the element
 			nodeindices = {nodeindices[0], nodeindices[2], nodeindices[6], nodeindices[8]};
 		}
-		else if (el->get_geometric_type_index() == 9 && domspace == "C1")
+		else if (el->get_geometric_type_index() == 9 && domspace == "C1") // TC2 -> TC1
 		{
 			// Reduce the element
 			nodeindices = {nodeindices[0], nodeindices[1], nodeindices[2]};
 		}
-		else if (el->get_geometric_type_index() == 2 && (domspace == "C1" || domspace == "C1TB"))
+		else if (el->get_geometric_type_index() == 2 && (domspace == "C1" || domspace == "C1TB")) // LC2->LC1
 		{
 			// Reduce the element
 			nodeindices = {nodeindices[0], nodeindices[2]};
 		}		
-		else if ((el->get_geometric_type_index() == 14 || el->get_geometric_type_index() == 11) && (domspace == "C1" || domspace == "C1TB"))
+		else if (el->get_geometric_type_index()==14 && (domspace == "C1" || domspace == "C1TB") ) //BC2 ->BC1
 		{
-			throw_runtime_error("TODO: Restrict nodes for geometric type index "+std::to_string(el->get_geometric_type_index()));
+		
+			nodeindices = {nodeindices[0], nodeindices[2], nodeindices[6], nodeindices[8],nodeindices[18],nodeindices[20],nodeindices[24],nodeindices[26]};
 		}
+		else if (el->get_geometric_type_index()==0 ) //BC2 ->BC1
+		{
+		
+			nodeindices = {nodeindices[0]};
+		}
+		
 
 		std::vector<bool> constructed_oomph_node(nodeindices.size(), false);
 		for (unsigned int ni = 0; ni < nodeindices.size(); ni++)
@@ -1629,13 +1655,16 @@ namespace pyoomph
 					nodes[nii]->oomph_node = new pyoomph::BoundaryNode(this->problem->time_stepper_pt(), n_lagrangian, n_lagrangian_type, nodal_dim, 1, ntot);
 				}
 
-				nodes[nii]->oomph_node->x(0) = nodes[nii]->x;
-				if (nodal_dim > 1)
+				if (nodal_dim > 0)
 				{
-					nodes[nii]->oomph_node->x(1) = nodes[nii]->y;
-					if (nodal_dim > 2)
+					nodes[nii]->oomph_node->x(0) = nodes[nii]->x;
+					if (nodal_dim > 1)
 					{
-						nodes[nii]->oomph_node->x(2) = nodes[nii]->z;
+						nodes[nii]->oomph_node->x(1) = nodes[nii]->y;
+						if (nodal_dim > 2)
+						{
+							nodes[nii]->oomph_node->x(2) = nodes[nii]->z;
+						}
 					}
 				}
 				//      	std::cout << "POS " << nodes[nii]->oomph_node->x(0)<< " = " << nodes[nii]->x << " and " << nodes[nii]->oomph_node->x(1) <<" = " << nodes[nii]->y << " and " <<  nodes[nii]->oomph_node->x(2) <<" = " << nodes[nii]->z <<std::endl;

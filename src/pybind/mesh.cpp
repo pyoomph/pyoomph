@@ -209,6 +209,8 @@ void PyReg_Mesh(py::module &m)
 		.def("is_hanging", (bool(pyoomph::Node::*)(const int &) const) & pyoomph::Node::is_hanging, "index"_a = -1)
 		.def("variable_position_pt", &pyoomph::Node::variable_position_pt, py::return_value_policy::reference)
 		.def("is_on_boundary", (bool(pyoomph::Node::*)() const) & pyoomph::Node::is_on_boundary)
+		.def("set_obsolete", &pyoomph::Node::set_obsolete)
+		.def("is_obsolete", &pyoomph::Node::is_obsolete)
 		.def("remove_from_boundary",&pyoomph::Node::remove_from_boundary)
 		.def("add_to_boundary", &pyoomph::Node::add_to_boundary)						
 		//	.def("is_on_boundary_index",(bool (pyoomph::Node::*,const unsigned )() const) &pyoomph::Node::is_on_boundary)
@@ -277,6 +279,11 @@ void PyReg_Mesh(py::module &m)
 			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
 			if (!be) { throw_runtime_error("Not a BulkelementBase"); return;	   }
 			be->debug_hessian(Y,C,epsilon); })
+		.def("get_meshio_type_index", [](oomph::GeneralisedElement *self) -> unsigned int
+			 {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return -1;
+			return be->get_meshio_type_index(); })
 		.def("assemble_hessian_and_mass_hessian",[](oomph::GeneralisedElement *self)
 		   {
 			  pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
@@ -331,6 +338,13 @@ void PyReg_Mesh(py::module &m)
 			if (!be) return NULL;
 			return be->get_code_instance(); },
 			py::return_value_policy::reference)
+		.def("get_macro_element_coordinate_at_s",[](oomph::GeneralisedElement *self, std::vector<double> s) -> std::vector<double>
+		   {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return {};
+			oomph::Vector<double> so(s.size()); for (unsigned int i=0;i<s.size();i++) so[i]=s[i];
+			return be->get_macro_element_coordinate_at_s(so);			
+		   })
 		.def("evalulate_local_expression_at_s", [](oomph::GeneralisedElement *self, int index, std::vector<double> s) -> double
 			 {
 			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
@@ -354,6 +368,47 @@ void PyReg_Mesh(py::module &m)
 			if (!be) return NULL;
 			return dynamic_cast<pyoomph::Node*>(be->node_pt(i)); },
 			py::return_value_policy::reference)
+		.def("nodes",[](oomph::GeneralisedElement *self) 
+			{
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);			
+			std::vector<pyoomph::Node*> nodes;
+			if (be)
+			{			
+				for (unsigned int i=0;i<be->nnode();i++) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->node_pt(i)));
+			}
+			return nodes;
+			},py::return_value_policy::reference)
+		.def("boundary_nodes",[](oomph::GeneralisedElement *self,int boundary_index) 
+			{
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);			
+			std::vector<pyoomph::Node*> nodes;
+			if (be)
+			{		
+				if (boundary_index<0)	
+				{
+					for (unsigned int i=0;i<be->nnode();i++) if (be->node_pt(i)->is_on_boundary()) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->node_pt(i)));
+				}
+				else
+				{
+					for (unsigned int i=0;i<be->nnode();i++) if (be->node_pt(i)->is_on_boundary(boundary_index)) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->node_pt(i)));
+				}
+			}
+			return nodes;
+			},py::return_value_policy::reference,py::arg("boundary_index")=-1)
+		.def("boundary_vertex_nodes",[](oomph::GeneralisedElement *self,int boundary_index) 
+			{
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);			
+			std::vector<pyoomph::Node*> nodes;
+			if (be)
+			{		
+				for (unsigned int i=0;i<be->nvertex_node();i++) if (be->vertex_node_pt(i)->is_on_boundary(boundary_index)) nodes.push_back(dynamic_cast<pyoomph::Node*>(be->vertex_node_pt(i)));				
+			}
+			return nodes;
+			},py::return_value_policy::reference)
+		.def("_connect_periodic_tree",[](oomph::GeneralisedElement *self,oomph::GeneralisedElement *other, int mydir, int otherdir)
+			{
+				dynamic_cast<pyoomph::BulkElementBase*>(self)->connect_periodic_tree(dynamic_cast<pyoomph::BulkElementBase*>(other),mydir,otherdir);
+			})
 		//Returns oomph::Data and value indices for a fields. If use_elemental_indices, it will return (NULL,-1) for elemental node indices that do not have data associated
 		.def("get_field_data_list",[](oomph::GeneralisedElement *self, std::string name,bool use_elemental_indices) -> std::vector<std::pair<oomph::Data *,int> >
 		   {
@@ -375,12 +430,12 @@ void PyReg_Mesh(py::module &m)
 			   return ie->get_attached_element_equation_mapping(which);
 		    }
 		    )
-		.def("set_opposite_interface_element", [](oomph::GeneralisedElement *self, oomph::GeneralisedElement *opp)
+		.def("set_opposite_interface_element", [](oomph::GeneralisedElement *self, oomph::GeneralisedElement *opp,std::vector<double> offs)
 			 {
 			pyoomph::InterfaceElementBase * ie=dynamic_cast<pyoomph::InterfaceElementBase*>(self);
 			pyoomph::InterfaceElementBase * io=dynamic_cast<pyoomph::InterfaceElementBase*>(opp);
 			if (!ie || !io) { throw_runtime_error("Can only connect interface elements this way"); }
-			ie->set_opposite_interface_element(io); })
+			ie->set_opposite_interface_element(io,offs); })
 		.def(
 			"vertex_node_pt", [](oomph::GeneralisedElement *self, unsigned int i) -> pyoomph::Node *
 			{
@@ -579,6 +634,23 @@ void PyReg_Mesh(py::module &m)
 			if (!be) return ;
 			be->set_macro_elem_pt(m);
 			if (map_nodes) be->map_nodes_on_macro_element(); })
+		.def("create_interpolated_node",[](oomph::GeneralisedElement *self, const std::vector<double> & s,bool as_boundary_node) -> pyoomph::Node *
+		   {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return NULL;			
+			oomph::Vector<double> soomph(s.size());
+			for (unsigned int i=0;i<s.size();i++) soomph[i]=s[i];
+			return be->create_interpolated_node(soomph,as_boundary_node);
+		   },py::return_value_policy::reference)
+		.def("local_coordinate_of_node", [](oomph::GeneralisedElement *self, unsigned int l) -> std::vector<double>
+			 {
+			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
+			if (!be) return std::vector<double>();
+			oomph::Vector<double> s;
+			be->local_coordinate_of_node(l, s);
+			std::vector<double> res(s.size());
+			for (unsigned int i=0;i<s.size();i++) res[i]=s[i];
+			return res; })
 		.def("set_undeformed_macro_element", [](oomph::GeneralisedElement *self, oomph::MacroElement *m)
 			 {
 			pyoomph::BulkElementBase * be=dynamic_cast<pyoomph::BulkElementBase*>(self);
@@ -651,6 +723,15 @@ void PyReg_Mesh(py::module &m)
 			"as_pyoomph_mesh", [](oomph::Mesh *self)
 			{ return dynamic_cast<pyoomph::Mesh *>(self); },
 			py::return_value_policy::reference)
+		.def("add_node_to_mesh",[](oomph::Mesh *self,pyoomph::Node *n)
+			 {
+				self->add_node_pt(n);
+			 })
+		.def("prune_dead_nodes",[](oomph::Mesh *self,bool with_bounds) 
+			{
+				if (with_bounds) self->prune_dead_nodes();
+				else dynamic_cast<pyoomph::TemplatedMeshBase*>(self)->prune_dead_nodes_without_respecting_boundaries();				
+			})
 		.def("output_paraview", [](oomph::Mesh *self, const std::string &fname, const unsigned &order)
 			 { std::ofstream f(fname); self->output_paraview(f,order); })
 		.def("nelement", &oomph::Mesh::nelement)
@@ -667,6 +748,12 @@ void PyReg_Mesh(py::module &m)
 		.def("nboundary", &oomph::Mesh::nboundary)
 		.def("nboundary_node", &oomph::Mesh::nboundary_node)
 		.def("nboundary_element", &oomph::Mesh::nboundary_element)
+		.def("resolve_copy_master_node", [](oomph::Mesh *self, pyoomph::Node *n)->pyoomph::Node *
+			 { 
+				if (!dynamic_cast<pyoomph::Mesh*>(self)) return NULL;
+				return dynamic_cast<pyoomph::Node *>(dynamic_cast<pyoomph::Mesh*>(self)->resolve_copy_master(n)); 
+			},py::return_value_policy::reference
+			)
 		.def("_disable_adaptation", [](oomph::Mesh *self)
 			 {
     oomph::RefineableMeshBase* refmesh =dynamic_cast<oomph::RefineableMeshBase*>(self);
@@ -837,7 +924,33 @@ void PyReg_Mesh(py::module &m)
 			 unsigned nnode=self->count_nnode(discontinuous);
 			 pyoomph::Node* node0=self->get_some_node();
 			 unsigned nodal_dim=(node0 ? node0->ndim() : 0);
-			 pyoomph::BulkElementBase* be=dynamic_cast<pyoomph::BulkElementBase*>(self->element_pt(0));
+			 pyoomph::BulkElementBase* be=NULL;
+			 if (self->nelement()>0) 
+			 {
+				be=dynamic_cast<pyoomph::BulkElementBase*>(self->element_pt(0));
+			 }
+			 #ifdef OOMPH_HAS_MPI
+			 else
+			 {
+			 	int my_rank = self->communicator_pt()->my_rank();
+      			int n_proc = self->communicator_pt()->nproc();
+				for (int nrnk=0;nrnk<n_proc;nrnk++)
+				{
+					std::cout << "INFO MY RANK " << my_rank << " NRNK " << nrnk << " NROOT " << self->nroot_haloed_element(nrnk) << std::endl;
+					if (nrnk!=my_rank) 
+					{
+						if (self->nroot_haloed_element(nrnk)>0) 
+						{
+							be=dynamic_cast<pyoomph::BulkElementBase*>(self->root_haloed_element_pt(nrnk,0));
+							break;
+						}
+					}
+				}
+				
+			 }
+			 #endif
+			 if (!be) throw std::runtime_error("No elements in mesh. Cannot convert to numpy.");
+			 
  			 unsigned nlagrange=(node0 ? node0 ->nlagrangian() : 0);
 			 unsigned ncontfields=(be ? be->ncont_interpolated_values() : 0);
 			 unsigned nDGfields=(be ? be->num_DG_fields(false) :0);
@@ -985,6 +1098,7 @@ void PyReg_Mesh(py::module &m)
 			{ return dynamic_cast<pyoomph::BulkElementODE0d *>(self->get_ODE(name)); },
 			py::return_value_policy::reference);
 
+	py::class_<pyoomph::MeshTemplateElementPoint>(m, "MeshTemplateElementPoint");
 	py::class_<pyoomph::MeshTemplateElementLineC1>(m, "MeshTemplateElementLineC1");
 	py::class_<pyoomph::MeshTemplateElementLineC2>(m, "MeshTemplateElementLineC2");
 	py::class_<pyoomph::MeshTemplateElementQuadC1>(m, "MeshTemplateElementQuadC1");
@@ -998,6 +1112,7 @@ void PyReg_Mesh(py::module &m)
 
 	py::class_<pyoomph::MeshTemplateElementCollection>(m, "MeshTemplateElementCollection")
 		.def("_get_reference_position_for_IC_and_DBC", &pyoomph::MeshTemplateElementCollection::get_reference_position_for_IC_and_DBC)
+		.def("add_point_element", &pyoomph::MeshTemplateElementCollection::add_point_element, py::return_value_policy::reference,"Adds a single point element to the domain")
 		.def("add_line_1d_C1", &pyoomph::MeshTemplateElementCollection::add_line_1d_C1, py::return_value_policy::reference,"Adds a line element by two node indices")
 		.def("add_line_1d_C2", &pyoomph::MeshTemplateElementCollection::add_line_1d_C2, py::return_value_policy::reference,"Adds a second order line element by three node indices")
 		.def("add_quad_2d_C1", &pyoomph::MeshTemplateElementCollection::add_quad_2d_C1, py::return_value_policy::reference,"Adds a quadrilateral element by four node indices")
@@ -1101,6 +1216,8 @@ void PyReg_Mesh(py::module &m)
 		.def("nullify_selected_bulk_dofs", &pyoomph::InterfaceMesh::nullify_selected_bulk_dofs)
 		.def("_connect_interface_elements_by_kdtree", &pyoomph::InterfaceMesh::connect_interface_elements_by_kdtree)
 		.def("rebuild_after_adapt", &pyoomph::InterfaceMesh::rebuild_after_adapt)
+		.def("set_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::set_opposite_interface_offset_vector)
+		.def("get_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::get_opposite_interface_offset_vector)		
 		.def("get_bulk_mesh", &pyoomph::InterfaceMesh::get_bulk_mesh)
 		.def(
 			"_get_problem", [](pyoomph::InterfaceMesh *self)

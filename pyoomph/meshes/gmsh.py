@@ -315,7 +315,7 @@ class GmshTemplate(MeshTemplate):
         self._pointhash:Dict[Tuple[float,float,float],Point] = {}
         self._point_size_hash:Dict[Point,float] = {}
         self._onedims_attached_to_point:Dict[Point,Set[Union[Line,Spline,BSpline,CircleArc]]]={}
-        self.all_nodes_as_boundary_nodes:bool=False
+        
 
         self._mesh_size_callback=None
 
@@ -605,23 +605,27 @@ class GmshTemplate(MeshTemplate):
             self.plane_surface(*lines,name="box") # Create the surface of the box
 
         Args:
-            *args: Variable number of arguments representing the points and names of the lines. Each argument should be in the format: p1, <name>, p2, <name>, p3, <name>, p4, ...
+            *args: Variable number of arguments representing the points and names of the lines. Each argument should be in the format: p1, <name>, p2, <name>, p3, <name>, p4, ... If it stops with a name, not a point, it will close the line loop to the first point
 
         Returns:
             A list of Line objects representing the created lines.
 
         Raises:
-            ValueError: If the number of arguments is not odd.
             ValueError: If the arguments are not in the correct format.
         """
+        closed_loop=False
         if len(args) % 2 != 1:
-            raise ValueError("create line needs arguments like p1, <name>, p2, <name>, p3, <name>, p4 ,...")
+            closed_loop=True
+            #raise ValueError("create line needs arguments like p1, <name>, p2, <name>, p3, <name>, p4 ,...")
         NL = len(args) // 2
         res:List[Line] = []
         for i in range(NL):
             pstart = args[2 * i]
             name = args[2 * i + 1]
-            pend = args[2 * i + 2]
+            if closed_loop and 2*i+2==len(args):
+                pend=args[0]
+            else:
+                pend = args[2 * i + 2]
             if (not isinstance(pstart, (Point,list,tuple))) or (not isinstance(pend, (Point,list,tuple))) or not (isinstance(name, str)):
                 raise ValueError("create line needs arguments like p1, <name>, p2, <name>, p3, <name>, p4 ,...")
             if isinstance(pstart,(list,tuple)):
@@ -696,6 +700,19 @@ class GmshTemplate(MeshTemplate):
                 self._onedims_attached_to_point[p]=set()
             self._onedims_attached_to_point[p].add(res)
         return res
+
+    def create_circle_lines(self,centre:Union[Tuple[ExpressionOrNum,...],Point],radius:ExpressionOrNum,*,mesh_size:Optional[float]=None,line_name:Optional[str]=None)->List[Line]:
+        if not isinstance(centre,Point):
+            centre=self.point(*centre)
+        corners:List[Point]=[]
+        for signs in [[1,0],[0,1],[-1,0],[0,-1]]:
+            corners.append(self.point(centre.x[0]+signs[0]*radius,centre.x[1]+signs[1]*radius,size=mesh_size))
+        corners.append(corners[0])
+        lines:List[CircleArc]=[]
+        for i in range(4):
+            lines.append(self.circle_arc(corners[i],corners[i+1],center=centre,name=line_name))
+        return lines
+            
 
     def circle_arc(self, startpt:Union[Point,Sequence[ExpressionOrNum]], endpt:Union[Point,Sequence[ExpressionOrNum]], *, center:Optional[Union[Point,Sequence[ExpressionOrNum]]]=None, through_point:Optional[Union[Point,Sequence[ExpressionOrNum]]]=None, name:Optional[str]=None, with_macro_element:bool=True)->Optional[Union[Line,CircleArc]]:
         """

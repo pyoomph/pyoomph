@@ -18,6 +18,8 @@ gather mcflow Multicomponent_Flow
 gather dg Discontinuous_Galerkin
 gather advstab Advanced_Linear_Dynamics
 gather plotting Plotting_Interface
+gather precice PreCICE_Coupling
+cp precice/*.xml _GATHER_SCRIPTS/pyoomph_tutorial_scripts/PreCICE_Coupling/
 
 cat > _GATHER_SCRIPTS/pyoomph_tutorial_scripts/README.txt <<EOCAT
 Here, you find the python scripts used and explained throughout the tutorial of pyoomph.

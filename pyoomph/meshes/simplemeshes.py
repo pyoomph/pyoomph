@@ -121,9 +121,10 @@ class RectangularQuadMesh(MeshTemplate):
         split_in_tris: Split the quadrilateral elements into triangles.
         split_scott_vogelius: Whether to use splitting into Scott-Vogelius elements.
         boundary_names: A dictionary mapping boundary names ``"left"``, ``"right"``, ``"top"``, ``"bottom"`` to their corresponding names. Alternatively a function, which also takes the center coordinates of each element as input, can be used to define the boundary names.            
+        nodal_dimension: The nodal dimension of the mesh, can be used to curve the mesh later on.
     """
     
-    def __init__(self, *, name:Union[str,Callable[[float,float],str]]="domain", size:Union[ExpressionOrNum,List[ExpressionOrNum]]=1.0, N:Union[int,List[int]]=10, lower_left:Union[ExpressionOrNum,List[ExpressionOrNum]]=[0, 0], periodic:Union[bool,List[bool]]=False, split_in_tris:Literal[False, "alternate_left", "alternate_right", "left", "right", "crossed"]=False,split_scott_vogelius:bool=False, boundary_names:Dict[str,Union[str,Callable[[float],str]]]={}):
+    def __init__(self, *, name:Union[str,Callable[[float,float],str]]="domain", size:Union[ExpressionOrNum,List[ExpressionOrNum]]=1.0, N:Union[int,List[int]]=10, lower_left:Union[ExpressionOrNum,List[ExpressionOrNum]]=[0, 0], periodic:Union[bool,List[bool]]=False, split_in_tris:Literal[False, "alternate_left", "alternate_right", "left", "right", "crossed"]=False,split_scott_vogelius:bool=False, boundary_names:Dict[str,Union[str,Callable[[float],str]]]={},nodal_dimension:Optional[int]=None):
         super().__init__()
         self.name:Union[str,Callable[[float,float],str]] = name
         self.size = size
@@ -138,11 +139,21 @@ class RectangularQuadMesh(MeshTemplate):
         self.remesher = Remesher2d(self)
         self.boundary_names=boundary_names
         self.split_scott_vogelius=split_scott_vogelius
+        self.nodal_dimension=nodal_dimension
+        if self.nodal_dimension is not None:
+            if not isinstance(self.nodal_dimension, int):
+                raise RuntimeError("nodal_dimension must be an integer")
+            if self.nodal_dimension<2:
+                raise RuntimeError("nodal_dimension must be at least 2")
+            elif self.nodal_dimension>3:
+                raise RuntimeError("nodal_dimension must be at most 3")
 
     def define_geometry(self):
         dynamic_names:Dict[str,_pyoomph.MeshTemplateElementCollection]={}
-        if not callable(self.name):
+        if not callable(self.name):            
             domain = self.new_domain(self.name)
+            if self.nodal_dimension is not None:
+                domain.set_nodal_dimension(self.nodal_dimension)
         else:
             domain=None
 
@@ -181,7 +192,7 @@ class RectangularQuadMesh(MeshTemplate):
             raise ValueError("Mesh size must be a positive integer, but got " + str(nN))
 
         lower_left = self.lower_left
-        if isinstance(lower_left, list) or isinstance(lower_left, tuple):
+        if isinstance(lower_left, list) or isinstance(lower_left, tuple) or isinstance(lower_left, numpy.ndarray):
             lower_left=list(lower_left)
             lower_left = [self.nondim_size(x) for x in lower_left]
         else:
@@ -234,6 +245,8 @@ class RectangularQuadMesh(MeshTemplate):
                     dn=self.name((ix+0.5) * size[0] / nN[0] + lower_left[0], (iy+0.5) * size[1] / nN[1] + lower_left[1]) #type:ignore
                     if dn not in dynamic_names.keys():
                         dynamic_names[dn]=self.new_domain(dn)
+                        if self.nodal_dimension is not None:
+                            dynamic_names[dn].set_nodal_dimension(self.nodal_dimension)
                     domain=dynamic_names[dn]
                     if ix>0:
                         otherdom=self.name((ix-0.5) * size[0] / nN[0] + lower_left[0], (iy+0.5) * size[1] / nN[1] + lower_left[1])
@@ -666,3 +679,17 @@ class CylinderMesh(MeshTemplate):
                 if ns==self.nsegments_h-1:
                     self.add_nodes_to_boundary(self.top_interface,[norigu,norigu, ni0u, n0iu, niiu,nddu,no0u])
 
+
+class PointMesh(MeshTemplate):
+    """ 
+    A mesh consisting of a single point (without any spatial coordinates). This is useful to use the normal mode expansion to a 1d problem
+    """
+    def __init__(self,domain_name:str="domain",nodal_dimension:int=0):
+        super().__init__()
+        self.domain_name=domain_name
+        self.nodal_dimension=nodal_dimension
+        
+    def define_geometry(self) -> None:
+        dom=self.new_domain(self.domain_name)        
+        dom.set_nodal_dimension(self.nodal_dimension)
+        dom.add_point_element(self.add_node_unique(0))

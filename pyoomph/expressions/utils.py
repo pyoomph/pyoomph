@@ -49,15 +49,15 @@ class DeterministicRandomField(CustomMathExpression):
     super(DeterministicRandomField, self).__init__()
     self.min_x = min_x
     self.max_x= max_x
-    if not isinstance(self.min_x ,(tuple ,list)):
+    if not isinstance(self.min_x ,(tuple ,list,numpy.ndarray)):
       self.min_x =[self.min_x]
-    if not isinstance(self.max_x ,(tuple ,list)):
+    if not isinstance(self.max_x ,(tuple ,list,numpy.ndarray)):
       self.max_x =[self.max_x]
     if len(self.min_x) !=len(self.max_x):
       raise RuntimeError("Non-matching min and max dimensions")
     self.amplitude =amplitude
     self.Nresolution =Nresolution
-    if not isinstance(self.Nresolution ,(tuple ,list)):
+    if not isinstance(self.Nresolution ,(tuple ,list,numpy.ndarray)):
       self.Nresolution =[self.Nresolution ] *len(self.min_x)
     if len(self.Nresolution ) != len(self.min_x):
       raise RuntimeError("Non-matching Nresolution array")

@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from _pyoomph import Node
     from ..solvers.generic import GenericEigenSolver
     from ..generic.codegen import EquationTree
-    from ..materials.generic import AnyFluidProperties
+    from ..materials.generic import AnyFluidProperties,PureLiquidProperties
     from ..generic.problem import Problem
 
 
@@ -179,9 +179,10 @@ class StokesEquations(Equations):
         velocity_name (str, optional): Name of the velocity field. Defaults to "velocity".
         DG_alpha (ExpressionNumOrNone, optional): If using Discontinuous Galerkin discretisation, set penalty coefficient alpha for jump terms of the stress tensor. Defaults to None.
         symmetric_test_function (Union[Literal['auto'],bool], optional): Use symmetric test functions for the momentum equation. Defaults to 'auto'.
+        pressure_test_scaling_factor (float, optional): Multiplicative scaling factor for the pressure test function. Defaults to 1.0.
     """
     def __init__(self, *, dynamic_viscosity:ExpressionOrNum=1.0, mode:Literal["TH","CR","SV","C1","D2D1","D1D0","D2TBD1","mini","C2DL"]="TH", bulkforce:ExpressionNumOrNone=None, fluid_props:Optional["AnyFluidProperties"]=None, gravity:ExpressionNumOrNone=None, boussinesq:bool=False, mass_density:ExpressionNumOrNone=None,
-                 pressure_sign_flip:bool=False,momentum_scheme:TimeSteppingScheme="BDF2",continuity_scheme:TimeSteppingScheme="BDF2",wrong_strain:bool=False,pressure_factor:ExpressionOrNum=1, PFEM:Union[PFEMOptions,bool]=False, stress_tensor:ExpressionNumOrNone=None,velocity_name="velocity",DG_alpha:ExpressionNumOrNone=None,symmetric_test_function:Union[Literal['auto'],bool]='auto'):
+                 pressure_sign_flip:bool=False,momentum_scheme:TimeSteppingScheme="BDF2",continuity_scheme:TimeSteppingScheme="BDF2",wrong_strain:bool=False,pressure_factor:ExpressionOrNum=1, PFEM:Union[PFEMOptions,bool]=False, stress_tensor:ExpressionNumOrNone=None,velocity_name="velocity",DG_alpha:ExpressionNumOrNone=None,symmetric_test_function:Union[Literal['auto'],bool]='auto',pressure_test_scaling_factor:float=1):
         super().__init__()
         self.bulkforce = bulkforce  # Some arbitrary bulk-force vector
         self.gravity = gravity  # Some gravity direction, i.e. g*<unit vector of direction>
@@ -191,7 +192,7 @@ class StokesEquations(Equations):
         self.mode:Literal["TH","CR","C1","C2","SV","D2D1","D1D0","mini","C2DL"] = mode
         self.requires_interior_facet_terms=self.mode in {"D2D1","D1D0","D2TBD1"}
         self.DG_alpha=DG_alpha
-
+        self.pressure_test_scaling_factor=pressure_test_scaling_factor
         if self.mode in {"D2D1","D1D0"}:
             if self.DG_alpha is None:
                 raise RuntimeError(f"Must set DG_alpha if mode=='{self.mode}'")
@@ -271,8 +272,8 @@ class StokesEquations(Equations):
                 self.set_test_scaling(mesh_x=self.velocity_name)
                 self.set_test_scaling(mesh_y=self.velocity_name)
                 self.set_test_scaling(mesh_z=self.velocity_name)
-        self.set_test_scaling(pressure=X / U)
-        self.add_named_numerical_factor(p_in_momentum_eq=scale_factor("pressure")*test_scale_factor(self.velocity_name)/scale_factor("spatial"))
+        self.set_test_scaling(pressure=X / U*self.pressure_test_scaling_factor)
+        self.add_named_numerical_factor(p_in_momentum_eq=scale_factor("pressure")*test_scale_factor(self.velocity_name)/scale_factor("spatial")*self.pressure_test_scaling_factor)
         self.add_named_numerical_factor(div_u__in_conti_eq=scale_factor(self.velocity_name) * test_scale_factor("pressure") / scale_factor("spatial"))
 
     def define_stress_tensor(self):
@@ -376,7 +377,7 @@ class StokesEquations(Equations):
             integral_value: The integral value of the pressure over the domain.
             ode_domain_name: Domain name for the Lagrange multiplier enforcing the pressure integral. Defaults to "globals".
             lagrange_name: Name of the global Lagrange multiplier. Defaults to "lagr_intconstr_pressure".
-            set_zero_on_angular_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
+            set_zero_on_normal_mode_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
 
         Returns:
             The (Navier-)Stokes equations with the pressure integral constraint.
@@ -385,7 +386,7 @@ class StokesEquations(Equations):
         return self+fix
 
 
-    def with_pressure_integral_constraint(self, problem:"Problem", integral_value:ExpressionOrNum=0, *, ode_domain_name:str="globals",lagrange_name:str="lagr_intconstr_pressure", set_zero_on_angular_eigensolve:bool=True) -> Equations:
+    def with_pressure_integral_constraint(self, problem:"Problem", integral_value:ExpressionOrNum=0, *, ode_domain_name:str="globals",lagrange_name:str="lagr_intconstr_pressure", set_zero_on_normal_mode_eigensolve:bool=True) -> Equations:
         """
         Instead of adding ``StokesEquation``, add ``StokesEquation.with_pressure_integral_constraint(...)`` to remove the pressure nullspace in case of pure Dirichlet boundary conditions for the normal flow.
         With this method, the integral of the pressure is constrained to a given value via a global Lagrange multiplier.
@@ -395,7 +396,7 @@ class StokesEquations(Equations):
             integral_value: The integral value of the pressure over the domain.
             ode_domain_name: Domain name for the Lagrange multiplier enforcing the pressure integral. Defaults to "globals".
             lagrange_name: Name of the global Lagrange multiplier. Defaults to "lagr_intconstr_pressure".
-            set_zero_on_angular_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
+            set_zero_on_normal_mode_eigensolve: Deactivate when solving angular eigenvalue problems. Defaults to True.
 
         Returns:
             The (Navier-)Stokes equations with the pressure integral constraint.
@@ -404,7 +405,7 @@ class StokesEquations(Equations):
 
         eq_additions += WeakContribution(var("pressure"), testfunction(lagrange_name, domain=ode_domain_name),dimensional_dx=False)
         eq_additions += WeakContribution(var(lagrange_name, domain=ode_domain_name), testfunction("pressure"),dimensional_dx=False)
-        ode_additions = GlobalLagrangeMultiplier(**{lagrange_name:integral_value},set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve)
+        ode_additions = GlobalLagrangeMultiplier(**{lagrange_name:integral_value},set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve)
         ode_additions +=TestScaling(**{lagrange_name:1/scale_factor("pressure")})
         ode_additions += Scaling(**{lagrange_name: 1 / test_scale_factor("pressure")})
         problem.add_equations(ode_additions @ ode_domain_name)
@@ -414,8 +415,7 @@ class StokesEquations(Equations):
 ##################################
 
 class NavierStokesEquations(StokesEquations):   
-    """
-    Represents the Navier-Stokes-Equations, defined by the second-order partial differential equations (PDEs):
+    """Represents the Navier-Stokes-Equations, defined by the second-order partial differential equations (PDEs):
 
     .. math:: \\partial_t \\rho + \\nabla \\cdot (\\rho \\vec{u}) = 0 \\,
     .. math:: \\rho (\\partial_t \\vec{u} + \\vec{u} \\cdot \\nabla \\vec{u} ) = \\nabla \\cdot [-\\nabla p \\vec{\\vec{I}} + \\mu (\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T})] + f \\,
@@ -457,9 +457,9 @@ class NavierStokesEquations(StokesEquations):
                  
         
     def __init__(self, *, dynamic_viscosity:ExpressionOrNum=1.0, mode:Literal["TH","CR","SV"]="TH", mass_density:ExpressionOrNum=1.0, bulkforce:ExpressionNumOrNone=None, fluid_props:Optional["AnyFluidProperties"]=None,
-                 dt_factor:ExpressionOrNum=1, nonlinear_factor:ExpressionOrNum=1, gravity:ExpressionNumOrNone=None, boussinesq:bool=False,momentum_scheme:TimeSteppingScheme="BDF2",continuity_scheme:TimeSteppingScheme="BDF2",wrong_strain:bool=False,pressure_factor:ExpressionOrNum=1,wrap_params_in_subexpressions:bool=True,PFEM:Union[PFEMOptions,bool]=False, stress_tensor:ExpressionNumOrNone=None,velocity_name="velocity"):
+                 dt_factor:ExpressionOrNum=1, nonlinear_factor:ExpressionOrNum=1, gravity:ExpressionNumOrNone=None, boussinesq:bool=False,momentum_scheme:TimeSteppingScheme="BDF2",continuity_scheme:TimeSteppingScheme="BDF2",wrong_strain:bool=False,pressure_factor:ExpressionOrNum=1,wrap_params_in_subexpressions:bool=True,PFEM:Union[PFEMOptions,bool]=False, stress_tensor:ExpressionNumOrNone=None,velocity_name="velocity",symmetric_test_function:Union[Literal['auto'],bool]='auto',pressure_test_scaling_factor:float=1):
         super().__init__(dynamic_viscosity=dynamic_viscosity, mode=mode, bulkforce=bulkforce, fluid_props=fluid_props,
-                         gravity=gravity, boussinesq=boussinesq,momentum_scheme=momentum_scheme,continuity_scheme=continuity_scheme,wrong_strain=wrong_strain,pressure_factor=pressure_factor,PFEM=PFEM, stress_tensor=stress_tensor,velocity_name=velocity_name)
+                         gravity=gravity, boussinesq=boussinesq,momentum_scheme=momentum_scheme,continuity_scheme=continuity_scheme,wrong_strain=wrong_strain,pressure_factor=pressure_factor,PFEM=PFEM, stress_tensor=stress_tensor,velocity_name=velocity_name,symmetric_test_function=symmetric_test_function,pressure_test_scaling_factor=pressure_test_scaling_factor)
         if self.fluid_props is not None:
             self.mass_density = self.fluid_props.mass_density
         else:
@@ -601,7 +601,8 @@ class NavierStokesFreeSurface(InterfaceEquations):
     def define_residuals(self):
         flow_eqs=self.get_parent_equations(StokesEquations)
         assert isinstance(flow_eqs,StokesEquations)
-        n = self.get_normal()
+        #n = self.get_normal()
+        n=var("normal")
         if not flow_eqs.PFEM_options or not flow_eqs.PFEM_options.active:                    
             u, u_test = var_and_test(flow_eqs.velocity_name)
             R, R_test = var_and_test("mesh")
@@ -697,6 +698,8 @@ class ConnectVelocityAtInterface(InterfaceEquations):
         fields = [flow_eqs.velocity_name+ "_x", flow_eqs.velocity_name+"_y", flow_eqs.velocity_name+"_z"]
         if isinstance(self.get_coordinate_system(),AxisymmetryBreakingCoordinateSystem):
             return fields[0:self.get_nodal_dimension()]+[flow_eqs.velocity_name+"_phi"]
+        elif isinstance(self.get_coordinate_system(),CartesianCoordinateSystemWithAdditionalNormalMode):
+            return fields[0:self.get_nodal_dimension()]+[flow_eqs.velocity_name+"_normal"]
         else:
             return fields[0:self.get_nodal_dimension()]
 
@@ -805,6 +808,10 @@ class NoSlipBC(DirichletBC):
                 if lagr:
                     raise RuntimeError("TODO")
                 self._dcs[self.veloname+"_phi"]=0
+            elif isinstance(cs,CartesianCoordinateSystemWithAdditionalNormalMode):
+                if lagr:
+                    raise RuntimeError("TODO")
+                self._dcs[self.veloname+"_normal"]=0                
         super(NoSlipBC, self).define_residuals()
 
 

@@ -137,16 +137,16 @@ class EnforcedBC(InterfaceEquations):
 
     Args:
         only_for_stationary_solve (bool, optional): Flag indicating if the enforced boundary conditions should only be applied during stationary solves. Defaults to False.
-        set_zero_on_angular_eigensolve (bool, optional): Flag indicating if the enforced boundary conditions should be set to zero during azimuthal eigensolves. Defaults to False.
+        set_zero_on_normal_mode_eigensolve (bool, optional): Flag indicating if the enforced boundary conditions should be set to zero during azimuthal eigensolves. Defaults to False.
         **constraints (Expression): Keyword arguments representing the enforced boundary conditions as pair of variable name to adjust and constraint expression to fulfill in residual form.
     """
  
-    def __init__(self,*, only_for_stationary_solve:bool=False, set_zero_on_angular_eigensolve=False,**constraints:Expression):
+    def __init__(self,*, only_for_stationary_solve:bool=False, set_zero_on_normal_mode_eigensolve=False,**constraints:Expression):
         super(EnforcedBC, self).__init__()
         self.constraints = constraints.copy()
         self.lagrangian:bool = False
         self.only_for_stationary_solve=only_for_stationary_solve
-        self.set_zero_on_angular_eigensolve=set_zero_on_angular_eigensolve
+        self.set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve
 
     def get_lagrange_multiplier_name(self, varname:str)->str:
         return "_lagr_enf_bc_" + varname
@@ -251,7 +251,7 @@ class EnforcedBC(InterfaceEquations):
 
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         must_reapply=False
-        if self.set_zero_on_angular_eigensolve:
+        if self.set_zero_on_normal_mode_eigensolve:
             if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
                 #if self.get_mesh()._problem._azimuthal_mode_param_m.value!=0:
                 return False  # Don't do anything in this case. It would mess up everything!
@@ -269,16 +269,19 @@ class EnforcedBC(InterfaceEquations):
                     must_reapply=True
         return must_reapply
     
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver", angular_mode:Optional[int])->Set[Union[str,int]]:
-        if (not self.set_zero_on_angular_eigensolve) or (angular_mode is None):
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver", angular_mode:Optional[int],normal_k:Optional[float])->Set[Union[str,int]]:
+        if (not self.set_zero_on_normal_mode_eigensolve) or (angular_mode is None and normal_k is None):
             return cast(Set[str],set())
         else:
-            angular_mode=int(angular_mode)
+            if angular_mode is not None and normal_k is not None:
+                raise RuntimeError("Cannot have both angular and normal mode set")
+            if angular_mode is not None:
+                mode=int(angular_mode)
+            elif normal_k is not None:
+                mode=normal_k
             fullpath = eqtree.get_full_path().lstrip("/")
-            if angular_mode == 0:
+            if mode == 0:
                 return cast(Set[str],set())
-            elif angular_mode == 1 or angular_mode == -1:                
-                for_my_m = [self.get_lagrange_multiplier_name(k) for k in self.constraints.keys()]
             else:
                 for_my_m = [self.get_lagrange_multiplier_name(k) for k in self.constraints.keys()]
             lst=[fullpath + "/" + k for k in for_my_m]
@@ -318,6 +321,29 @@ class DirichletBC(BaseEquations):
 
     def get_information_string(self) -> str:
         return ", ".join([str(n) + "=" + str(v) for n, v in self._dcs.items()])
+
+
+
+class EnforcedDirichlet(EnforcedBC):
+    """
+    Enforces a DirichletBC by Lagrange multipliers.
+    As an example,
+    
+        ``EnforcedDirichlet(u=var("v")) @ "boundary"``
+        
+    will just be the same as :py:class:`~pyoomph.meshes.bcs.EnforcedBC` ``(u=var("u")-var("v")) @ "boundary"``
+        
+    
+    Args:
+        only_for_stationary_solve (bool, optional): Flag indicating if the enforced boundary conditions should only be applied during stationary solves. Defaults to False.
+        set_zero_on_normal_mode_eigensolve (bool, optional): Flag indicating if the enforced boundary conditions should be set to zero during azimuthal eigensolves. Defaults to False.
+        **constraints (Expression): Keyword arguments representing the enforced boundary conditions as pair of variable name to adjust and constraint expression to fulfill in residual form.
+    """
+    
+    def __init__(self,*, only_for_stationary_solve:bool=False, set_zero_on_normal_mode_eigensolve=False,**constraints:Expression):
+        from ..expressions import var        
+        new_kwargs={k:var(k)-v for k,v in constraints.items()}
+        super(EnforcedDirichlet, self).__init__(only_for_stationary_solve=only_for_stationary_solve, set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve,**new_kwargs.copy())
 
 
 class InactiveDirichletBC(DirichletBC):
@@ -450,7 +476,7 @@ class AxisymmetryBC(DirichletBC):
         super(AxisymmetryBC, self).define_residuals()
 
     # For axial symmetry breaking eigenanalysis, we must deactivate the DirichletBCs at r=0
-    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[float]) -> bool:
+    def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[float]=None,normal_k:Optional[float]=None) -> bool:
         if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
             return False # Nothing must be reassigned
         if angular_m is None or angular_m==0:
@@ -478,7 +504,7 @@ class AxisymmetryBC(DirichletBC):
                 must_reapply = True # Dirichlets have changed => reassign the equations
         return must_reapply
 
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[float])->Set[Union[str,int]]:
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[float],normal_k:Optional[float])->Set[Union[str,int]]:
         #print("GETTING SET FOR:"+eqtree.get_full_path())
         if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
             #print("RET EMPY")
@@ -507,7 +533,7 @@ class AxisymmetryBCForScalarD0Field(InterfaceEquations):
         super().__init__()
         self.fields=[f for f in fields]
 
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree: "EquationTree", eigensolver: "GenericEigenSolver", angular_mode: Union[int,None]) -> Set[Union[str,int]]:
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree: "EquationTree", eigensolver: "GenericEigenSolver", angular_mode: Union[int,None],normal_k:Optional[float]) -> Set[Union[str,int]]:
         eqs=set()
         if angular_mode!=0:
             for ie in eqtree._mesh.elements():
@@ -542,6 +568,8 @@ class PeriodicBC(InterfaceEquations):
     def before_finalization(self, codegen: "FiniteElementCodeGenerator"):
        
         bulkdom = self.get_parent_domain()
+        if bulkdom.get_nodal_dimension()!=len(self.offset):
+            raise RuntimeError("The offset of the PeriodicBC must have the same dimension as the nodal dimension of the mesh")
         while bulkdom.get_parent_domain() is not None:
             raise RuntimeError("Cannot yet apply periodic boundaries on interfaces on interfaces")
         pmesh = bulkdom.get_equations().get_mesh()
@@ -570,6 +598,8 @@ class PeriodicBC(InterfaceEquations):
             raise RuntimeError("Mismatch in number of nodes for a periodic boundary")
         kdtree = scipy.spatial.KDTree(data)  # type:ignore
 
+        slave_to_master:Dict[_pyoomph.Node,_pyoomph.Node]=dict()
+        master_to_slave:Dict[_pyoomph.Node,_pyoomph.Node]=dict()
         for ps, nslave in my_nodes_by_pos.items():
             qres = kdtree.query(ps)  # type:ignore
             if qres[0] > 1e-6:  # type:ignore
@@ -580,11 +610,32 @@ class PeriodicBC(InterfaceEquations):
                     raise RuntimeError(
                         "A periodic node on a single boundary shall be copied from a master that lies on more than one boundary")
                 pmesh._periodic_corner_node_info[nslave] = nmaster  # type:ignore
+                slave_to_master[nslave]=nmaster
+                master_to_slave[nmaster]=nslave
                 continue
             elif len(nslave.get_boundary_indices()) >= 2:
                 raise RuntimeError(
                     "A periodic corner node located on multiple boundaries shall be attached to a periodic master on a single boundary")
+            slave_to_master[nslave]=nmaster
+            master_to_slave[nmaster]=nslave
             nslave._make_periodic(nmaster, pmesh)
+            
+        # If we have a quad tree, we must also connect the quad tree here
+        if pmesh.refinement_possible():
+            myind=bnames.index(my_name)
+            oppind=bnames.index(self.other_interface)
+            oppnodes_to_oppelem:Dict[_pyoomph.Node,_pyoomph.Element]=dict()
+            for oppelem,direct in pmesh.boundary_elements(self.other_interface,with_directions=True):
+                oppnodes_to_oppelem[tuple(oppelem.boundary_nodes(oppind))]=(oppelem,direct)
+            
+            for myelem,direct in pmesh.boundary_elements(my_name,with_directions=True):                
+                my_nodes_on_bind=myelem.boundary_nodes(myind)                            
+                search_for=tuple(slave_to_master[n] for n in my_nodes_on_bind)
+                oppelem=oppnodes_to_oppelem.get(search_for,None)
+                if oppelem is None:            
+                    raise RuntimeError("Cannot identify the corresponding periodic boundary element on the other interface.")
+                myelem._connect_periodic_tree(oppelem[0],direct,oppelem[1])
+        
 
 
 class PythonDirichletBC(BoundaryCondition):
@@ -841,3 +892,20 @@ class PinMeshAtDistanceToInterface(PinWhere):
         self._build_where_func()
         super(PinMeshAtDistanceToInterface, self).apply()
 
+
+
+class InteriorBoundaryOrientation(InterfaceEquations):
+    """
+    Named interior boundaries within a domain are by default double-layered, i.e. interface elements are added from both sides.
+    This can usually cause problems. In order to avoid this, we have to specify the orientation of the boundary, i.e. only interface elements are added from one side, namely where the indicator function is positive.
+    For a unit circle ``"circle"`` embedded in a domain, you could e.g. add ``InteriorBoundaryOrientation(dot(var("coordinate"),var("normal)))@"circle"`` to only add interface elements with an outward pointing normal.
+
+    Args:
+        InterfaceEquations (_type_): _description_
+    """    
+    def __init__(self,indicator:ExpressionOrNum):
+        super().__init__()
+        self.indicator=indicator
+        
+    def define_residuals(self):
+        self.add_local_function("__interface_constraint",self.indicator)

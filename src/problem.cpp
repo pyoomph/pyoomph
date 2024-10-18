@@ -402,14 +402,14 @@ namespace pyoomph
 		{
 			if (!strcmp(name.c_str(), dyn->functable->fieldnames_C2[i]))
 			{
-				return i;
+				return i+ dyn->functable->numfields_C2TB_basebulk;
 			}
 		}
 		for (unsigned int i = 0; i < dyn->functable->numfields_C1_basebulk; i++)
 		{
 			if (!strcmp(name.c_str(), dyn->functable->fieldnames_C1[i]))
 			{
-				return i + dyn->functable->numfields_C2_basebulk;
+				return i + dyn->functable->numfields_C2_basebulk+ dyn->functable->numfields_C2TB_basebulk;
 			}
 		}
 		return -1;
@@ -480,9 +480,20 @@ namespace pyoomph
 		*/
 	}
 
+    bool DynamicBulkElementInstance::has_parameter_contribution(const std::string &param)
+	{
+		if (!this->get_problem()->has_global_parameter(param))
+			return false;
+		pyoomph::GlobalParameterDescriptor * parameter=this->get_problem()->get_global_parameter(param);
+		for (unsigned int i = 0; i < dyn->functable->numglobal_params; i++)
+		{
+			if (dyn->functable->global_paramindices[i] == parameter->get_global_index())
+				return true;
+		}
+		return false;
+	}
 
-
-	void CustomResJacInformation::set_custom_jacobian(const std::vector<double> &Jv, const std::vector<int> &col_index, const std::vector<int> &row_start)
+    void CustomResJacInformation::set_custom_jacobian(const std::vector<double> &Jv, const std::vector<int> &col_index, const std::vector<int> &row_start)
 	{
 		Jvals.resize(Jv.size());
 		Jcolumn_index.resize(col_index.size());

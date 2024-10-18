@@ -184,9 +184,16 @@ namespace pyoomph
   void Mesh::_load_state(const std::vector<double> &meshdata)
   {
     size_t s = 0;
-    for (unsigned nii = 0; nii < this->nnode(); nii++)
+    bool old_ordering = true;
+    oomph::Vector<oomph::Node *> nodes;
+    this->get_node_reordering(nodes, old_ordering);
+
+    //for (unsigned nii = 0; nii < this->nnode(); nii++)
+    //{
+    //  pyoomph::Node *n = dynamic_cast<pyoomph::Node *>(this->node_pt(nii));
+    for (auto * nn : nodes)
     {
-      pyoomph::Node *n = dynamic_cast<pyoomph::Node *>(this->node_pt(nii));
+      pyoomph::Node *n = dynamic_cast<pyoomph::Node *>(nn);
       unsigned ntstor = n->ntstorage();
       for (unsigned int iv = 0; iv < n->ndim(); iv++)
       {
@@ -302,7 +309,10 @@ namespace pyoomph
           //			std::cout << "N IS " << n << std::endl;
           if (n->is_on_boundary(ib) && n->is_a_copy())
           {
-            throw_runtime_error("Distributed parallel with copied nodes (i.e. periodic boundaries) does not work...");
+            if (n->nvalue() > 0 || (dynamic_cast<pyoomph::Node*>(n)->variable_position_pt()->nvalue() > 0 && dynamic_cast<pyoomph::Node*>(n)->variable_position_pt()->is_a_copy()))
+            {
+              throw_runtime_error("Distributed parallel with copied nodes (i.e. PeriodicBC) does not work with nodal degrees of freedom. Either use pure DG or implement a periodic boundary condition by Lagrange multipliers");
+            }
             std::cout << "FOUND ELEM NODE: " << ib << "  " << ie << "  " << in << "  iscpy " << n->is_a_copy() << std::endl;
             auto *master = n->copied_node_pt();
             std::cout << "MASTER NODE " << master << std::endl;
@@ -512,9 +522,18 @@ namespace pyoomph
 
       if (restriction_index >= 0)
       {
+        //std::cout << "RESTRALL " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->alloced << std::endl;
+        if (!be->get_eleminfo()->alloced) 
+        {
+          be->fill_element_info(true);
+        }
         if (be->get_eleminfo()->alloced)
         {
-          std::cout << "RESTR " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->bulk_eleminfo << std::endl;
+          if (!dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->alloced) 
+          {
+            dynamic_cast<BulkElementBase *>(fe)->fill_element_info(true);
+          }
+          //std::cout << "RESTR " << dynamic_cast<BulkElementBase *>(fe)->get_eleminfo()->bulk_eleminfo << " ELEMINFO " << be->get_eleminfo() << " NODAL COORDS " << be->get_eleminfo()->nodal_coords << std::endl;
           double restriction = dynamic_cast<BulkElementBase *>(fe)->eval_local_expression_at_midpoint(restriction_index);
           if (restriction <= 0)
           {
@@ -542,7 +561,7 @@ namespace pyoomph
         }
         generated_opposite_face_elems.push_back(ofe);
         dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets.push_back(ofe);
-        dynamic_cast<InterfaceElementBase *>(fe)->set_opposite_interface_element(dynamic_cast<BulkElementBase *>(ofe));
+        dynamic_cast<InterfaceElementBase *>(fe)->set_opposite_interface_element(dynamic_cast<BulkElementBase *>(ofe),std::vector<double>());
       }
 
       imesh->add_element_pt(fe);
@@ -4314,9 +4333,16 @@ namespace pyoomph
 
       InterfaceElementBase *iA = dynamic_cast<InterfaceElementBase *>(eA);
       InterfaceElementBase *iB = dynamic_cast<InterfaceElementBase *>(eB);
-      iA->set_opposite_interface_element(iB);
-      iB->set_opposite_interface_element(iA);
+      iA->set_opposite_interface_element(iB,this->opposite_offset_vector);
+      iB->set_opposite_interface_element(iA,this->reversed_opposite_offset_vector);
     }
+  }
+
+  void InterfaceMesh::set_opposite_interface_offset_vector(const std::vector<double> & offset)
+  {
+    this->opposite_offset_vector=offset;
+    this->reversed_opposite_offset_vector=offset;
+    for (unsigned int i=0;i<this->reversed_opposite_offset_vector.size();i++) this->reversed_opposite_offset_vector[i]=-this->reversed_opposite_offset_vector[i];
   }
 
   ///////

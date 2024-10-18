@@ -397,6 +397,7 @@ class FieldSplitPETSCSolver(PETSCSolver):
             name = str(i)
             fields.append((name, IS)) #type:ignore
         pc = self.ksp.getPC() #type:ignore
+        print("FIELDSPlIT ",fields)
         pc.setFieldSplitIS(*fields) #type:ignore
         self._fieldsplit=fields
 

@@ -117,7 +117,7 @@ class _BaseNumpyOutput(_BaseOutputter):
 
 
 class _TextOutput(_BaseNumpyOutput):
-    def __init__(self,mesh:"AnySpatialMesh",*fields:str,ftrunk:str="txtout",in_subdir:bool=True,file_ext:Optional[Union[str,List[str]]]=None,eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",nondimensional:bool=False,hide_lagrangian:bool=True,hide_underscore:bool=True,reverse_segment_if:Optional[Callable[[List[int],NPFloatArray],bool]]=None,sort_segments_by:Optional[Callable[[List[int],NPFloatArray],float]]=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True):
+    def __init__(self,mesh:"AnySpatialMesh",*fields:str,ftrunk:str="txtout",in_subdir:bool=True,file_ext:Optional[Union[str,List[str]]]=None,eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",nondimensional:bool=False,hide_lagrangian:bool=True,hide_underscore:bool=True,reverse_segment_if:Optional[Callable[[List[int],NPFloatArray],bool]]=None,sort_segments_by:Optional[Callable[[List[int],NPFloatArray],float]]=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True,operator:Optional["MeshDataCacheOperatorBase"]=None,tesselate_tri:bool=True):
         super().__init__(mesh)
         self.fname_trunk=ftrunk
         self.in_subdir=in_subdir
@@ -133,6 +133,8 @@ class _TextOutput(_BaseNumpyOutput):
         self.sort_segments_by=sort_segments_by
         self.discontinuous=discontinuous
         self.add_eigen_to_mesh_positions=add_eigen_to_mesh_positions
+        self.operator=operator
+        self.tesselate_tri=tesselate_tri
 
 
 
@@ -172,7 +174,7 @@ class _TextOutput(_BaseNumpyOutput):
         if self.eigenvector is not None:
             if self.eigenvector >= len(self.mesh.get_problem()._last_eigenvectors): #type:ignore
                 return  # No output hrere
-        cache=self.get_cached_mesh_data(self.mesh,nondimensional=self.nondimensional,tesselate_tri=True,eigenvector=self.eigenvector,eigenmode=self.eigenvector_mode,discontinuous=self.discontinuous,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
+        cache=self.get_cached_mesh_data(self.mesh,nondimensional=self.nondimensional,tesselate_tri=self.tesselate_tri,eigenvector=self.eigenvector,eigenmode=self.eigenvector_mode,discontinuous=self.discontinuous,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions,operator=self.operator)
         if len(self.fields)==0:
             self.fields=cache.get_default_output_fields(rem_lagrangian=self.hide_lagrangian,rem_underscore=self.hide_underscore)
         header:List[str] = []
@@ -396,6 +398,7 @@ class _OutputTxtAlongLine(_BaseOutputter):
                 del isol
 
             fields=meshdata.get_default_output_fields(rem_lagrangian=self.hide_lagrangian,rem_underscore=self.hide_underscore)
+            fields=[f for f in fields if f not in meshdata.elemental_field_inds.keys()] # Does not work for elemental fields
             dataL:List[NPFloatArray]=[]
             for f in fields:
                 inter=tri.LinearTriInterpolator(triang, meshdata.get_data(f))
@@ -880,7 +883,7 @@ class TextFileOutput(GenericOutput):
 
 
 
-    def __init__(self,filetrunk:Optional[str]=None,filename:Optional[str]=None, nondimensional:bool=False,hide_underscore:bool=True,hide_lagrangian:bool=True,eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",reverse_segment_if:Optional[Callable[[List[int],NPFloatArray],bool]]=None,sort_segments_by:Optional[Callable[[List[int],NPFloatArray],float]]=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True):
+    def __init__(self,filetrunk:Optional[str]=None,filename:Optional[str]=None, nondimensional:bool=False,hide_underscore:bool=True,hide_lagrangian:bool=True,eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",reverse_segment_if:Optional[Callable[[List[int],NPFloatArray],bool]]=None,sort_segments_by:Optional[Callable[[List[int],NPFloatArray],float]]=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True,operator:Optional["MeshDataCacheOperatorBase"]=None,tesselate_tri:bool=True):
         super(TextFileOutput, self).__init__()
         if filetrunk is not None and filename is not None:
             raise RuntimeError("Please set either filename or filetrunk - both are the same, just for backwards compatibility")
@@ -897,12 +900,14 @@ class TextFileOutput(GenericOutput):
         self.reverse_segment_if=reverse_segment_if
         self.discontinuous=discontinuous
         self.add_eigen_to_mesh_positions=add_eigen_to_mesh_positions
+        self.operator=operator
+        self.tesselate_tri=tesselate_tri
 
     def _construct_outputter_for_eq_tree(self,eqtree:"EquationTree",continue_info:Optional[Dict[str,Any]],mpirank:int) -> _TextOutput:
         fn=self._expand_filename(eqtree,self.filename,"",add_problem_outdir=False)
         mesh=eqtree.get_mesh()
         assert not isinstance(mesh,ODEStorageMesh)
-        return _TextOutput(mesh,ftrunk=fn,nondimensional=self.nondimensional,hide_underscore=self.hide_underscore,hide_lagrangian=self.hide_lagrangian,eigenvector=self.eigenvector,eigenmode=self.eigenmode,sort_segments_by=self.sort_segments_by,reverse_segment_if=self.reverse_segment_if,discontinuous=self.discontinuous,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
+        return _TextOutput(mesh,ftrunk=fn,nondimensional=self.nondimensional,hide_underscore=self.hide_underscore,hide_lagrangian=self.hide_lagrangian,eigenvector=self.eigenvector,eigenmode=self.eigenmode,sort_segments_by=self.sort_segments_by,reverse_segment_if=self.reverse_segment_if,discontinuous=self.discontinuous,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions,operator=self.operator,tesselate_tri=self.tesselate_tri)
 
     def _is_ode(self):
         return False

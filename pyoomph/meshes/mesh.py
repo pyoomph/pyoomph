@@ -41,7 +41,6 @@ from ..expressions.generic import Expression, ExpressionOrNum, is_zero, NameStrS
 
 
 
-
 import itertools
 
 
@@ -418,6 +417,9 @@ class MeshTemplateOppositeInterfaceConnection:
             pos = sorted(pos)
             posBmap[tuple(pos)] = eB
 
+        offset_vector=meshA.get_opposite_interface_offset_vector()
+        rev_offset=[-o for o in offset_vector]
+        print("OFFSET VECTOR",offset_vector)
         for eA in meshA.elements():
             pos2find: List[List[float]] = []
             for nvi in range(eA.nvertex_node()):
@@ -432,8 +434,8 @@ class MeshTemplateOppositeInterfaceConnection:
                         dist += self._match_pos_func(pos2find[i], pB[i])
                     # print(pB,len(pB),dist)
                     if dist < 1e-8:
-                        eA.set_opposite_interface_element(eB)
-                        eB.set_opposite_interface_element(eA)
+                        eA.set_opposite_interface_element(eB,offset_vector)
+                        eB.set_opposite_interface_element(eA,rev_offset)
                         found = True
                         break
             if not found:
@@ -486,6 +488,7 @@ class MeshTemplate(_pyoomph.MeshTemplate):
         self._interior_boundaries: Set[str] = set()
         self._macrobounds: List[_pyoomph.MeshTemplateCurvedEntityBase] = []
         self._fntrunk:Optional[str]=None # To be set for remeshing
+        self.all_nodes_as_boundary_nodes:bool=False
 
     def get_problem(self) -> "Problem":
         return self._problem
@@ -619,6 +622,8 @@ class MeshTemplate(_pyoomph.MeshTemplate):
         else:
             raise RuntimeError("Domain with name '" + name +
                                "' already in the mesh template")
+        if self.all_nodes_as_boundary_nodes:
+            self._domains[name].set_all_nodes_as_boundary_nodes()
         return self._domains[name]
 
     @overload
@@ -643,14 +648,14 @@ class MeshTemplate(_pyoomph.MeshTemplate):
                 resL.append(self.nondim_size(b))
             return resL
         res: float
-        if isinstance(a, float) or isinstance(a, int) or isinstance(a,_pyoomph.GiNaC_GlobalParam):
+        if isinstance(a, float) or isinstance(a, int) or isinstance(a,_pyoomph.GiNaC_GlobalParam) or isinstance(a,numpy.floating) or isinstance(a,numpy.integer):
             assert self._problem is not None
             res = (float(a / self._problem.get_scaling("spatial")))
         elif isinstance(a, _pyoomph.Expression):  # type:ignore
             assert self._problem is not None
             res = ((a / self._problem.get_scaling("spatial")).float_value())        
         else:
-            raise ValueError("Strange spatial argument for a mesh:"+str(a))
+            raise ValueError("Strange spatial argument for a mesh:"+str(a)+" of type "+str(type(a)))
         return res
 
     def add_nodes(self, *args: Sequence[float]) -> Optional[Union[int , Tuple[int, ...]]]:

@@ -276,6 +276,76 @@ namespace pyoomph
 		return minJ / (size / weightsum);
 	}
 
+	void BulkElementBase::connect_periodic_tree(BulkElementBase *other, const int &mydir, const int &otherdir)
+	{
+		oomph::QuadTree *my_qt = dynamic_cast<oomph::QuadTree *>(Tree_pt);
+		oomph::BinaryTree *my_bt = dynamic_cast<oomph::BinaryTree *>(Tree_pt);
+		oomph::OcTree *my_ot = dynamic_cast<oomph::OcTree *>(Tree_pt);
+		oomph::TreeRoot * myroot=NULL;
+		oomph::TreeRoot * otherroot=NULL;
+		int my_root_dir,other_root_dir;
+		if (my_qt)
+		{
+			using namespace oomph::QuadTreeNames;
+			oomph::QuadTree *other_qt = dynamic_cast<oomph::QuadTree *>(other->tree_pt());
+			if (!other_qt) throw_runtime_error("Cannot connect a QuadTree with a non-QuadTree for a periodic boundary");
+			myroot=my_qt->root_pt(); otherroot=other_qt->root_pt();
+			if (mydir==-1) my_root_dir=W;
+			else if (mydir==1) my_root_dir=E;
+			else if (mydir==-2) my_root_dir=S;
+			else if (mydir==2) my_root_dir=N;
+			else throw_runtime_error("Invalid direction");
+			if (otherdir==-1) other_root_dir=W;
+			else if (otherdir==1) other_root_dir=E;
+			else if (otherdir==-2) other_root_dir=S;
+			else if (otherdir==2) other_root_dir=N;
+			else throw_runtime_error("Invalid direction");						
+		}
+		else if (my_ot)
+		{
+			using namespace oomph::OcTreeNames;
+			oomph::OcTree *other_ot = dynamic_cast<oomph::OcTree *>(other->tree_pt());			
+			if (!other_ot) throw_runtime_error("Cannot connect a OcTree with a non-OcTree for a periodic boundary");			
+			myroot=my_ot->root_pt(); otherroot=other_ot->root_pt();						
+			if (mydir==-1) my_root_dir=L;
+			else if (mydir==1) my_root_dir=R;
+			else if (mydir==-2) my_root_dir=D;
+			else if (mydir==2) my_root_dir=U;			
+			else if (mydir==-3) my_root_dir=B;			
+			else if (mydir==3) my_root_dir=F;			
+			else throw_runtime_error("Invalid direction");
+			if (otherdir==-1) other_root_dir=L;
+			else if (otherdir==1) other_root_dir=R;
+			else if (otherdir==-2) other_root_dir=D;
+			else if (otherdir==2) other_root_dir=U;			
+			else if (otherdir==-3) other_root_dir=B;			
+			else if (otherdir==3) other_root_dir=F;			
+			else throw_runtime_error("Invalid direction");			
+		}
+		else if (my_bt)
+		{
+			using namespace oomph::BinaryTreeNames;
+			oomph::BinaryTree *other_bt = dynamic_cast<oomph::BinaryTree *>(other->tree_pt());
+			if (!other_bt) throw_runtime_error("Cannot connect a BinaryTree with a non-BinaryTree for a periodic boundary");
+			myroot=my_bt->root_pt(); otherroot=other_bt->root_pt();
+			if (mydir==-1) my_root_dir=L;
+			else if (mydir==1) my_root_dir=R;			
+			else throw_runtime_error("Invalid direction");
+			if (otherdir==-1) other_root_dir=L;
+			else if (otherdir==1) other_root_dir=R;			
+			else throw_runtime_error("Invalid direction");			
+		}
+		if (myroot && otherroot)
+		{
+			myroot->set_neighbour_periodic(my_root_dir);
+			otherroot->set_neighbour_periodic(other_root_dir);
+			myroot->neighbour_pt(my_root_dir)=otherroot;
+			otherroot->neighbour_pt(other_root_dir)=myroot;
+		}
+		
+		// Otherwise, we can't do anything
+	}
+
 	unsigned BulkElementBase::ndof_types() const
 	{
 		auto *ft = codeinst->get_func_table();
@@ -1598,6 +1668,39 @@ namespace pyoomph
 
 					  
 		}
+		else if (eldim==0 && nodal_dim==1)
+		{ 
+           //Actually, this does not mean anything, but we can set the derivative to zero
+		   for (unsigned int i = 0; i < nodal_dim; i++)
+			{
+				for (unsigned l = 0; l < n_node; l++)
+				{
+					for (unsigned int k = 0; k < nodal_dim; k++)
+					{
+						dnormal_dcoord[i][l][k] = 0.0;
+					}
+				}
+			}
+			if (d2normal_dcoord2)
+			{			
+				for (unsigned int i = 0; i < nodal_dim; i++)
+			   {
+					for (unsigned l = 0; l < n_node; l++)
+					{
+						for (unsigned int j = 0; j < nodal_dim; j++)
+						{
+							for (unsigned lp = 0; lp < n_node; lp++)
+							{
+								for (unsigned int jp = 0; jp < nodal_dim; jp++)
+								{		
+								 d2normal_dcoord2[i][l][j][lp][jp]=0.0;
+								}												
+							}
+						}
+					}
+				}
+			}
+		}
 		else
 		{
 
@@ -1668,6 +1771,10 @@ namespace pyoomph
 				l = 1;
 			l = sqrt(l);
 			for (unsigned int d = 0; d < nodal_dim; d++) n[d] /=l;
+		}
+		else if (nodal_dim==1 && eldim==0)
+		{
+			n[0]=1.0; // Makes only partially sense, but for PointMesh with a Cartesian normal mode expansion, it matters
 		}
 		else
 		{
@@ -1894,6 +2001,20 @@ namespace pyoomph
 		return h;
 	}
 
+	std::vector<double> BulkElementBase::get_macro_element_coordinate_at_s(oomph::Vector<double> s)
+	{
+		if (!macro_elem_pt()) return {};
+		unsigned el_dim = dim();
+		oomph::QElementBase *qelem = dynamic_cast<oomph::QElementBase *>(this);
+		if (!qelem) return {};
+		std::vector<double> s_macro(el_dim,0);
+		for (unsigned i = 0; i < el_dim; i++)
+		{
+				s_macro[i] = qelem->s_macro_ll(i) + 0.5 * (s[i] + 1.0) * (qelem->s_macro_ur(i) - qelem->s_macro_ll(i));
+		}
+		return s_macro;
+	}
+
 	void BulkElementBase::map_nodes_on_macro_element() // Does only work for bulk elems
 	{
 		if (!macro_elem_pt())
@@ -2040,6 +2161,10 @@ namespace pyoomph
 			{
 				res = new BulkElementBrick3dC2();
 			}
+		}
+		else if (el->get_geometric_type_index() == 0)
+		{
+			res= new PointElement0d();
 		}
 		else
 			throw_runtime_error("Undefined element type: " + std::to_string(el->get_geometric_type_index()));
@@ -2530,6 +2655,7 @@ namespace pyoomph
 				eleminfo.nodal_coords[i] = NULL;
 			}
 		}
+		//std::cout << "NODAL COORDS DEALLOCATED FOR " << this << std::endl;
 		if (eleminfo.nodal_coords)
 		{
 			free(eleminfo.nodal_coords);
@@ -2571,13 +2697,14 @@ namespace pyoomph
 			return 1.0;
 	}
 
-	void BulkElementBase::fill_element_info()
+	void BulkElementBase::fill_element_info(bool without_equations)
 	{
 		free_element_info();
 
 		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
 
 		eleminfo.nodal_coords = (double ***)malloc(eleminfo.nnode * sizeof(double **));
+		//std::cout << "NODAL COORDS ALLOCATED FOR " << this << std::endl;
 		eleminfo.nodal_data = (double ***)calloc(eleminfo.nnode, sizeof(double **));
 		eleminfo.nodal_local_eqn = (int **)calloc(eleminfo.nnode, sizeof(int *));
 		eleminfo.pos_local_eqn = (int **)calloc(eleminfo.nnode, sizeof(int *));
@@ -2596,7 +2723,6 @@ namespace pyoomph
 		if (eleminfo.nnode_DL)
 			numfields += functable->numfields_DL;
 		numfields += functable->numfields_D0 + functable->numfields_ED0;
-		// std::cout  << "ALLOCATING " << numfields << " ON ELEM OF TYPE " << codeinst->get_code()->get_file_name() << std::endl;
 		for (unsigned int i = 0; i < eleminfo.nnode; i++)
 		{
 			eleminfo.nodal_coords[i] = (double **)calloc(eleminfo.nodal_dim + functable->lagr_dim, sizeof(double *));
@@ -2620,22 +2746,26 @@ namespace pyoomph
 			for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
 				eleminfo.pos_local_eqn[i][j] = -1;
 		}
-
-		for (unsigned int i = 0; i < eleminfo.nnode; i++)
+		
+		
+		if (!without_equations)
 		{
-			for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
+			for (unsigned int i = 0; i < eleminfo.nnode; i++)
 			{
-				if (dynamic_cast<pyoomph::Node *>(this->node_pt(i))->is_hanging())
+				for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
 				{
-					eleminfo.pos_local_eqn[i][j] = -2; //->constrain
-				}
-				else
-				{
-					eleminfo.pos_local_eqn[i][j] = this->position_local_eqn(i, 0, j);
+					if (dynamic_cast<pyoomph::Node *>(this->node_pt(i))->is_hanging())
+					{
+						eleminfo.pos_local_eqn[i][j] = -2; //->constrain
+					}
+					else
+					{
+						eleminfo.pos_local_eqn[i][j] = this->position_local_eqn(i, 0, j);
+					}
 				}
 			}
 		}
-
+		
 		unsigned local_field_offset = 0;
 		unsigned global_offs = 0;
 
@@ -2648,7 +2778,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 			}
 		}
 	  }
@@ -2661,7 +2791,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 			}
 		}
 
@@ -2677,7 +2807,7 @@ namespace pyoomph
 				{
 					unsigned node_index = j + local_field_offset;
 					eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-					eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+					if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 				}
 			}
 		}
@@ -2691,7 +2821,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(node_index - global_offs); // Warning: value_pt does not work for hanging nodes! Will be changed if necessary
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, node_index - global_offs);
 			}
 		}
 		local_field_offset += functable->numfields_C1_basebulk;
@@ -2705,7 +2835,7 @@ namespace pyoomph
 				unsigned node_index = j + local_field_offset;
 //				std::cout << "NODE IDNEX " << node_index  << "  " << local_field_offset << " " << j << ":" << this->get_D2TB_nodal_data(j)->nvalue() << " " << this->get_D2TB_node_index(j,i) << std::endl;
 				eleminfo.nodal_data[i][node_index] =  this->get_D2TB_nodal_data(j)->value_pt(this->get_D2TB_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2TB_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2TB_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D2TB_basebulk;
@@ -2717,7 +2847,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = this->get_D2_nodal_data(j)->value_pt(this->get_D2_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D2_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D2_basebulk;		
@@ -2728,7 +2858,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = this->get_D1TB_nodal_data(j)->value_pt(this->get_D1TB_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1TB_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1TB_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D1TB_basebulk;		
@@ -2745,7 +2875,7 @@ namespace pyoomph
 				 
 			//	std::cout << "   fieldindex " << j << " vs " << functable->numfields_D1_bulk << " offs " << functable->external_offset_D1_bulk <<std::endl;
 				eleminfo.nodal_data[i][node_index] = this->get_D1_nodal_data(j)->value_pt(this->get_D1_node_index(j,i)); 
-				eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] =  this->get_D1_local_equation(j, i);
 			}
 		}
 		local_field_offset += functable->numfields_D1_basebulk;		
@@ -2762,7 +2892,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + local_field_offset;
 				eleminfo.nodal_data[i][node_index] = this->get_DL_nodal_data( j)->value_pt(i);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_DL_local_equation(j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_DL_local_equation(j, i);
 			}
 		}
 
@@ -2772,7 +2902,7 @@ namespace pyoomph
 		{
 			unsigned node_index = j + local_field_offset;
 			eleminfo.nodal_data[0][node_index] = this->get_D0_nodal_data(j)->value_pt(0);
-			eleminfo.nodal_local_eqn[0][node_index] = this->get_D0_local_equation(j);
+			if (!without_equations) eleminfo.nodal_local_eqn[0][node_index] = this->get_D0_local_equation(j);
 		}
 
 		local_field_offset = functable->numfields_C2TB + functable->numfields_C2 + functable->numfields_C1+ functable->numfields_C1TB +functable->numfields_D2TB + functable->numfields_D2 + functable->numfields_D1TB+ functable->numfields_D1+ functable->numfields_DL + functable->numfields_D0;
@@ -2783,17 +2913,22 @@ namespace pyoomph
 
 			unsigned node_index = i + local_field_offset;
 
-			//		std::cout << "NODE INDEX oF " << functable->fieldnames_ED0[i] << " IS " << node_index << std::endl;
-			if (!codeinst->linked_external_data[i].data)
-				throw_runtime_error("Element has an external data contribution, which is not assigned: " + std::string(functable->fieldnames_ED0[i]));
-			int extdata_i = codeinst->linked_external_data[i].elemental_index+functable->external_offset_ED0;
-			if (extdata_i >= (int)this->nexternal_data())
-				throw_runtime_error("Somehow the external data array was not done well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + "  ext_data_index is " + std::to_string(extdata_i) + ", but only " + std::to_string((int)this->nexternal_data()) + " ext data slots present. Happened in " + codeinst->get_code()->get_file_name());
-			int value_i = codeinst->linked_external_data[i].value_index;
-			if (value_i < 0 || value_i >= (int)this->external_data_pt(extdata_i)->nvalue())
-				throw_runtime_error("Somehow the external data array was not done, i.e. wrong value index, well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + " at value " + std::to_string(value_i));
-			eleminfo.nodal_data[0][node_index] = this->external_data_pt(extdata_i)->value_pt(value_i);
-			eleminfo.nodal_local_eqn[0][node_index] = this->external_local_eqn(extdata_i, value_i);
+			if (!without_equations)
+			{
+				//		std::cout << "NODE INDEX oF " << functable->fieldnames_ED0[i] << " IS " << node_index << std::endl;
+				if (!codeinst->linked_external_data[i].data)
+					throw_runtime_error("Element has an external data contribution, which is not assigned: " + std::string(functable->fieldnames_ED0[i]));
+				int extdata_i = codeinst->linked_external_data[i].elemental_index+functable->external_offset_ED0;
+				if (extdata_i >= (int)this->nexternal_data())
+					throw_runtime_error("Somehow the external data array was not done well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + "  ext_data_index is " + std::to_string(extdata_i) + ", but only " + std::to_string((int)this->nexternal_data()) + " ext data slots present. Happened in " + codeinst->get_code()->get_file_name());
+				int value_i = codeinst->linked_external_data[i].value_index;
+				if (value_i < 0 || value_i >= (int)this->external_data_pt(extdata_i)->nvalue())
+					throw_runtime_error("Somehow the external data array was not done, i.e. wrong value index, well when trying to index data: " + std::string(functable->fieldnames_ED0[i]) + " at value " + std::to_string(value_i));
+				eleminfo.nodal_data[0][node_index] = this->external_data_pt(extdata_i)->value_pt(value_i); // This is a bit an issue. You cannot access this data if you don't need equations to be linked 
+				eleminfo.nodal_local_eqn[0][node_index] = this->external_local_eqn(extdata_i, value_i);
+
+
+			}
 		}
 
 		//	eleminfo.global_parameters=(double**)calloc(functable->numglobal_params,sizeof(double*));
@@ -4439,6 +4574,7 @@ namespace pyoomph
 		this->prepare_shape_buffer_for_integration(codeinst->get_func_table()->shapes_required_LocalExprs, 0);
 //		set_remaining_shapes_appropriately(shape_info, codeinst->get_func_table()->shapes_required_LocalExprs);
       _currently_assembled_element = this;
+	    //std::cout << "CALLING EVAL LOCAL EXPRESSION  " << this << " ELEMINFO " << &eleminfo << std::endl;
 		return functable->EvalLocalExpression(&eleminfo, this->shape_info, index);
 	}
 
@@ -6158,7 +6294,41 @@ namespace pyoomph
 		return eval_local_expression_at_s(index, s);
 	}
 
-	oomph::Vector<double> BulkElementBase::get_Eulerian_midpoint_from_local_coordinate() // Set s=[0.5*(smin+smax), ... ] and evaluate the position
+    pyoomph::Node *BulkElementBase::create_interpolated_node(const oomph::Vector<double> &s,bool as_boundary_node)
+    {
+		if (this->nnode()==0) return 0;
+		pyoomph::Node *res;
+		if (as_boundary_node)
+		{
+		 	res= new pyoomph::BoundaryNode(this->node_pt(0)->time_stepper_pt(),this->nlagrangian(), this->nnodal_lagrangian_type(), this->nodal_dimension(), this->nnodal_position_type(), this->required_nvalue(0));
+		}
+		else
+		{
+			res= new pyoomph::Node(this->node_pt(0)->time_stepper_pt(),this->nlagrangian(), this->nnodal_lagrangian_type(), this->nodal_dimension(), this->nnodal_position_type(), this->required_nvalue(0));	
+		}
+		
+
+		oomph::Vector<double> xibuff(this->lagrangian_dimension(),0.0);
+		this->interpolated_xi(s,xibuff);	
+		for (unsigned i = 0; i < this->lagrangian_dimension(); i++) res->xi(i) = xibuff[i];
+
+		for (unsigned ti = 0; ti < res->time_stepper_pt()->ntstorage(); ti++)
+		{
+			oomph::Vector<double> xbuff(this->nodal_dimension(),0.0);
+			this->interpolated_x(ti,s,xbuff);	
+			for (unsigned i = 0; i < this->nodal_dimension(); i++)
+				res->x(ti, i) = xbuff[i];
+
+			oomph::Vector<double> vbuff(res->nvalue(),0.0);
+			this->get_interpolated_values(ti,s,vbuff);
+			for (unsigned int i=0;i<vbuff.size();i++) res->set_value(ti,i,vbuff[i]);
+			
+		}
+        
+		return res;
+    }
+
+    oomph::Vector<double> BulkElementBase::get_Eulerian_midpoint_from_local_coordinate() // Set s=[0.5*(smin+smax), ... ] and evaluate the position
 	{
 		oomph::Vector<double> res(this->nodal_dimension(), 0.0);
 		if (this->nnode() == 1)
@@ -11780,7 +11950,7 @@ namespace pyoomph
 		return -1;
 	}
 
-	void InterfaceElementBase::fill_element_info_interface_part()
+	void InterfaceElementBase::fill_element_info_interface_part(bool without_equations)
 	{
 		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
 		// Obtain the offset where the interface additional contiuous fields start
@@ -11803,7 +11973,7 @@ namespace pyoomph
 				unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				// std::cout << "NOO " << i << "  " << node_index << "  " << i_el << "   " << valindex << std::endl;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			}
 		}
 
@@ -11825,7 +11995,7 @@ namespace pyoomph
 				unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				// std::cout << "NOO " << i << "  " << node_index << "  " << i_el << "   " << valindex << std::endl;
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			}
 		}
 
@@ -11847,7 +12017,7 @@ namespace pyoomph
 				  unsigned interf_id = interface_ids_C1TB[j];
 				  unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				  eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				  eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				  if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			  }
 		  }
 		}
@@ -11869,7 +12039,7 @@ namespace pyoomph
 				unsigned interf_id = interface_ids_C1[j];
 				unsigned valindex = dynamic_cast<oomph::BoundaryNodeBase *>(this->node_pt(i_el))->index_of_first_value_assigned_by_face_element(interf_id);
 				eleminfo.nodal_data[i][node_index] = node_pt(i_el)->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->nodal_local_eqn(i_el, valindex);
 			}
 		}
 
@@ -11882,7 +12052,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D2TB_node_index(functable->numfields_D2TB_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D2TB_local_equation(functable->numfields_D2TB_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D2TB_local_equation(functable->numfields_D2TB_basebulk+j, i);
 			}
 		}
 		for (unsigned int j=0;j<functable->numfields_D2-functable->numfields_D2_basebulk;j++)
@@ -11893,7 +12063,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D2_node_index(functable->numfields_D2_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D2_local_equation(functable->numfields_D2_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D2_local_equation(functable->numfields_D2_basebulk+j, i);
 			}
 		}
 		for (unsigned int j=0;j<functable->numfields_D1TB-functable->numfields_D1TB_basebulk;j++)
@@ -11904,7 +12074,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D1TB_node_index(functable->numfields_D1TB_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D1TB_local_equation(functable->numfields_D1TB_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D1TB_local_equation(functable->numfields_D1TB_basebulk+j, i);
 			}
 		}		
 		for (unsigned int j=0;j<functable->numfields_D1-functable->numfields_D1_basebulk;j++)
@@ -11915,7 +12085,7 @@ namespace pyoomph
 			{
 				unsigned valindex=this->get_D1_node_index(functable->numfields_D1_basebulk+j,i);
 				eleminfo.nodal_data[i][node_index] = data->value_pt(valindex);
-				eleminfo.nodal_local_eqn[i][node_index] = this->get_D1_local_equation(functable->numfields_D1_basebulk+j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->get_D1_local_equation(functable->numfields_D1_basebulk+j, i);
 			}
 		}
 
@@ -11926,7 +12096,7 @@ namespace pyoomph
 			{
 				unsigned node_index = j + functable->buffer_offset_DL;
 				eleminfo.nodal_data[i][node_index] = internal_data_pt(functable->internal_offset_DL + j)->value_pt(i);
-				eleminfo.nodal_local_eqn[i][node_index] = this->internal_local_eqn(functable->internal_offset_DL + j, i);
+				if (!without_equations) eleminfo.nodal_local_eqn[i][node_index] = this->internal_local_eqn(functable->internal_offset_DL + j, i);
 			}
 		}
 
@@ -11937,7 +12107,7 @@ namespace pyoomph
 		{
 			unsigned node_index = j + functable->buffer_offset_D0;
 			eleminfo.nodal_data[0][node_index] = internal_data_pt(functable->internal_offset_D0 + j)->value_pt(0);
-			eleminfo.nodal_local_eqn[0][node_index] = this->internal_local_eqn(functable->internal_offset_D0 + j, 0);
+			if (!without_equations) eleminfo.nodal_local_eqn[0][node_index] = this->internal_local_eqn(functable->internal_offset_D0 + j, 0);
 		}
 		//	}
 		/* ///NOTE: EXT DATA SHOULD BE ALWAYS AT THE END AT THE MOMENT
