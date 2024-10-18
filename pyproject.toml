@@ -54,7 +54,7 @@ requires = ["setuptools>=68.0","pybind11>=2.5.0","setuptools-scm>=8"]
 build-backend = "setuptools.build_meta:__legacy__"
 
 [tool.cibuildwheel]
-skip = "cp36-* cp37-* cp-38* pp37-* *-manylinux_i686 *_ppc64le *_s390x *_universal2"
+skip = "cp36-* cp37-* cp-38* cp-313* pp37-* *-manylinux_i686 *_ppc64le *_s390x *_universal2"
 manylinux-x86_64-image = "manylinux2014"
 build-frontend = { name = "pip", args = ["--no-build-isolation", "--verbose"] }
 #test-requires = "pytest"
