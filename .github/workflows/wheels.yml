@@ -23,7 +23,7 @@ jobs:
 
       - name: Build wheels
         if: startsWith(matrix.os, 'windows') != true
-        uses: pypa/cibuildwheel@v2.18.0
+        uses: pypa/cibuildwheel@v2.21.3
         
 
       - uses: msys2/setup-msys2@v2
