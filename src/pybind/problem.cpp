@@ -166,9 +166,9 @@ void PyReg_Problem(py::module &m)
 
 	m.def("_get_core_information",[](){
 		std::map<std::string,std::string> info;
-		#ifdef VERSION_INFO
+		/*#ifdef VERSION_INFO
 			info["core_version"]=VERSION_INFO;
-		#endif
+		#endif*/
 		return info;
 	});
 
