@@ -1424,6 +1424,7 @@ class Problem(_pyoomph.Problem):
         self.cmdlineparser.add_argument("--verbose",help="Gives a lot of output",action='store_true')
         self.cmdlineparser.add_argument("--where",help="Python bool expression involving variables time or step. Only used in runmodes c and p",type=str,default="True")
         self.cmdlineparser.add_argument("--largest_residuals",help="Debug the largest residuals",type=int,default=self._debug_largest_residual)
+        self.cmdlineparser.add_argument("--generate_precice_cfg",help="Generate some parts of a preCICE configuration file from the coupling equations",action="store_true")
 
     def parse_cmd_line(self):
         from ..materials.generic import MaterialProperties
@@ -2199,6 +2200,13 @@ class Problem(_pyoomph.Problem):
 
         for hook in self._hooks:
             hook.actions_after_initialise()
+            
+            
+        if self.cmdlineargs.generate_precice_cfg:
+            print("Generating preCICE configuration file")
+            from ..solvers.precice_adapter import get_pyoomph_precice_adapter
+            get_pyoomph_precice_adapter().generate_precice_config_file(self)
+            exit()
 
 
     def _perform_replot(self):

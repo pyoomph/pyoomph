@@ -79,6 +79,140 @@ class _PyoomphPreciceAdapater:
                     problem.output()
             
 
+    def generate_precice_config_file(self,problem:Problem):
+        import xml.etree.ElementTree as ET
+        root=ET.Element("precice-configuration")        
+        
+        data_kwargs_default={"waveform-degree":"1"}       
+        mesh_kwargs_default={}
+        mapping_kwargs_default={"mode":"nearest-neighbor","constraint":"consistent"}
+        
+        mesh_read_data={}
+        mesh_write_data={}
+        precice_read_data={}
+        precice_write_data={}
+        provided_meshes=set()
+        received_meshes=set()
+        pyoomph_mesh_name_to_provide_name={}
+        def recursive_scan_data(eqtree:EquationTree):
+            if eqtree._equations is not None:
+                read_datas=eqtree._equations.get_equation_of_type(PreciceReadData,always_as_list=True)
+                for read_data in read_datas:                                 
+                    read_data=cast(PreciceReadData,read_data)
+                    meshname=eqtree.get_full_path().lstrip("/")
+                    for n,e in read_data.entries.items():                        
+                        data_kwargs=data_kwargs_default.copy()
+                        dataentry=ET.SubElement(root,"data"+":"+("scalar" if read_data.vector_dim is None else "vector"),name=e,**data_kwargs)
+                        if meshname not in mesh_read_data:
+                            mesh_read_data[meshname]=[]                        
+                        mesh_read_data[meshname].append(e)                        
+                        
+                
+                write_datas=eqtree._equations.get_equation_of_type(PreciceWriteData,always_as_list=True)
+                for write_data in write_datas:                                 
+                    write_data=cast(PreciceWriteData,write_data)
+                    meshname=eqtree.get_full_path().lstrip("/")
+                    for n,e in write_data.entries.items():    
+                        data_kwargs=data_kwargs_default.copy()                    
+                        dataentry=ET.SubElement(root,"data"+":"+("scalar" if write_data.vector_dim is None else "vector"),name=n,**data_kwargs)
+                        if meshname not in mesh_write_data:
+                            mesh_write_data[meshname]=[]
+                        mesh_write_data[meshname].append(n)
+                        
+            for path,subeqs in eqtree._children.items():
+                recursive_scan_data(subeqs)    
+                        
+        def recursive_scan_meshes(eqtree:EquationTree):
+            if eqtree._equations is not None:
+                mesh_provides=eqtree._equations.get_equation_of_type(PreciceProvideMesh,always_as_list=True)
+                for mesh_provide in mesh_provides:                    
+                    mesh_provide=cast(PreciceProvideMesh,mesh_provide)
+                    meshname=eqtree.get_full_path().lstrip("/")
+                    mesh=problem.get_mesh(meshname)
+                    n=next(mesh.nodes())
+                    meshdim=n.ndim()
+                    if meshdim<2:
+                        meshdim=2
+                    mesh_kwargs=mesh_kwargs_default.copy()
+                    meshentry=ET.SubElement(root,"mesh",name=mesh_provide.name,dimensions=str(meshdim), **mesh_kwargs)
+                    use_data=[]
+                    if meshname in mesh_read_data.keys():                        
+                        use_data+=mesh_read_data[meshname]
+                        precice_read_data[mesh_provide.name]=mesh_read_data[meshname].copy()
+                    if meshname in mesh_write_data.keys():
+                        use_data+=mesh_write_data[meshname]                                 
+                        precice_write_data[mesh_provide.name]=mesh_write_data[meshname].copy()           
+                    if len(use_data)==0:
+                        raise RuntimeError("Provided Mesh "+meshname+" (preCICE name '"+str(mesh_provide.name)+"') has no data to read or write")
+                    else:
+                        use_data=set(use_data)
+                        for ud in use_data:
+                            ET.SubElement(meshentry,"use-data",name=ud)
+                    provided_meshes.add(mesh_provide.name)
+                    if meshname in pyoomph_mesh_name_to_provide_name.keys():
+                        raise RuntimeError("Mesh "+meshname+" has multiple PreciceProvideMesh entries")
+                    pyoomph_mesh_name_to_provide_name[meshname]=mesh_provide.name
+                    
+                mesh_receives=eqtree._equations.get_equation_of_type(PreciceReceiveMesh,always_as_list=True)
+                for mesh_receive in mesh_receives:                    
+                    mesh_receive=cast(PreciceProvideMesh,mesh_receive)
+                    meshname=eqtree.get_full_path().lstrip("/")
+                    mesh=problem.get_mesh(meshname)
+                    n=next(mesh.nodes())
+                    meshdim=n.ndim()
+                    if meshdim<2:
+                        meshdim=2
+                    mesh_kwargs=mesh_kwargs_default.copy()
+                    meshentry=ET.SubElement(root,"mesh",name=mesh_receive.name,dimensions=str(meshdim), **mesh_kwargs)
+                    use_data=[]
+                    if meshname in mesh_read_data.keys():                        
+                        use_data+=mesh_read_data[meshname]
+                    if meshname in mesh_write_data.keys():
+                        use_data+=mesh_write_data[meshname]                                            
+                    if len(use_data)==0:
+                        raise RuntimeError("Received Mesh "+meshname+" (preCICE name '"+str(mesh_receive.name)+"') has no data to read or write")
+                    else:
+                        use_data=set(use_data)
+                        for ud in use_data:
+                            ET.SubElement(meshentry,"use-data",name=ud)
+                    received_meshes.add((mesh_receive.name,mesh_receive.from_participant,meshname))
+                    
+            for path,subeqs in eqtree._children.items():
+                recursive_scan_meshes(subeqs)
+        recursive_scan_data(problem._equation_system)
+        recursive_scan_meshes(problem._equation_system)
+        
+        if problem.precice_participant is None or problem.precice_participant=="":
+            raise RuntimeError("Please set a preCICE participant name by the Problem property precice_participant")
+        
+        participant=ET.SubElement(root,"participant",name=problem.precice_participant)
+        for meshname in provided_meshes:
+            ET.SubElement(participant,"provide-mesh",name=meshname)
+        for entry in received_meshes:
+            ET.SubElement(participant,"receive-mesh",name=entry[0],**{"from":entry[1]})
+        for meshname in provided_meshes:
+            for data in precice_write_data.get(meshname,[]):
+                ET.SubElement(participant,"write-data",name=data,mesh=meshname)
+            for data in precice_read_data.get(meshname,[]):
+                ET.SubElement(participant,"read-data",name=data,mesh=meshname)
+        for entry in received_meshes:
+            if entry[2] not in pyoomph_mesh_name_to_provide_name.keys():
+                print("WARNING: Received mesh "+str(entry[0])+" is not provided by this participant")
+                #raise RuntimeError("Received mesh "+str(entry[0])+" is not provided by this participant")
+            else:
+                # Mapping
+                mapping_kwargs=mapping_kwargs_default.copy()
+                mapping_kwargs["from"]=entry[0]
+                mapping_kwargs["to"]=pyoomph_mesh_name_to_provide_name[entry[2]]
+                mode=mapping_kwargs.pop("mode","nearest-neighbor")
+                ET.SubElement(participant,"mapping:"+mode,direction="read",**mapping_kwargs)
+                
+            
+        
+        tree = ET.ElementTree(root)
+        ET.indent(tree, space="  ", level=0)
+        tree.write(problem.get_output_directory("generated_precice_config.xml"))
+
 
 class PreciceProvideMesh(BaseEquations):
     """This class exports the domain or interface where it is added to to preCICE. 
@@ -109,6 +243,9 @@ class PreciceProvideMesh(BaseEquations):
             grid = numpy.zeros([len(my_nodes), xml_dimension])
             if len(my_nodes)==0:
                 raise ValueError("No nodes in mesh")
+            mesh_dim=my_nodes[0].ndim()
+            if xml_dimension<mesh_dim:
+                raise RuntimeError("Mesh dimension mismatch: "+str(xml_dimension)+" in preCICE config vs. "+str(mesh_dim))
             iterate_dim=min(xml_dimension,my_nodes[0].ndim())
             if self.use_lagrangian_coords:
                 for i,n in enumerate(my_nodes):
@@ -134,6 +271,7 @@ class PreciceProvideMesh(BaseEquations):
                 if not all_nodes_have_vertex_id:
                     raise RuntimeError("Not all nodes in element have vertex id...")
                 typus=e.get_meshio_type_index()
+                
                 if typus==2: # LineC2
                     interface.set_mesh_edge(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)])
                     interface.set_mesh_edge(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)])                    
@@ -165,8 +303,13 @@ class PreciceProvideMesh(BaseEquations):
                     
                 elif typus==8: # QuadC2
                     if xml_dimension==3:
-                        #interface.set_mesh_quad(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(3)])
-                        raise RuntimeError("Check Quads here")
+                        def _add_quad(i1,i2,i3,i4):
+                            interface.set_mesh_quad(self.name,mesh._precice_node_to_vertex_id[e.node_pt(i1)],mesh._precice_node_to_vertex_id[e.node_pt(i2)],mesh._precice_node_to_vertex_id[e.node_pt(i3)],mesh._precice_node_to_vertex_id[e.node_pt(i4)])
+                        _add_quad(0,1,3,4)
+                        _add_quad(1,2,4,5)
+                        _add_quad(3,4,6,7)
+                        _add_quad(4,5,7,8)
+                        
                     else:
                         interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(3)])
                         interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(4)])                        
@@ -178,19 +321,19 @@ class PreciceProvideMesh(BaseEquations):
                         interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(7)],mesh._precice_node_to_vertex_id[e.node_pt(5)],mesh._precice_node_to_vertex_id[e.node_pt(4)])
                 elif typus==6: # QuadC1
                     if xml_dimension==3:
-                        #interface.set_mesh_quad(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(3)])
-                        raise RuntimeError("Check Quads here")
+                        interface.set_mesh_quad(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                        
                     else:
                         interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)])                                        
                         interface.set_mesh_triangle(self.name,mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(3)])                                                            
+                #elif typus==11: # BrickC1
+                    #interface.set_mesh_tetrahedron(self.name,mesh._precice_node_to_vertex_id[e.node_pt(0)],mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(4)])
+                    #interface.set_mesh_tetrahedron(self.name,mesh._precice_node_to_vertex_id[e.node_pt(4)],mesh._precice_node_to_vertex_id[e.node_pt(7)],mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(2)])
+                    #interface.set_mesh_tetrahedron(self.name,mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(7)],mesh._precice_node_to_vertex_id[e.node_pt(6)],mesh._precice_node_to_vertex_id[e.node_pt(4)])
+                    #interface.set_mesh_tetrahedron(self.name,mesh._precice_node_to_vertex_id[e.node_pt(1)],mesh._precice_node_to_vertex_id[e.node_pt(2)],mesh._precice_node_to_vertex_id[e.node_pt(3)],mesh._precice_node_to_vertex_id[e.node_pt(4)])
                 else:
-                    raise RuntimeError("Only mesh edges are implemented, not type index "+str(typus))
+                    raise RuntimeError("Mesh elements are only supported for points, lines, triangle and quads, not yet for e.g. 3d elements. Got type index "+str(typus))
                 
-                    
-                                
-            
-        
-
+                                            
 
     def after_remeshing(self, eqtree: EquationTree):
         mesh=eqtree.get_mesh()
@@ -206,6 +349,16 @@ class PreciceProvideMesh(BaseEquations):
                 raise ValueError("Node not in preCICE mesh. Did you remesh? This does not work with preCICE")
         
 
+
+class PreciceReceiveMesh(BaseEquations):
+    """
+    This class is not necessary for running, but helps to automatically generate a preCICE config file.
+    Add it at an interface or domain so that the automatic generation of the preCICE config file includes the mesh as <receive-mesh> tag.
+    """
+    def __init__(self,name:str,from_participant:str):
+        super().__init__()
+        self.name=name
+        self.from_participant=from_participant
             
             
 
@@ -233,9 +386,9 @@ class PreciceWriteData(BaseEquations):
     def _sanitize_name(self,name:str):
         return "_precice_write_proj_"+name.replace(" ","_").replace("-","_").replace("/","_")
 
-    def define_scalar_field(self,name:str,space:FiniteElementSpaceEnum,scale:Optional[ExpressionNumOrNone]=None):
+    def define_scalar_field(self,name:str,space:FiniteElementSpaceEnum,scale:Optional[ExpressionNumOrNone]=None,testscale:Optional[ExpressionNumOrNone]=None):
         # This is a bit dirty, but I cannot see how it can be done differently, except for providing different classes for ODEEquations and Equations
-        return Equations.define_scalar_field(self,name,space,scale=scale)
+        return Equations.define_scalar_field(self,name,space,scale=scale,testscale=testscale)
 
     def define_fields(self):
         if self.by_projection:
@@ -248,10 +401,13 @@ class PreciceWriteData(BaseEquations):
                 space=self.projection_space
             for name in self.entries.keys():
                 # This is a bit dirty, but I cannot see how it can be done differently, except for providing different classes for ODEEquations and Equations
+                testscale=None
+                if self.scaling is not None:
+                    testscale=1/self.scaling
                 if self.vector_dim is None:
-                    Equations.define_scalar_field(self,self._sanitize_name(name),space,scale=self.scaling)
+                    Equations.define_scalar_field(self,self._sanitize_name(name),space,scale=self.scaling,testscale=testscale)
                 else:
-                    Equations.define_vector_field(self,self._sanitize_name(name),space,scale=self.scaling,dim=self.vector_dim)                    
+                    Equations.define_vector_field(self,self._sanitize_name(name),space,scale=self.scaling,dim=self.vector_dim,testscale=testscale)                    
 
     def define_residuals(self):
         if self.by_projection:
@@ -356,6 +512,9 @@ class PreciceReadData(BaseEquations):
     def __init__(self,*,scaling:ExpressionNumOrNone=None,vector_dim:Optional[int]=None,**kwargs:str):
         super().__init__()
         self.entries=kwargs.copy()
+        for n,e in self.entries.items():
+            if not isinstance(e,str):
+                raise ValueError("PreciceReadData requires mapping from string (pyoomph var name) to string (precice config name), but got "+str(type(e))+" in "+str(n)+" = "+str(e))
         self.scaling=scaling
         self.vector_dim=vector_dim
 
@@ -426,6 +585,8 @@ class PreciceReadData(BaseEquations):
     def before_precice_solve(self, eqtree: EquationTree, precice_dt: float):
         self._do_read_data(precice_dt)
              
+
+
 
 
 # Instance of the helper class

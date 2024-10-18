@@ -323,6 +323,29 @@ class DirichletBC(BaseEquations):
         return ", ".join([str(n) + "=" + str(v) for n, v in self._dcs.items()])
 
 
+
+class EnforcedDirichlet(EnforcedBC):
+    """
+    Enforces a DirichletBC by Lagrange multipliers.
+    As an example,
+    
+        ``EnforcedDirichlet(u=var("v")) @ "boundary"``
+        
+    will just be the same as :py:class:`~pyoomph.meshes.bcs.EnforcedBC` ``(u=var("u")-var("v")) @ "boundary"``
+        
+    
+    Args:
+        only_for_stationary_solve (bool, optional): Flag indicating if the enforced boundary conditions should only be applied during stationary solves. Defaults to False.
+        set_zero_on_normal_mode_eigensolve (bool, optional): Flag indicating if the enforced boundary conditions should be set to zero during azimuthal eigensolves. Defaults to False.
+        **constraints (Expression): Keyword arguments representing the enforced boundary conditions as pair of variable name to adjust and constraint expression to fulfill in residual form.
+    """
+    
+    def __init__(self,*, only_for_stationary_solve:bool=False, set_zero_on_normal_mode_eigensolve=False,**constraints:Expression):
+        from ..expressions import var        
+        new_kwargs={k:var(k)-v for k,v in constraints.items()}
+        super(EnforcedDirichlet, self).__init__(only_for_stationary_solve=only_for_stationary_solve, set_zero_on_normal_mode_eigensolve=set_zero_on_normal_mode_eigensolve,**new_kwargs.copy())
+
+
 class InactiveDirichletBC(DirichletBC):
     """
     Same as 'DirichletBC', but it starts deactivated, i.e. the Neumann term will be active by default.

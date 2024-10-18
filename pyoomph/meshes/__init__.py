@@ -25,6 +25,6 @@
 # ========================================================================
  
 from .simplemeshes import RectangularQuadMesh,LineMesh,CuboidBrickMesh
-from .bcs import DirichletBC,NeumannBC,EnforcedBC,PinWhere,PeriodicBC,AxisymmetryBC,InactiveDirichletBC,InteriorBoundaryOrientation
+from .bcs import DirichletBC,NeumannBC,EnforcedBC,PinWhere,PeriodicBC,AxisymmetryBC,InactiveDirichletBC,InteriorBoundaryOrientation,EnforcedDirichlet
 from .mesh import MeshTemplate,AnyMesh,AnySpatialMesh
-__all__ = ["LineMesh","RectangularQuadMesh","CuboidBrickMesh","DirichletBC","NeumannBC","EnforcedBC","MeshTemplate","PinWhere","PeriodicBC","AxisymmetryBC","InactiveDirichletBC","InteriorBoundaryOrientation","AnyMesh","AnySpatialMesh"]
+__all__ = ["LineMesh","RectangularQuadMesh","CuboidBrickMesh","DirichletBC","NeumannBC","EnforcedBC","MeshTemplate","PinWhere","PeriodicBC","AxisymmetryBC","InactiveDirichletBC","InteriorBoundaryOrientation","AnyMesh","AnySpatialMesh","EnforcedDirichlet"]
