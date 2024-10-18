@@ -15,7 +15,8 @@ jobs:
         # macos-13 is an intel runner, macos-14 is apple silicon
         os: [ubuntu-latest, macos-13, windows-latest]
 
-  
+    env:
+      CIBW_SKIP: "cp36-* cp37-* cp-38* cp-313* pp-* *-manylinux_i686 *-musllinux* *_ppc64le *_s390x *_universal2 *_arm64" 
 
     steps:
       - uses: actions/checkout@v4
