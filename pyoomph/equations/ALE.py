@@ -24,6 +24,7 @@
 #
 # ========================================================================
  
+from pyoomph.expressions import BaseCoordinateSystem, cartesian, scale_factor
 from ..meshes.mesh import InterfaceMesh, AnyMesh
 from .. import GlobalLagrangeMultiplier, WeakContribution
 from ..generic import Equations,InterfaceEquations,ODEEquations
@@ -176,6 +177,50 @@ class LaplaceSmoothedMesh(BaseMovingMeshEquations):
             tens=grad(displ,coordsys=coordsys,lagrangian=True)
         self.add_residual(self.factor*Weak(tens, grad(x_test,coordsys=coordsys, lagrangian=True),coordinate_system=coordsys) )
 
+
+class SingleDirectionLaplaceSmoothedMesh(LaplaceSmoothedMesh):
+    def __init__(self, direction:Union[int,Literal["x","y","z"]], factor: Expression | int | float = scale_factor("spatial") ** 2, constrain_bulk_to_C1: bool = False, coordinate_space: str | None = None, coordsys: BaseCoordinateSystem | None = cartesian):
+        super().__init__(factor, constrain_bulk_to_C1, coordinate_space, coordsys, symmetrize=False)
+        self.direction=direction
+        if isinstance(direction,str):
+            self.direction={"x":0,"y":1,"z":2}[direction]
+    
+    def define_residuals(self):
+        dirn=["x","y","z"][self.direction]
+        x,x_test = var_and_test("mesh_"+dirn)
+        X = var("lagrangian_"+dirn)
+        displ = x - X
+        coordsys=self.coordsys        
+        tens=grad(displ,coordsys=coordsys,lagrangian=True)[self.direction]
+        self.add_residual(self.factor*Weak(tens, grad(x_test,coordsys=coordsys, lagrangian=True)[self.direction],coordinate_system=coordsys) )
+        ndim=self.get_mesh().get_code_gen().get_nodal_dimension()
+        for i in range(ndim):
+            if i!=self.direction:
+                self.set_Dirichlet_condition("mesh_"+["x","y","z"][i],True)
+
+
+
+class PinMeshCoordinates(Equations):
+    def __init__(self,*directions:Union[int,Literal["x","y","z"]]):
+        super(PinMeshCoordinates, self).__init__()
+        if len(directions)>0:
+            self.directions=set()        
+            for d in directions:
+                if isinstance(d,str):
+                    self.directions.add({"x":0,"y":1,"z":2}[d])
+                else:
+                    self.directions.add(d)
+        else:
+            self.directions=None
+    
+    def define_residuals(self):
+        if self.directions is None:
+            for d in range(self.get_mesh().get_code_gen().get_nodal_dimension()):
+                self.set_Dirichlet_condition("mesh_"+["x","y","z"][d],True)
+        else:
+            for d in self.directions:
+                self.set_Dirichlet_condition("mesh_"+["x","y","z"][d],True)
+        
 
 class SetLagrangianToEulerianAfterSolve(Equations):
     """
