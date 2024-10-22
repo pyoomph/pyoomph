@@ -388,7 +388,7 @@ void PyReg_CodeGen(py::module &m)
         .def_readwrite("stop_on_jacobian_difference", &pyoomph::FiniteElementCode::stop_on_jacobian_difference);
 
     m.def(
-        "__currently_generated_element", []()
+        "_currently_generated_element", []()
         { return pyoomph::__current_code; },
         py::return_value_policy::reference);
 

@@ -1303,6 +1303,7 @@ class Problem(_pyoomph.Problem):
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._azimuthal_stability.real_contribution_name)
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._azimuthal_stability.imag_contribution_name)
         if self._normal_mode_param_k is not None:
+            pass
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._cartesian_normal_mode_stability.real_contribution_name)
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._cartesian_normal_mode_stability.imag_contribution_name)
 

@@ -596,6 +596,10 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
     def _map_residal_on_additional_eigenproblem(self,residual:Expression,re_im_mapping:Callable[[Expression],Expression])->Expression:
         zero = _pyoomph.Expression(0)
         # First order in epsilon is just derive by epsilon and set epsilon to zero afterwards
+        #print("IN",residual)
+        #residual=_pyoomph._currently_generated_element().expand_placeholders(residual,False)
+        #print("OUT",residual)
+        #exit()
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
         replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)
         # Map on the real/imag part part
@@ -614,6 +618,10 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def map_residual_on_normal_mode_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
+        print("MAPPING REAL",residual)
+        print(self._map_residal_on_additional_eigenproblem(residual,real_part))
+        print("EXPANDED",_pyoomph._currently_generated_element().expand_placeholders(self._map_residal_on_additional_eigenproblem(residual,real_part),True))
+        print("DONE MAPPING REAL")
         return self._map_residal_on_additional_eigenproblem(residual,real_part)
 
     def map_residual_on_normal_mode_eigenproblem_imag(self,residual:Expression)->Expression:
@@ -643,20 +651,37 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         dcoords=self.map_to_zero_epsilon(coords)
         pcoords=self.map_to_first_order_epsilon(coords)
         for i, a in enumerate(dcoords):
-            if i < ndim:
-                movmesh_term=0
-                if not lagrangian:
-                    movmesh_term=-self.imaginary_i*self.k_symbol*sum([diff(pcoords[j],dcoords[i])*diff(arg,dcoords[j]) for j in range(ndim)])
-                    # Seems to work!
-                res.append(diff(arg, a)+_pyoomph.GiNaC_EvalFlag("moving_mesh")*movmesh_term)
+            if i < ndim:    
+                res.append(diff(arg, a))
             elif i == ndim:                
-                movmesh_term=0
                 if not lagrangian:
-                    movmesh_term+= self.imaginary_i*self.k_symbol*sum([pcoords[j]*diff(arg,dcoords[j]) for j in range(ndim)])
-                    #seems to work
-                res.append( diff(arg,self.xadd) +_pyoomph.GiNaC_EvalFlag("moving_mesh")*movmesh_term ) 
+                    res.append(diff(arg, self.xadd))
+                else:
+                    res.append(0) 
             else:
                 res.append(0)
+                
+        if not lagrangian:
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            Xk=pcoords[0]                        
+            k=self.k_symbol
+            I=self.imaginary_i
+            x=dcoords[0]
+            if ndim==2:
+                Yk=pcoords[1]
+                y=dcoords[1]
+                res[0]+=mm*(-diff(Xk, x)*diff(arg, x) - diff(Yk, x)*diff(arg, y) )
+                res[1]+=mm*(-diff(Xk, y)*diff(arg, x) - diff(Yk, y)*diff(arg, y)  )                
+                res[2]+=mm*( I*k*(-Xk*diff(arg, x) - Yk*diff(arg, y)) )
+            elif ndim==1:
+                res[0]+=mm*(-diff(Xk, x)*diff(arg, x))
+                res[1]+=mm*(-I*k*Xk*diff(arg, x))
+                pass
+            elif ndim==0:
+                pass
+            else:
+                raise RuntimeError("Not implemented")
+
         return vector(res)
 
     def vector_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
@@ -664,15 +689,54 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         coords = self.get_coords(3, with_scales, lagrangian)
         dcoords=self.map_to_zero_epsilon(coords)
         pcoords=self.map_to_first_order_epsilon(coords)
-        moving_mesh_term=0
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+        
         for i in range(ndim):
-            res += diff(arg[i], dcoords[i])
-            if not lagrangian:
-                moving_mesh_term-=sum([diff(pcoords[j],dcoords[i])*diff(arg[i],dcoords[j]) for j in range(ndim)])
-                raise RuntimeError("Check here")
+            res+=diff(arg[i], dcoords[i])
+            if not lagrangian: # This is somehow a game changer, but I don't know why:
+                pass
+            #   I guess it only appears for test functions
+                # These formulations should be all the same and only contribute for test functions, all others will vanish
+                # However, I wonder why we should get a contribution ~ k^2 in a divergence, which is only first order!
+                # Only way to explain this is maybe that it accounts (i) the k-proportional change of the argument and (ii) the change of the mesh coordinates
+                # Or, the transformation of the surface tension term to (1,div(utest)) is just not allowed for some reason
+                
+                #res+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[i],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[i]
+                #res+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[i],self.xadd))*diff(pcoords[i],self.xadd)
+                #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*self.imaginary_i*self.k_symbol*arg[i]*diff(pcoords[i],self.xadd)
+                
+                # Indeed, it only matters for the interface, so the bulk (incompressibility) is not affected by this correction
+                
+                #if edim==0:
+                #res+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*self.k_symbol**2 *arg[i]*pcoords[i]
+                
         if not lagrangian:
-            moving_mesh_term-=self.imaginary_i*self.k_symbol*sum([pcoords[j]*diff(arg[ndim],dcoords[j]) for j in range(ndim)])
-        res+=diff(arg[ndim],self.xadd)+_pyoomph.GiNaC_EvalFlag("moving_mesh")*moving_mesh_term
+            
+            res+=diff(arg[ndim], self.xadd)
+        
+        
+        
+        I=self.imaginary_i
+        k=self.k_symbol
+        Xk=pcoords[0]        
+        x=dcoords[0]        
+        if not lagrangian:
+            if ndim==1:
+                res+=mm*(-I*k*Xk*diff(arg[1], x) - diff(Xk, x)*diff(arg[0], x))                
+            elif ndim==2:
+                Yk=pcoords[1]        
+                y=dcoords[1]        
+                res+=mm*(-I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
+            else:
+                raise RuntimeError("Not implemented")
+        
+        if edim==0:
+            print("HERE",arg,self.xadd,ndim)
+            print("RES SO FAR",res)
+            self.expand_with_modes_for_python_debugging=True
+            print()
+            print(_pyoomph._currently_generated_element().expand_placeholders(res,True))
+            #exit()
         
         return res
     
@@ -681,23 +745,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
     
     def vector_gradient(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
         res:List[List[ExpressionOrNum]] = []
-        """ Moving mesh terms
-        
-        XX I*k*Xk(x, y)*Derivative(vZ0(x, y), x) + I*k*vZ0(x, y)*Derivative(Xk(x, y), x) + vY0(x, y)*Derivative(Xk(x, y), x, y) - Derivative(Xk(x, y), x)*Derivative(vX0(x, y), x) + Derivative(Xk(x, y), y)*Derivative(vY0(x, y), x) - Derivative(Yk(x, y), x)*Derivative(vX0(x, y), y)
-        XY I*k*Xk(x, y)*Derivative(vZ0(x, y), y) + I*k*vZ0(x, y)*Derivative(Xk(x, y), y) + vY0(x, y)*Derivative(Xk(x, y), (y, 2)) - Derivative(Xk(x, y), y)*Derivative(vX0(x, y), x) + Derivative(Xk(x, y), y)*Derivative(vY0(x, y), y) - Derivative(Yk(x, y), y)*Derivative(vX0(x, y), y)
-        XZ k*(-k*Xk(x, y)*vZ0(x, y) - I*Xk(x, y)*Derivative(vX0(x, y), x) - I*Yk(x, y)*Derivative(vX0(x, y), y) + I*vY0(x, y)*Derivative(Xk(x, y), y))
-
-        YX I*k*Yk(x, y)*Derivative(vZ0(x, y), x) + I*k*vZ0(x, y)*Derivative(Yk(x, y), x) + vX0(x, y)*Derivative(Yk(x, y), (x, 2)) - Derivative(Xk(x, y), x)*Derivative(vY0(x, y), x) + Derivative(Yk(x, y), x)*Derivative(vX0(x, y), x) - Derivative(Yk(x, y), x)*Derivative(vY0(x, y), y)
-        YY I*k*Yk(x, y)*Derivative(vZ0(x, y), y) + I*k*vZ0(x, y)*Derivative(Yk(x, y), y) + vX0(x, y)*Derivative(Yk(x, y), x, y) - Derivative(Xk(x, y), y)*Derivative(vY0(x, y), x) + Derivative(Yk(x, y), x)*Derivative(vX0(x, y), y) - Derivative(Yk(x, y), y)*Derivative(vY0(x, y), y)
-        YZ k*(-k*Yk(x, y)*vZ0(x, y) - I*Xk(x, y)*Derivative(vY0(x, y), x) - I*Yk(x, y)*Derivative(vY0(x, y), y) + I*vX0(x, y)*Derivative(Yk(x, y), x))
-
-        ZX -Derivative(Xk(x, y), x)*Derivative(vZ0(x, y), x) - Derivative(Yk(x, y), x)*Derivative(vZ0(x, y), y)
-        ZY -Derivative(Xk(x, y), y)*Derivative(vZ0(x, y), x) - Derivative(Yk(x, y), y)*Derivative(vZ0(x, y), y)
-        ZZ I*k*(-Xk(x, y)*Derivative(vZ0(x, y), x) - Yk(x, y)*Derivative(vZ0(x, y), y)) 
-        
-        DAMN! This is a mess! And even worse! It has second order derivatives!
-        
-        """
+        # TODO MOVING COORDINATES
         coords=self.get_coords(ndim, with_scales, lagrangian)
         dcoords=self.map_to_zero_epsilon(coords)
         pcoords=self.map_to_first_order_epsilon(coords)
@@ -707,21 +755,23 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             for a in range(ndim):
                 line.append(diff(entry, dcoords[a]))
                 #if not lagrangian:
-                    #line[-1]+=- _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]                
-            line.append(diff(entry, self.xadd))
+                #    line[-1]+=- _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]                
+            if not lagrangian:
+                line.append(diff(entry, self.xadd))
+            else:
+                line.append(0)
             #if not lagrangian:
             #        line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol
             res.append(line)
         line:List[ExpressionOrNum] = []
-        for a in range(ndim):
-            line.append(diff(arg[ndim], dcoords[a]))
-            #if not lagrangian:
-            #    line[-1]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[ndim],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]
-        line.append(diff(arg[ndim],self.xadd))
-        
-        #if not lagrangian:
-                #line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[ndim],self.xadd))#*self.imaginary_i*self.k_symbol
-                #line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[ndim])*self.imaginary_i*self.k_symbol
+        if not lagrangian:
+            for a in range(ndim):
+                line.append(diff(arg[ndim], dcoords[a]))
+            line.append(diff(arg[ndim],self.xadd))
+        else:
+            for a in range(ndim+1):
+                line.append(0)            
+            
         res.append(line)
         return matrix(res)
 

@@ -314,7 +314,7 @@ namespace pyoomph
 		{
 			for (GiNaC::const_preorder_iterator i = arg.preorder_begin(); i != arg.preorder_end(); ++i)
 			{
-				if (is_ex_the_function(*i, testfunction) || is_ex_the_function(*i, dimtestfunction) || is_ex_the_function(*i, nondimfield) || is_ex_the_function(*i, scale) || is_ex_the_function(*i, test_scale) || is_ex_the_function(*i, field) || is_ex_the_function(*i, unitvect) || is_ex_the_function(*i, symbol_subs) || is_ex_the_function(*i, Diff) || is_ex_the_function(*i, eval_in_domain))
+				if (is_ex_the_function(*i, testfunction) || is_ex_the_function(*i, dimtestfunction) || is_ex_the_function(*i, nondimfield) || is_ex_the_function(*i, scale) || is_ex_the_function(*i, test_scale) || is_ex_the_function(*i, field) || is_ex_the_function(*i, unitvect) || is_ex_the_function(*i, symbol_subs) || is_ex_the_function(*i, Diff) || is_ex_the_function(*i, eval_in_domain) || is_ex_the_function(*i,ginac_expand) || is_ex_the_function(*i,grad) || is_ex_the_function(*i,div) )
 				{
 					return true;
 				}

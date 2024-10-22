@@ -24,7 +24,6 @@
 #
 # ========================================================================
  
-from pyoomph.expressions import BaseCoordinateSystem, cartesian, scale_factor
 from ..meshes.mesh import InterfaceMesh, AnyMesh
 from .. import GlobalLagrangeMultiplier, WeakContribution
 from ..generic import Equations,InterfaceEquations,ODEEquations
