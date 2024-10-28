@@ -1613,6 +1613,7 @@ class MatplotlibTimeLabel(MatplotlibText):
     unit="auto"
     bbox = dict(boxstyle='round', facecolor='wheat', alpha=1)
     textsize = 18
+    useTeX=False
 
     def pre_process(self):
         super(MatplotlibTimeLabel, self).pre_process()
@@ -1639,13 +1640,20 @@ class MatplotlibTimeLabel(MatplotlibText):
                 unitstr = " ms"
             elif self.unit=="us":
                 unit = 1000*1000
-                unitstr = " us"
+                if self.useTeX:
+                    unitstr = r" \mu s"
+                else:
+                    unitstr = " us"
             elif self.unit=="ns":
                 unit = 1000*1000*1000
                 unitstr = " ns"                
             else:
                 raise RuntimeError("TODO "+str(self.unit))
-        self.text=self.format.format(unit*self.plotter.get_problem().get_current_time(as_float=True))+unitstr #type:ignore
+        if self.useTeX:
+            self.text=self.format.format(unit*self.plotter.get_problem().get_current_time(as_float=True))+r"$\ \mathrm{"+unitstr+r"}$" #type:ignore
+        else:
+            self.text=self.format.format(unit*self.plotter.get_problem().get_current_time(as_float=True))+unitstr #type:ignore
+        
 
 @MatplotLibPart.register()
 class MatplotLibScaleBar(MatplotLibOverlayBase):
@@ -1657,6 +1665,7 @@ class MatplotLibScaleBar(MatplotLibOverlayBase):
     textsize = 14
     text_yoffset=0
     orientation="horizontal"
+    invisible=False
 
     def _fit_length(self,scale:float):
         maxrange = self.maxlength / scale
@@ -1675,6 +1684,8 @@ class MatplotLibScaleBar(MatplotLibOverlayBase):
         return reallength,reallength*scale
 
     def add_to_plot(self):
+        if self.invisible:
+            return
         assert self.plotter.xmin is not None and self.plotter.xmax is not None
         assert self.plotter.ymin is not None and self.plotter.ymax is not None
         reallength,figlength=self._fit_length(1/(self.plotter.xmax-self.plotter.xmin) if self.orientation!="vertical" else 1/(self.plotter.ymax-self.plotter.ymin))

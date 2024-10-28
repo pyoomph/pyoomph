@@ -210,10 +210,12 @@ class DebugZetaCoordinate(InterfaceEquations):
         bmesh=mesh.get_bulk_mesh()
         interfid = bmesh.has_interface_dof_id(self.get_zeta_name())
         bind=bmesh.get_boundary_index(mesh.get_name())
+        print("UPDATEING ZETAS",interfid,bind)  
         for n in mesh.nodes():
             ind=n.additional_value_index(interfid)
             n.set_value(ind,n.get_coordinates_on_boundary(bind)[0])
             n.pin(ind)
+        print("ZETAS UPDATED")
 
     def after_mapping_on_macro_elements(self):
         self.update_zetas()

@@ -632,6 +632,8 @@ namespace pyoomph
 
       std::vector<GiNaC::ex> residual;
       std::set<std::string> ignore_assemble_residuals; // E.g. for azimuthal eigenvalue matrices. Residual is not used => don't assemble
+      std::map<std::string,std::set<int> > remove_underived_modes; // If in the Jacobian still modes are present that are not derived from interpolated_... to shape_..., they are removed. They can appear in eigenderivatives
+      std::map<std::string,int> derive_jacobian_by_expansion_mode; // Derive the Jacobian by the given expansion mode only
       SpatialIntegralSymbol dx, dX;
       ElementSizeSymbol elemsize_Eulerian, elemsize_Lagrangian, elemsize_Eulerian_Cart, elemsize_Lagrangian_Cart;
       NodalDeltaSymbol nodal_delta;
@@ -803,8 +805,12 @@ namespace pyoomph
       virtual GiNaC::ex get_nodal_delta();
       virtual GiNaC::ex get_normal_component(unsigned i);
       virtual GiNaC::ex get_normal_component_eigenexpansion(unsigned i); // Used for azimuthal eigenstab only. Gives dn_i/dX^{0l}_j * X^{ml}_j
+      virtual void set_derive_jacobian_by_expansion_mode(std::string residual_name,int expansion_mode) { derive_jacobian_by_expansion_mode[residual_name]=expansion_mode; }      
       virtual void set_ignore_residual_assembly(std::string residual_name) { ignore_assemble_residuals.insert(residual_name); }
+      virtual void set_remove_underived_modes(std::string residual_name, std::set<int> modes) { remove_underived_modes[residual_name] = modes; }
       virtual bool is_current_residual_assembly_ignored() { return ignore_assemble_residuals.count(residual_names[residual_index]); }
+      virtual std::set<int> get_current_jacobian_remove_underived_modes() { if (remove_underived_modes.count(residual_names[residual_index])) return  remove_underived_modes[residual_names[residual_index]]; else return std::set<int>(); }
+      virtual int * get_derive_jacobian_by_expansion_mode() { if (!derive_jacobian_by_expansion_mode.count(residual_names[residual_index])) return NULL; else return &(derive_jacobian_by_expansion_mode[residual_names[residual_index]]) ; }      
 
       virtual int classify_space_type(const FiniteElementSpace *s); // Returns 0 if the space is defined on this element, -1 for bulk element, -2 for other side of interface, >0 for external elements [-1]
       virtual std::string get_owner_prefix(const FiniteElementSpace *sp);

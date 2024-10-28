@@ -36,10 +36,14 @@ from scipy import spatial
 
 # This is just a helper class which collects a few methods
 class _PyoomphPreciceAdapater:
+    def __init__(self) -> None:
+        self._initialized:bool=False
+        
     def initialize_problem(self,problem:Problem):        
         problem._precice_interface=precice.Participant(problem.precice_participant,problem.precice_config_file,0,1)
         problem._equation_system._before_precice_initialise()
         problem._precice_interface.initialize()
+        self._initialized=True
 
     def coupled_run(self,problem:Problem,maxstep:Optional[float]=None,temporal_error:Optional[float]=None,output_initially:bool=True,fast_dof_backup:bool=False):
         problem._activate_solver_callback()
@@ -336,6 +340,8 @@ class PreciceProvideMesh(BaseEquations):
                                             
 
     def after_remeshing(self, eqtree: EquationTree):
+        if not get_pyoomph_precice_adapter()._initialized:
+            return # Just skip it here for the first time. In can happen e.g. in --runmode c
         mesh=eqtree.get_mesh()
         pr=mesh.get_problem()
         interface=pr._precice_interface

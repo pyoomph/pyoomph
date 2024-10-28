@@ -1999,6 +1999,18 @@ namespace pyoomph
 						return GiNaC::GiNaCNormalSymbol(sp);
 					}
 				}
+				if (GiNaC::is_a<GiNaC::GiNaCSpatialIntegralSymbol>(inp))
+				{
+					GiNaC::GiNaCSpatialIntegralSymbol se = GiNaC::ex_to<GiNaC::GiNaCSpatialIntegralSymbol>(inp);
+					SpatialIntegralSymbol sp = se.get_struct();
+					if (sp.expansion_mode == index) //  || sp.is_eigenexpansion
+						return inp;
+					else
+					{
+						sp.expansion_mode = index;
+						return GiNaC::GiNaCSpatialIntegralSymbol(sp);
+					}
+				}
 				else
 				{
 					return inp.map(*this);

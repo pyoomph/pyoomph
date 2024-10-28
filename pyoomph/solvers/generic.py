@@ -274,6 +274,7 @@ class EigenMatrixSetDofsToZero(EigenMatrixManipulatorBase):
 		if len(self.zeromap)>0:
 			#J=self.set_rows_to_identity(J,list(self.zeromap))
 			for k in reversed(sorted(self.zeromap)):
+				#print("SET TO ZERO",k)       
 				self.setcsrrow2id(J,k)
 			#J=self.set_rows_to_identity(J,list(self.zeromap))
 			J.eliminate_zeros()
@@ -352,6 +353,8 @@ class GenericEigenSolver:
 		self.problem._set_solved_residual("")
 
 		for manip in self.matrix_manipulators:
+			#if isinstance(manip,EigenMatrixSetDofsToZero):      
+				#print("APPLY MANIP",manip,manip.doflist)
 			matJ,matM=manip.apply_on_J_and_M(self,matJ,matM)
 
 		if matM.nnz==0: #type:ignore

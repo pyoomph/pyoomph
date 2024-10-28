@@ -2454,6 +2454,64 @@ namespace pyoomph
     }
   }
 
+  std::vector<pyoomph::Node*> Mesh::add_interpolated_nodes_at(const std::vector<std::vector<double> > & coords,bool all_as_boundary_nodes)
+  {
+    std::vector<pyoomph::Node*> res;
+    oomph::MeshAsGeomObject MaGO(this);
+    pyoomph::BulkElementBase* el0=dynamic_cast<pyoomph::BulkElementBase*>(this->element_pt(0));
+    pyoomph::Node * n0=dynamic_cast<pyoomph::Node*>(el0->node_pt(0));
+    for ( const auto  & coord : coords)
+    {
+      oomph::GeomObject *res_go = NULL;
+      oomph::Vector<double> zet(coord.size());
+      for (unsigned i=0;i<coord.size();i++) zet[i]=coord[i];
+      oomph::Vector<double> s(el0->dim(), 1.0 / 3.0);
+      MaGO.locate_zeta(zet, res_go, s, false);
+      BulkElementBase *srcelem = dynamic_cast<BulkElementBase *>(res_go);
+
+      pyoomph::Node *newnode;
+      if (all_as_boundary_nodes)
+      {
+        newnode= new pyoomph::BoundaryNode(n0->time_stepper_pt(),el0->nlagrangian(), el0->nnodal_lagrangian_type(), el0->nodal_dimension(), el0->nnodal_position_type(), el0->required_nvalue(0));
+      }
+      else
+      {
+        newnode= new pyoomph::Node(n0->time_stepper_pt(),el0->nlagrangian(), el0->nnodal_lagrangian_type(), el0->nodal_dimension(), el0->nnodal_position_type(), el0->required_nvalue(0));	
+      }
+
+      for (unsigned i=0;i<coord.size();i++) newnode->x(i)=coord[i]; // Can't do a lot here
+      if (srcelem)
+      {
+        for (unsigned int time_ind = 0; time_ind < n0->time_stepper_pt()->ntstorage(); time_ind++)
+        {
+          oomph::Vector<double> vals;
+          srcelem->get_interpolated_values(time_ind, s, vals);
+          for (unsigned int vi = 0; vi < std::min((unsigned)vals.size(),newnode->nvalue()); vi++)
+          {
+              newnode->set_value(time_ind, vi, vals[vi]);           
+          }
+          for (unsigned int i = 0; i < newnode->ndim(); i++)
+          {
+            newnode->x(time_ind, i) = srcelem->interpolated_x(time_ind, s, i);
+          }
+        }
+        
+            /*for (unsigned int time_ind = 1; time_ind < n0->position_time_stepper_pt()->ntstorage(); time_ind++)
+            {
+           
+            }*/
+        
+        
+      }
+      
+
+      
+
+      res.push_back(newnode);
+    }
+    return res;
+  }
+
   void Mesh::set_output_scale(std::string fname, GiNaC::ex s, DynamicBulkElementInstance *_code)
   {
     if (!_code)

@@ -314,7 +314,7 @@ class BaseEquations(_pyoomph.Equations):
         if coordsys is None:
             coordsys = master.get_coordinate_system()
         assert isinstance(coordsys,BaseCoordinateSystem)
-        return coordsys.integral_dx(self.get_element_dimension(), use_scaling,master.get_scaling("spatial"), lagrangian)
+        return coordsys.integral_dx(self.get_nodal_dimension(), self.get_element_dimension(), use_scaling,master.get_scaling("spatial"), lagrangian)
 
     def after_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str,elem_dim:Optional[int]=None):
         pass        

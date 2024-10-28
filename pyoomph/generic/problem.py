@@ -1303,9 +1303,12 @@ class Problem(_pyoomph.Problem):
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._azimuthal_stability.real_contribution_name)
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._azimuthal_stability.imag_contribution_name)
         if self._normal_mode_param_k is not None:
-            pass
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._cartesian_normal_mode_stability.real_contribution_name)
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._cartesian_normal_mode_stability.imag_contribution_name)
+            eqs.get_current_code_generator().set_derive_jacobian_by_expansion_mode(self._cartesian_normal_mode_stability.real_contribution_name,1)
+            eqs.get_current_code_generator().set_derive_jacobian_by_expansion_mode(self._cartesian_normal_mode_stability.imag_contribution_name,1)
+            #eqs.get_current_code_generator().set_remove_underived_modes(self._cartesian_normal_mode_stability.real_contribution_name,set([1]))
+            #eqs.get_current_code_generator().set_remove_underived_modes(self._cartesian_normal_mode_stability.imag_contribution_name,set([1]))
 
     def set_custom_assembler(self,assm:Optional["CustomAssemblyBase"]) -> None:
         self._custom_assembler=assm

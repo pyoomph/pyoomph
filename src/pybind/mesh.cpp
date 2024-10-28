@@ -156,8 +156,10 @@ void PyReg_Mesh(py::module &m)
 
 	py::class_<pyoomph::MeshTemplateCurvedEntity>(m, "MeshTemplateCurvedEntityBase")
 		.def_static("load_from_strings", &pyoomph::MeshTemplateCurvedEntity::load_from_strings)
-		.def("get_information_string", &pyoomph::MeshTemplateCurvedEntity::get_information_string).
-		doc()="A generic class representing a relation for a curved boundary representation";
+		.def("get_information_string", &pyoomph::MeshTemplateCurvedEntity::get_information_string)
+		.def("get_pos_from_parametric", &pyoomph::MeshTemplateCurvedEntity::parametric_to_position)
+		.def("get_parametric_from_pos", &pyoomph::MeshTemplateCurvedEntity::position_to_parametric)
+		.doc()="A generic class representing a relation for a curved boundary representation";
 
 	py::class_<pyoomph::CurvedEntityCircleArc, pyoomph::MeshTemplateCurvedEntity>(m, "CurvedEntityCircleArc")
 		.def(py::init<const std::vector<double> &, const std::vector<double> &, const std::vector<double> &>());
@@ -197,10 +199,13 @@ void PyReg_Mesh(py::module &m)
 
 	py::class_<pyoomph::Node, oomph::Data>(m, "Node")
 		.def("x", (const double &(pyoomph::Node::*)(const unsigned int &) const) & pyoomph::Node::x)
+		.def("x_at_t", (const double &(pyoomph::Node::*)(const unsigned int &,const unsigned int &) const) & pyoomph::Node::x)
 		.def("x_lagr", (const double &(pyoomph::Node::*)(const unsigned int &) const) & pyoomph::Node::xi)
 		.def("ndim", (unsigned(pyoomph::Node::*)() const) & pyoomph::Node::ndim)
 		.def("set_x", [](pyoomph::Node *n, unsigned const &ind, double const &x)
 			 { n->x(ind) = x; })
+		.def("set_x_at_t", [](pyoomph::Node *n, unsigned const &t,unsigned const &ind, double const &x)
+			 { n->x(t,ind) = x; })
 		.def("set_x_lagr", [](pyoomph::Node *n, unsigned const &ind, double const &x)
 			 { n->xi(ind) = x; })
 		.def("pin_position", (void(pyoomph::Node::*)(const unsigned &)) & pyoomph::Node::pin_position)
@@ -795,6 +800,9 @@ void PyReg_Mesh(py::module &m)
 		.def("activate_duarte_debug", &pyoomph::Mesh::activate_duarte_debug)
 		.def("prepare_zeta_interpolation", [](pyoomph::Mesh *self, pyoomph::Mesh *old_mesh){self->prepare_zeta_interpolation(old_mesh);})
 		.def("remove_boundary_nodes",[](pyoomph::Mesh *self) {self->remove_boundary_nodes();})		
+		.def("remove_boundary_nodes_of_bound",[](pyoomph::Mesh *self,unsigned b) {self->remove_boundary_nodes(b);})		
+		.def("add_interpolated_nodes_at",&pyoomph::Mesh::add_interpolated_nodes_at,py::return_value_policy::reference)
+		.def("add_boundary_node",[](pyoomph::Mesh *self,unsigned bind,pyoomph::Node *n) {self->add_boundary_node(bind,n);})
 		.def("flush_element_storage", [](pyoomph::Mesh *self){self->flush_element_storage();})
 		.def("_set_time_level_for_projection", [](pyoomph::Mesh *self, unsigned time_level){self->set_time_level_for_projection(time_level);})
 		.def("get_field_information", [](pyoomph::Mesh *self)

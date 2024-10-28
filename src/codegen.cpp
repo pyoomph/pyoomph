@@ -102,6 +102,7 @@ namespace pyoomph
 	const ShapeExpansion *__deriv_subexpression_wrto = NULL;
 	bool __derive_shapes_by_second_index = false;
 	bool __in_pitchfork_symmetry_constraint = false;
+	int * __derive_only_by_expansion_mode = NULL;
 	std::set<ShapeExpansion> __all_Hessian_shapeexps;
 	std::set<TestFunction> __all_Hessian_testfuncs;
 	std::set<FiniteElementField *> __all_Hessian_indices_required;
@@ -112,7 +113,40 @@ namespace pyoomph
 		return __in_pitchfork_symmetry_constraint && !pyoomph::__derive_shapes_by_second_index;
 	}
 
-	
+
+	class RemoveUnderivedModes : public GiNaC::map_function
+	{
+	protected:
+		std::set<int> remove_modes;
+	public:
+		RemoveUnderivedModes(std::set<int> remove_modes_) : remove_modes(remove_modes_) {}
+		GiNaC::ex operator()(const GiNaC::ex &inp)
+		{
+			if (GiNaC::is_a<GiNaC::GiNaCShapeExpansion>(inp))
+			{
+				auto &shapeexp = (GiNaC::ex_to<GiNaC::GiNaCShapeExpansion>(inp)).get_struct();
+
+				if (remove_modes.count(shapeexp.expansion_mode) && !shapeexp.is_derived)
+				{
+					return 0;
+				}				
+			}
+			else if (GiNaC::is_a<GiNaC::GiNaCNormalSymbol>(inp))
+			{
+				auto &normalsym = (GiNaC::ex_to<GiNaC::GiNaCNormalSymbol>(inp)).get_struct();
+				std::cout << "GOT NORMAL SYMBOL IN MAPPING " << inp << std::endl;
+				std::cout << normalsym.is_eigenexpansion << "  " << remove_modes.count(normalsym.expansion_mode) << "  " << normalsym.get_derived_direction() << "  " << normalsym.is_derived_by_lshape2() << std::endl;
+				if (normalsym.is_eigenexpansion && remove_modes.count(normalsym.expansion_mode) ) // && normalsym.get_derived_direction()==-1 && normalsym.is_derived_by_lshape2()==-1
+				{
+					return 0;
+				}				
+			}
+			return inp.map(*this);
+		}
+
+	};
+
+
 
 	class SubExpressionsToStructs : public GiNaC::map_function
 	{
@@ -1869,7 +1903,16 @@ namespace pyoomph
 				std::cout << "DIFFING FOR JACOBIAN " << for_what << "   WRT.  " << f->get_symbol() << std::endl
 						  << std::flush;
 			}
+			__derive_only_by_expansion_mode=for_code->get_derive_jacobian_by_expansion_mode();
 			GiNaC::ex diffpart = GiNaC::diff(for_what, f->get_symbol());
+			__derive_only_by_expansion_mode=NULL;
+
+			if (for_code->get_current_jacobian_remove_underived_modes().size())
+			{
+				RemoveUnderivedModes remove_underived_modes(for_code->get_current_jacobian_remove_underived_modes());
+				diffpart = remove_underived_modes(diffpart);
+			}
+
 			if (diffpart.is_zero())
 				continue;
 			if (pyoomph_verbose)
@@ -1881,6 +1924,10 @@ namespace pyoomph
 				std::string nodal_index = f->get_nodal_index_str(for_code);
 				std::string hang_info = f->get_hanginfo_str(for_code);
 				os << indent << "  BEGIN_JACOBIAN_HANG(" << eqn_index << ", ";
+				if (for_code->get_derive_jacobian_by_expansion_mode())
+				{
+					os << indent << " /* SYMBOLIC FORM  " << std::endl << diffpart << std::endl << " */ ";
+				}
 				print_simplest_form(diffpart, os, csrc_opts);
 				os << "," << hang_info << "," << nodal_index << "," << l_shape << ")" << std::endl;
 			}
@@ -1888,6 +1935,10 @@ namespace pyoomph
 			{
 				//	    os << indent << "  //TODO Jacobian of ext data must be always hanging!!! " <<std::endl;
 				os << indent << "  BEGIN_JACOBIAN_NOHANG(" << eqn_index << ", ";
+				if (for_code->get_derive_jacobian_by_expansion_mode())
+				{
+					os << indent << " /* SYMBOLIC FORM  " << std::endl << diffpart << std::endl << " */ ";
+				}
 				print_simplest_form(diffpart, os, csrc_opts);
 				os << indent << ")" << std::endl;
 			}
@@ -1986,11 +2037,15 @@ namespace pyoomph
 					oss << indent << "    BEGIN_RESIDUAL_CONTINUOUS_SPACE(" << eqn_index << ",";
 					if (for_code->is_current_residual_assembly_ignored())
 					{
-						oss << "0";
+						oss << "0 /* IGNORED RESIDUAL: " << std::endl << var_part << std::endl << std::endl ;
 					}
-					else
-					{
+					//else
+					//{
 						print_simplest_form(var_part, oss, csrc_opts);
+					//}
+					if (for_code->is_current_residual_assembly_ignored())
+					{
+						oss << std::endl << "*/" << std::endl;
 					}
 					if (for_code->latex_printer)
 					{
@@ -2005,11 +2060,15 @@ namespace pyoomph
 					oss << indent << "    BEGIN_RESIDUAL(" << eqn_index << ", ";
 					if (for_code->is_current_residual_assembly_ignored())
 					{
-						oss << "0";
+						oss << "0 /* IGNORED RESIDUAL: " << std::endl << var_part << std::endl << std::endl ;
 					}
-					else
-					{
+					/*else
+					{*/
 						print_simplest_form(var_part, oss, csrc_opts);
+					//}
+					if (for_code->is_current_residual_assembly_ignored())
+					{
+						oss << std::endl << "*/" << std::endl;
 					}
 					oss << ")" << std::endl;
 					oss << indent << "      ADD_TO_RESIDUAL()" << std::endl;
@@ -2394,6 +2453,7 @@ namespace pyoomph
 		return res;
 	}
 
+	
 	class MeshToCoordinateShapes : public GiNaC::map_function
 	{
 	protected:
@@ -7196,16 +7256,17 @@ namespace GiNaC
 				return;
 			}
 		}
+		std::string modestr=(get_struct().expansion_mode ? " | MODE "+std::to_string(get_struct().expansion_mode) +" " : "");
 		if (get_struct().is_lagrangian())
 		{
-			c.s << "<DX Lagrangian>";
+			c.s << "<DX "+modestr+"Lagrangian>";
 		}
 		else
 		{
 			if (get_struct().is_derived())
 			{
 
-				c.s << "<DX";
+				c.s << "<DX "+modestr;
 
 				c.s << " derived by position direction " << get_struct().get_derived_direction();
 				if (get_struct().is_derived2())
@@ -7221,7 +7282,7 @@ namespace GiNaC
 			}
 			else
 			{
-				c.s << "<DX>";
+				c.s << "<DX"+modestr+">";
 			}
 		}
 	}
@@ -7229,6 +7290,8 @@ namespace GiNaC
 	GiNaC::ex GiNaCSpatialIntegralSymbol::derivative(const GiNaC::symbol &s) const
 	{
 		if (get_struct().is_lagrangian())
+			return 0;
+		if (pyoomph::__derive_only_by_expansion_mode &&  get_struct().expansion_mode!=*pyoomph::__derive_only_by_expansion_mode)
 			return 0;
 		pyoomph::FiniteElementCode *code = (pyoomph::FiniteElementCode *)(get_struct().get_code()); // Cast aways the constness
 		pyoomph::FiniteElementField *testf;
@@ -7428,7 +7491,7 @@ namespace GiNaC
 			   //c.s << "/* EIGEX: " << sp.is_eigenexpansion << " NOJA " << sp.no_jacobian << " NOHESS " << sp.no_hessian << "*/" << std::endl;
 				if (sp.is_eigenexpansion)
 				{
-					c.s << "NORMAL_EIGEN_EXPANSION_" + std::to_string(sp.get_direction()) + "_DERIVS_" + std::to_string(sp.get_derived_direction()) + "_" + std::to_string(sp.get_derived_direction2()) + "/*THIS SHOULD NOT HAPPEN*/";
+					c.s << "NORMAL_EIGEN_EXPANSION_" + std::to_string(sp.get_direction()) + "_DERIVS_" + std::to_string(sp.get_derived_direction()) + "_" + std::to_string(sp.get_derived_direction2()) + "--THIS SHOULD NOT HAPPEN--";
 					// throw_runtime_error("We should not have to print an azimuthal normal eigenexpansion like dn_i/dX^{0l}_j*X^{ml}_j ever");
 					return;
 				}
@@ -7480,7 +7543,7 @@ namespace GiNaC
 	template <>
 	GiNaC::ex GiNaCNormalSymbol::derivative(const GiNaC::symbol &s) const
 	{
-
+        
 		if (s == pyoomph::expressions::t || s == pyoomph::expressions::x || s == pyoomph::expressions::y || s == pyoomph::expressions::z || s == pyoomph::expressions::X || s == pyoomph::expressions::Y || s == pyoomph::expressions::Z)
 		{
 			throw_runtime_error("Cannot derive the normal with respect to space or time yet");
@@ -7489,6 +7552,8 @@ namespace GiNaC
 		{
 
 			const pyoomph::NormalSymbol &sp = get_struct();
+			if (pyoomph::__derive_only_by_expansion_mode && sp.expansion_mode != *pyoomph::__derive_only_by_expansion_mode)
+				return 0;
 
 //      std::cout << "ENTERING NORMAL DIFF " << sp.no_jacobian << " " << pyoomph::__derive_shapes_by_second_index <<  " " << sp.no_hessian << std::endl;
 //      std::cout << " BY WHAT " << s << std::endl;
@@ -7849,15 +7914,17 @@ namespace GiNaC
 		std::ostringstream oss;
 		oss << s;
 		std::string sname = oss.str();
+		if (pyoomph::__derive_only_by_expansion_mode && sp.expansion_mode != *pyoomph::__derive_only_by_expansion_mode)
+			return 0;
 		//			   std::cout << " ENTER diff "  << (*this) << "  " << sp.field->get_name() <<  "   WRT " << s <<  std::endl;
 
-		/*   if (pyoomph::pyoomph_verbose)
+		   /*if (pyoomph::pyoomph_verbose)
 		   {
 			std::cout << "DERIV SHAPE EXP  " <<(*this) << " by " << s << " which is a realsymb? " << (GiNaC::is_a<GiNaC::realsymbol>(s) ? " true " : "false") << std::endl;
 					 std::cout << "DERIV SHAPE EXP  " << (GiNaC::ex_to<GiNaC::realsymbol>(s)==pyoomph::expressions::t ? " same" : "not" )<< " namely : " << s << " vs " << pyoomph::expressions::t << " SUB "  << (pyoomph::expressions::t-s) <<std::endl;
-		   }*/
+		   }
 
-		/* if (pyoomph::pyoomph_verbose)
+		 if (pyoomph::pyoomph_verbose)
 		 {std::cout << "SYMBOLIC MATCH IN DERIV  " << sp.field->get_symbol()<< " == " <<s<< "  :  "  << ( sp.field->get_symbol()==s ? "true" : "false") <<  std::endl;
 		  if (GiNaC::is_a<GiNaC::realsymbol>(s)) { std::cout << "   " << GiNaC::ex_to<GiNaC::realsymbol>(s)-GiNaC::ex_to<GiNaC::realsymbol>(sp.field->get_symbol()) << std::endl; }
 		  std::cout << " HASHES " << sp.field->get_symbol().gethash() << "  "<< GiNaC::ex_to<GiNaC::symbol>(sp.field->get_symbol().gethash()) << "  " << s.gethash() << "  " << GiNaC::ex_to<GiNaC::realsymbol>(s) << std::endl;
@@ -7927,12 +7994,20 @@ namespace GiNaC
 		// Eulerian derivatives
 		else if (s == pyoomph::expressions::x || s == pyoomph::expressions::y || s == pyoomph::expressions::z)
 		{
-			//  std::cout << "   IS COORD DIFF "  << (*this) << "  " << sp.field->get_name() <<  "   WRT " << s <<  std::endl;
+			if (pyoomph::pyoomph_verbose)
+			{
+			 std::cout << "   IS COORD DIFF "  << (*this) << "  " << sp.field->get_name() <<  "   WRT " << s <<  std::endl;
+			}
 			unsigned dir = (s == pyoomph::expressions::x ? 0 : (s == pyoomph::expressions::y ? 1 : 2));
 			if (dynamic_cast<pyoomph::PositionFiniteElementSpace *>(sp.field->get_space()))
 			{
 				bool no_codimension = (sp.basis->get_space()->get_code()->element_dim == (int)sp.basis->get_space()->get_code()->nodal_dimension());
-				if (!sp.dt_order && no_codimension) // TODO: Check for no co-dimension relevant?
+				bool no_eigenexpansion = (sp.expansion_mode==0 || pyoomph::__derive_only_by_expansion_mode);
+				if (pyoomph::pyoomph_verbose)
+				{
+			 		std::cout << "   NO CODIM, NO EIGENEXPANSION "  << no_codimension << "  ,  "  << no_eigenexpansion <<  std::endl;
+				}
+				if (!sp.dt_order && no_codimension && no_eigenexpansion) // TODO: Check for no co-dimension relevant?
 				{
 					//	   std::cout << "   BB alt diff "  << (*this) << "  " << sp.field->get_name() << std::endl;
 					//   	     std::cout << "GRAD TEST " <<  << std::endl;
@@ -7967,9 +8042,15 @@ namespace GiNaC
 				else
 				{
 					//				   std::cout << "   AA alt diff "  << (*this) << "  " << sp.field->get_name() << std::endl;
-					if (sp.field->get_name() == "coordinate_x" || sp.field->get_name() == "coordinate_y" || sp.field->get_name() == "coordinate_z")
+					/*if (sp.field->get_name() == "coordinate_x" || sp.field->get_name() == "coordinate_y" || sp.field->get_name() == "coordinate_z")
+					{
+						if (pyoomph::pyoomph_verbose)
+						{
+							std::cout << "   HIT ELSE CASE IN COORD DIFF "  << (*this) << "  " << sp.field->get_name() <<  "   WRT " << s <<  std::endl;
+						}
 						return 0;
-					else
+					}
+					else*/
 					{
 						auto se = pyoomph::ShapeExpansion(sp.field, sp.dt_order, sp.basis->get_diff_x(dir), sp.dt_scheme, sp.is_derived, sp.nodal_coord_dir);
 						if (sp.no_jacobian)

@@ -50,6 +50,7 @@ void PyReg_TimeStepper(py::module &m)
 			 { return self.is_steady(); })
 		.def("set_weights", [](oomph::TimeStepper &self)
 			 { return self.set_weights(); })
+		.def("ntstorage", &oomph::TimeStepper::ntstorage)
 		.def("nprev_values", &oomph::TimeStepper::nprev_values);
 
 	py::class_<pyoomph::MultiTimeStepper, oomph::TimeStepper>(m, "MultiTimeStepper")
