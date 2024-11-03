@@ -28,11 +28,11 @@
 import precice
 
 from ..expressions import *
-from ..generic.codegen import EquationTree, ODEStorageMesh, BaseEquations, Equations
+from ..generic.codegen import EquationTree, ODEStorageMesh, BaseEquations, Equations, ODEEquations
 from ..generic.problem import Problem
 
 from scipy import spatial
-
+import gc
 
 # This is just a helper class which collects a few methods
 class _PyoomphPreciceAdapater:
@@ -77,6 +77,9 @@ class _PyoomphPreciceAdapater:
                                     
             if problem._precice_interface.requires_reading_checkpoint():
                 problem.load_state(problem.get_output_directory("precice_checkpoint.dump"))
+                gc.collect()
+                gc.collect()
+                gc.collect() # Just to be sure
             else:                    
                 if problem._precice_interface.is_time_window_complete():
                     problem.actions_after_newton_solve()
@@ -132,11 +135,14 @@ class _PyoomphPreciceAdapater:
                 for mesh_provide in mesh_provides:                    
                     mesh_provide=cast(PreciceProvideMesh,mesh_provide)
                     meshname=eqtree.get_full_path().lstrip("/")
-                    mesh=problem.get_mesh(meshname)
-                    n=next(mesh.nodes())
-                    meshdim=n.ndim()
-                    if meshdim<2:
-                        meshdim=2
+                    if eqtree._equations.get_combined_equations()._is_ode() is True:
+                        meshdim=2 # Must be 2 for ODEs
+                    else:
+                        mesh=problem.get_mesh(meshname)
+                        n=next(mesh.nodes())
+                        meshdim=n.ndim()
+                        if meshdim<2:
+                            meshdim=2
                     mesh_kwargs=mesh_kwargs_default.copy()
                     meshentry=ET.SubElement(root,"mesh",name=mesh_provide.name,dimensions=str(meshdim), **mesh_kwargs)
                     use_data=[]
@@ -161,11 +167,14 @@ class _PyoomphPreciceAdapater:
                 for mesh_receive in mesh_receives:                    
                     mesh_receive=cast(PreciceProvideMesh,mesh_receive)
                     meshname=eqtree.get_full_path().lstrip("/")
-                    mesh=problem.get_mesh(meshname)
-                    n=next(mesh.nodes())
-                    meshdim=n.ndim()
-                    if meshdim<2:
-                        meshdim=2
+                    if eqtree._equations.get_combined_equations()._is_ode() is True:
+                        meshdim=2 # Must be 2 for ODEs
+                    else:
+                        mesh=problem.get_mesh(meshname)
+                        n=next(mesh.nodes())
+                        meshdim=n.ndim()
+                        if meshdim<2:
+                            meshdim=2
                     mesh_kwargs=mesh_kwargs_default.copy()
                     meshentry=ET.SubElement(root,"mesh",name=mesh_receive.name,dimensions=str(meshdim), **mesh_kwargs)
                     use_data=[]
@@ -235,15 +244,15 @@ class PreciceProvideMesh(BaseEquations):
         mesh=eqtree.get_mesh()
         pr=mesh.get_problem()
         interface=pr._precice_interface
-        
+                                        
         xml_dimension = interface.get_mesh_dimensions(self.name)
-        my_nodes=[n for n in mesh.nodes()]
-        
-        
-        mesh._precice_node_to_vertex_id={n:i for i,n in enumerate(my_nodes)}
         if isinstance(mesh,ODEStorageMesh):
+            mesh._precice_node_to_vertex_id=None # No mapping needed for ODEs
             grid = numpy.zeros([1, xml_dimension])          
         else:
+            my_nodes=[n for n in mesh.nodes()]
+            mesh._precice_node_to_vertex_id={n:i for i,n in enumerate(my_nodes)}    
+            
             grid = numpy.zeros([len(my_nodes), xml_dimension])
             if len(my_nodes)==0:
                 raise ValueError("No nodes in mesh")
@@ -340,8 +349,11 @@ class PreciceProvideMesh(BaseEquations):
                                             
 
     def after_remeshing(self, eqtree: EquationTree):
+        
         if not get_pyoomph_precice_adapter()._initialized:
             return # Just skip it here for the first time. In can happen e.g. in --runmode c
+        if self.get_combined_equations()._is_ode():
+            return # All fine for ODEs
         mesh=eqtree.get_mesh()
         pr=mesh.get_problem()
         interface=pr._precice_interface
@@ -397,11 +409,12 @@ class PreciceWriteData(BaseEquations):
         return Equations.define_scalar_field(self,name,space,scale=scale,testscale=testscale)
 
     def define_fields(self):
+        if self.get_combined_equations()._is_ode():
+            self.by_projection=True
         if self.by_projection:
             if self.get_combined_equations()._is_ode():
-                raise RuntimeError("TODO ODES")
-            
-            if not self.projection_space:
+                space="D0"            
+            elif not self.projection_space:
                 space=self.get_current_code_generator()._coordinate_space
             else:
                 space=self.projection_space
@@ -416,6 +429,8 @@ class PreciceWriteData(BaseEquations):
                     Equations.define_vector_field(self,self._sanitize_name(name),space,scale=self.scaling,dim=self.vector_dim,testscale=testscale)                    
 
     def define_residuals(self):
+        if self.get_combined_equations()._is_ode():
+            self.by_projection=True
         if self.by_projection:
             for name,expr in self.entries.items():
                 vname=self._sanitize_name(name)
@@ -438,23 +453,32 @@ class PreciceWriteData(BaseEquations):
         assert isinstance(provider,PreciceProvideMesh)
         vertex_ids=mesh._precice_vertex_ids
                 
-        if self.by_projection:
+        if self.by_projection:            
             for write_name in self.entries.keys():
                 pyoomph_name=self._sanitize_name(write_name)
                 
-                mynodes=[n for n in mesh.nodes()]
+                if self.get_combined_equations()._is_ode():
+                    mynodes=[None]
+                else:
+                    mynodes=[n for n in mesh.nodes()]
                 
                 if self.vector_dim is None:
                 
                     buffer=numpy.zeros([len(mynodes)])
-                    if mesh.has_interface_dof_id(pyoomph_name)>=0:
-                        index=mesh.has_interface_dof_id(pyoomph_name)
-                        for i,n in enumerate(mynodes):
-                            buffer[mesh._precice_node_to_vertex_id[n]]=n.value(n.additional_value_index(index))
+                    if self.get_combined_equations()._is_ode():
+                        index=mesh.get_code_gen().get_code().get_elemental_field_indices()[pyoomph_name]
+                        buffer[0]=mesh.element_pt(0).internal_data_pt(index).value(0)
                     else:
-                        index=mesh.get_nodal_field_indices()[pyoomph_name]
-                        for i,n in enumerate(mynodes):
-                            buffer[mesh._precice_node_to_vertex_id[n]]=n.value(index,buffer)
+                        if mesh.has_interface_dof_id(pyoomph_name)>=0:
+                            index=mesh.has_interface_dof_id(pyoomph_name)
+                            for i,n in enumerate(mynodes):
+                                buffer[mesh._precice_node_to_vertex_id[n]]=n.value(n.additional_value_index(index))
+                        else:
+                            index=mesh.get_nodal_field_indices()[pyoomph_name]
+                            if index<0:
+                                raise ValueError("Field "+pyoomph_name+" not found in mesh. TODO: Elemental fields")
+                            for i,n in enumerate(mynodes):
+                                buffer[mesh._precice_node_to_vertex_id[n]]=n.value(index,buffer)
                 else:
                     buffer=[]
                     for vindex in range(self.vector_dim):
@@ -480,7 +504,13 @@ class PreciceWriteData(BaseEquations):
                     expr_index=mesh.list_local_expressions().index("_precice_write_"+write_name)
                     buffer=mesh.evaluate_local_expression_at_nodes(expr_index,True,False)                
                     buffer=numpy.array(buffer)                                                            
-                    interface.write_data(provider.name, write_name, vertex_ids[inds], buffer)
+                    if self.get_combined_equations()._is_ode():
+                        expr=mesh.element_pt(0).evalulate_local_expression_at_midpoint(expr_index)
+                        buffer=numpy.array([expr])
+                        #print("WRITE DATA",write_name,mesh._precice_vertex_ids,buffer)
+                        interface.write_data(provider.name, write_name, mesh._precice_vertex_ids, buffer)
+                    else:                    
+                        interface.write_data(provider.name, write_name, vertex_ids[inds], buffer)
                 else:                    
                     directs=["x","y","z"]
                     buffer=[]
@@ -530,13 +560,19 @@ class PreciceReadData(BaseEquations):
 
     def define_fields(self):
         if self.get_combined_equations()._is_ode():
-            raise RuntimeError("TODO ODES")
-        for name in self.entries.keys():
-            # This is a bit dirty, but I cannot see how it can be done differently, except for providing different classes for ODEEquations and Equations
-            if self.vector_dim is None:
-                Equations.define_scalar_field(self,name,self.get_current_code_generator()._coordinate_space,scale=self.scaling)
+            if self.vector_dim is not None:
+                raise RuntimeError("Vector fields not supported for ODEs")
             else:
-                Equations.define_vector_field(self,name,self.get_current_code_generator()._coordinate_space,scale=self.scaling,dim=self.vector_dim)
+                for name in self.entries.keys():
+                    # This is a bit dirty, but I cannot see how it can be done differently, except for providing different classes for ODEEquations and Equations
+                    ODEEquations.define_ode_variable(self,name,scale=self.scaling)
+        else:
+            for name in self.entries.keys():
+                # This is a bit dirty, but I cannot see how it can be done differently, except for providing different classes for ODEEquations and Equations
+                if self.vector_dim is None:
+                    Equations.define_scalar_field(self,name,self.get_current_code_generator()._coordinate_space,scale=self.scaling)
+                else:
+                    Equations.define_vector_field(self,name,self.get_current_code_generator()._coordinate_space,scale=self.scaling,dim=self.vector_dim)
 
     def define_residuals(self):
         for name in self.entries.keys():
@@ -564,14 +600,21 @@ class PreciceReadData(BaseEquations):
             if self.vector_dim is None:
                 if len(buffer.shape)>1:
                     raise RuntimeError("Expected scalar, got vector")
-                if mesh.has_interface_dof_id(pyoomph_name)>=0:
-                    index=mesh.has_interface_dof_id(pyoomph_name)
-                    for i,n in enumerate(mesh.nodes()):                    
-                        n.set_value(n.additional_value_index(index) ,buffer[mesh._precice_node_to_vertex_id[n]])
+                if self.get_combined_equations()._is_ode():
+                    index=mesh.get_code_gen().get_code().get_elemental_field_indices()[pyoomph_name]
+                    #print("READ DATA",pyoomph_name,index,buffer[0])
+                    mesh.element_pt(0).internal_data_pt(index).set_value(0,buffer[0])                    
                 else:
-                    index=mesh.get_nodal_field_indices()[pyoomph_name]
-                    for i,n in enumerate(mesh.nodes()):
-                        n.set_value(index,buffer[mesh._precice_node_to_vertex_id[n]])
+                    if mesh.has_interface_dof_id(pyoomph_name)>=0:
+                        index=mesh.has_interface_dof_id(pyoomph_name)
+                        for i,n in enumerate(mesh.nodes()):                    
+                            n.set_value(n.additional_value_index(index) ,buffer[mesh._precice_node_to_vertex_id[n]])
+                    else:
+                        index=mesh.get_nodal_field_indices()[pyoomph_name]
+                        if index<0:
+                            raise RuntimeError("TODO: Elemental fields?")
+                        for i,n in enumerate(mesh.nodes()):
+                            n.set_value(index,buffer[mesh._precice_node_to_vertex_id[n]])
             else:
                 if len(buffer.shape)==1:
                     raise RuntimeError("Expected vector, got scalar")

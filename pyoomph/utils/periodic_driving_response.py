@@ -119,7 +119,7 @@ class PeriodicDrivingResponse():
         """
         self.set_driving_omega(2*pi*freq)
 
-    def iterate_over_driving_frequencies(self,*,omegas:Optional[List[ExpressionOrNum]]=None,freqs:Optional[List[ExpressionOrNum]]=None,unit:ExpressionOrNum=1):
+    def iterate_over_driving_frequencies(self,*,omegas:Optional[List[ExpressionOrNum]]=None,freqs:Optional[List[ExpressionOrNum]]=None,unit:ExpressionOrNum=1,signum:int=1):
         """
         Iterator to iterate over the response of the system to different driving frequencies.
 
@@ -127,6 +127,7 @@ class PeriodicDrivingResponse():
             omegas: A list of angular frequencies to iterate over. You must either set ``omegas`` or ``freqs``.
             freqs: A list of frequencies to iterate over. You must either set ``omegas`` or ``freqs``.
             unit: An optional unit for the frequencies, e.g. ``kilo*hertz``. Defaults to 1.
+            signum: The sign orientation in the complex plane. Defaults to 1.
 
         Yields:
             For each frequency, you get the current response as complex vector, with entries belonging to the degrees of freedom of the system.
@@ -189,7 +190,7 @@ class PeriodicDrivingResponse():
         for omega in omegas:
             self.set_driving_omega(omega*unit)
             matJ[dtdrivedofind,dtdrivedofind]=-self.omega_param.value**2
-            fullmat=scipy.sparse.bmat([[matJ,self.omega_param.value*matM,lambda_in_vr],[self.omega_param.value*matM,-matJ,None],[vr_in_lambda,None,None]]).copy()        
+            fullmat=scipy.sparse.bmat([[signum*matJ,self.omega_param.value*matM,lambda_in_vr],[signum*self.omega_param.value*matM,-matJ,None],[vr_in_lambda,None,None]]).copy()        
             fullmat=fullmat.tocsr()                        
             sol=rhs.copy()
 
