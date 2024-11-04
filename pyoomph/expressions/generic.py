@@ -427,6 +427,34 @@ def Weak(a:ExpressionOrNum,b:ExpressionOrNum,*,dimensional_dx:bool=False,coordin
 
 
 
+def minimize_functional_derivative(F:ExpressionOrNum,only_with_respect_to:Optional[Union[Expression,set[Expression],List[Expression],Tuple[Expression,...]]]=None,*,coordinate_system:OptionalCoordinateSystem=None,lagrangian:bool=False,dimensional_dx:bool=False,dimensional_testfunctions:bool=True)->Expression:
+    if only_with_respect_to is None:
+        only_with_respect_to=[]
+    elif isinstance(only_with_respect_to,(set,tuple,list)):
+        only_with_respect_to=list(only_with_respect_to)
+    else:
+        only_with_respect_to=[only_with_respect_to]
+        
+    flags=0
+    if coordinate_system is None:
+        coordinate_system=_pyoomph.Expression(0)
+    else:
+        coordinate_system = 0 + _pyoomph.GiNaC_wrap_coordinate_system(coordinate_system)
+    # Must agree with weak(a,b) flags
+    if dimensional_dx:
+        flags+=2
+    if lagrangian:
+        flags+=1
+    # Additional flags
+    if dimensional_testfunctions:
+        flags+=64
+    flags=Expression(flags)
+    if not isinstance(F,_pyoomph.Expression):
+        F=_pyoomph.Expression(F)
+          
+    return _pyoomph.GiNaC_minimize_functional_derivative(F,only_with_respect_to,flags,coordinate_system)
+
+
 def timestepper_weight(order:int,index:int,scheme:TimeSteppingScheme="BDF1")->Expression:
 	return _pyoomph.GiNaC_time_stepper_weight(order,index,scheme)
 

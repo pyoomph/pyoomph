@@ -314,7 +314,24 @@ namespace pyoomph
 		{
 			for (GiNaC::const_preorder_iterator i = arg.preorder_begin(); i != arg.preorder_end(); ++i)
 			{
-				if (is_ex_the_function(*i, testfunction) || is_ex_the_function(*i, dimtestfunction) || is_ex_the_function(*i, nondimfield) || is_ex_the_function(*i, scale) || is_ex_the_function(*i, test_scale) || is_ex_the_function(*i, field) || is_ex_the_function(*i, unitvect) || is_ex_the_function(*i, symbol_subs) || is_ex_the_function(*i, Diff) || is_ex_the_function(*i, eval_in_domain) || is_ex_the_function(*i,ginac_expand) || is_ex_the_function(*i,grad) || is_ex_the_function(*i,div) )
+				if (is_ex_the_function(*i, testfunction) || 
+					is_ex_the_function(*i, dimtestfunction) || 
+					is_ex_the_function(*i, nondimfield) || 
+					is_ex_the_function(*i, scale) || 
+					is_ex_the_function(*i, test_scale) || 
+					is_ex_the_function(*i, field) || 
+					is_ex_the_function(*i, unitvect) || 
+					is_ex_the_function(*i, symbol_subs) || 
+					is_ex_the_function(*i, Diff) || 
+					is_ex_the_function(*i, eval_in_domain) || 
+					is_ex_the_function(*i,ginac_expand) || 
+					is_ex_the_function(*i,grad) || 
+					is_ex_the_function(*i,div) || 
+					is_ex_the_function(*i,transpose) ||
+					is_ex_the_function(*i,determinant) ||
+					is_ex_the_function(*i,trace) || // TODO: Add more!
+					is_ex_the_function(*i,minimize_functional_derivative) 
+					)
 				{
 					return true;
 				}
@@ -1572,6 +1589,71 @@ namespace pyoomph
 		REGISTER_FUNCTION(double_index, eval_func(double_index_eval).set_return_type(GiNaC::return_types::commutative))
 
 		////////////////
+
+		static ex determinant_eval(const ex &v,const ex &n)
+		{
+			ex evmv = v.evalm();
+			if (need_to_hold(evmv))
+				return determinant(evmv,n).hold();
+
+			if (is_a<matrix>(evmv))
+			{
+				int _n = GiNaC::ex_to<GiNaC::numeric>(n.evalf()).to_double();
+				matrix ma = ex_to<matrix>(evmv);
+				//std::cout << "N IS " << _n << std::endl;
+				if (_n<0) return ma.determinant(); // Determinant of the whole matrix
+				else if (_n==0)
+				{
+					// Try to find the size of the nonzero block					
+					_n=std::min(ma.cols(),ma.rows());
+					//std::cout << "N cols rows " << _n << std::endl;
+					while (_n>0)
+					{
+						bool found_nonzero=false;
+						for (unsigned int i=0;i<_n;i++)
+						{							
+							if (!ma(i,_n-1).is_zero())
+							{
+								found_nonzero=true;
+								break;
+							}
+							if (!ma(_n-1,i).is_zero())
+							{
+								found_nonzero=true;
+								break;
+							}
+						}
+						if (found_nonzero) break;
+						_n--;						
+					}
+					//std::cout << "N at end of loop " << _n << std::endl;
+					if (_n==0) return 0;
+				}
+				
+				
+				// Extract the block
+				if (ma.cols() < _n) throw_runtime_error("Block size is larger than the matrix (colums)");
+				if (ma.rows() < _n) throw_runtime_error("Block size is larger than the matrix (rows)");
+				std::vector<GiNaC::ex> entries;
+				for (unsigned int i = 0; i < _n; i++)
+				{
+					for (unsigned int j = 0; j < _n; j++)
+					{
+						entries.push_back(ma(i, j));
+					}
+				}
+				GiNaC::lst entries_lst(GiNaC::lst(entries.begin(), entries.end()));
+				return GiNaC::matrix(_n, _n, entries_lst).determinant();
+				
+			}
+			throw_runtime_error("determinant cannot be applied on a non-matrix/vector object");
+		}
+
+		REGISTER_FUNCTION(determinant, eval_func(determinant_eval).set_return_type(GiNaC::return_types::commutative))
+
+		////////////////
+
+		
 
 		static ex subexpression_eval(const ex &wrapped)
 		{
@@ -3012,6 +3094,101 @@ namespace pyoomph
 				throw_runtime_error(oss.str());
 			}
 		}
+
+		/////////////////
+
+		static ex minimize_functional_derivative_eval(const ex &F, const ex &only_wrto, const ex &flags, const ex &coordsys)
+		{
+			if (need_to_hold(F) || need_to_hold(only_wrto) || need_to_hold(flags) || need_to_hold(coordsys))
+				return minimize_functional_derivative(F, only_wrto, flags, coordsys).hold();
+			
+
+			int flag = GiNaC::ex_to<GiNaC::numeric>(flags).to_int();
+			bool dim_testfunc=flag & 64;
+
+
+			if (!__current_code)
+				throw_runtime_error("Cannot use functional minimization outside of a code generation");
+
+			GiNaC::lst wrto;
+			if (GiNaC::is_a<GiNaC::lst>(only_wrto) && only_wrto.nops() > 0)
+			{
+				std::set<pyoomph::ShapeExpansion> wrto_set;
+				std::cout << "NOPS " << only_wrto.nops() << std::endl;
+				for (unsigned i = 0; i < only_wrto.nops(); i++)
+				{
+					//std::cout << "NOP " <<i << " of NOPS " << only_wrto.nops()<< " : " << only_wrto.op(i) << std::endl;
+					//std::cout << "GETTING SHAPES IN " << only_wrto.op(i) << std::endl;
+					for (const pyoomph::ShapeExpansion & se:  __current_code->get_all_shape_expansions_in(only_wrto.op(i)))
+					{
+						
+						GiNaC::GiNaCShapeExpansion gse(se);
+						//std::cout << "  SHAPE  " << gse << " IN " << only_wrto.op(i) << " SET COUNT " << wrto_set.count(se) << std::endl;
+						if (!wrto_set.count(se))
+						{
+							//std::cout << "  ADDING SHAPE  " << gse << " IN " << only_wrto.op(i) << std::endl;
+							//std::cout << "SHAPE " << gse << std::endl;
+							wrto.append(gse);
+							wrto_set.insert(se);
+						}
+					}					
+				}
+				
+			}
+			else
+			{
+				for (const pyoomph::ShapeExpansion & se:  __current_code->get_all_shape_expansions_in(F))
+				{
+					wrto.append(GiNaC::GiNaCShapeExpansion(se));
+				}
+			}
+			//std::cout << "Minimizing " << F << " wrt " << wrto << std::endl;
+			GiNaC::ex res = 0;
+			GiNaC::symbol derive_dummy("__dummy__for_minimization");
+			for (GiNaC::ex wrt_ex : wrto)
+			{
+				if (is_a<GiNaCShapeExpansion>(wrt_ex))
+				{
+					const GiNaCShapeExpansion &se = ex_to<GiNaCShapeExpansion>(wrt_ex);
+					const pyoomph::ShapeExpansion sexp=se.get_struct();
+					if (sexp.time_history_index!=0) throw_runtime_error("Cannot minimize wrt a time history");
+					if (sexp.expansion_mode!=0) throw_runtime_error("Cannot minimize wrt an expansion mode");
+					if (sexp.nodal_coord_dir!=-1 || sexp.nodal_coord_dir2!=-1) throw_runtime_error("Cannot minimize wrt a nodal coordinate derivative");
+					if (sexp.is_derived) throw_runtime_error("Cannot minimize wrt a derived shape expansion");
+					if (sexp.is_derived_other_index) throw_runtime_error("Cannot minimize wrt a derived shape expansion with respect to another index");
+					if (sexp.no_jacobian || sexp.no_hessian) throw_runtime_error("Cannot minimize wrt a shape expansion with no_jacobian or no_hessian");
+					if (sexp.dt_order!=0) throw_runtime_error("Cannot minimize wrt a shape expansion with a time derivative");
+					// TODO: This should be possible for e.g. bulk domain -> bulk test function
+					if (sexp.field->get_space()->get_code()!=__current_code) throw_runtime_error("Cannot minimize wrt a shape expansion from another domain");
+
+					//std::cout << "Minimizing wrt " << se << std::endl;					
+					GiNaC::ex F_dummy = F.subs(wrt_ex == derive_dummy);
+					GiNaC::ex dF = GiNaC::diff(F_dummy, derive_dummy).subs(derive_dummy == wrt_ex);
+//					std::cout << " dF " << dF << std::endl;					
+					pyoomph::TestFunction testfunc(sexp.field,sexp.basis);
+					GiNaC::ex tf=0+GiNaC::GiNaCTestFunction(testfunc);
+					if (dim_testfunc)
+					{
+						throw_runtime_error("Dimensional test function here");
+					}
+					//std::cout << "dF " << dF << std::endl;
+					res = res + weak(dF,tf,flags,coordsys);
+				}
+				else
+				{
+					std::ostringstream oss;
+					oss << "Cannot minimize wrt " << wrt_ex;
+					throw_runtime_error(oss.str());
+				}
+			}
+
+
+
+			return res;
+		}
+
+		
+		REGISTER_FUNCTION(minimize_functional_derivative, eval_func(minimize_functional_derivative_eval).set_return_type(GiNaC::return_types::commutative))
 
 	}
 

@@ -30,7 +30,7 @@ import _pyoomph
 from ..typings import Optional
 
 from ..meshes.mesh import assert_spatial_mesh,InterfaceMesh,ODEStorageMesh
-from ..expressions import AxisymmetryBreakingCoordinateSystem, find_dominant_element_space, scale_factor, vector,matrix,evaluate_in_domain,testfunction,weak,var,nondim,Expression,rational_num
+from ..expressions import AxisymmetryBreakingCoordinateSystem, find_dominant_element_space, scale_factor, vector,matrix,evaluate_in_domain,testfunction,weak,var,nondim,Expression,rational_num,minimize_functional_derivative
 
 # from ..expressions import var, get_global_symbol, nondim, vector, testfunction, scale_factor, cartesian, partial_t
 from ..expressions.coordsys import ODECoordinateSystem, BaseCoordinateSystem
@@ -307,6 +307,25 @@ class BaseEquations(_pyoomph.Equations):
         if isinstance(b,str):
             b=testfunction(b)
         self.add_residual(weak(a,b,dimensional_dx=dimensional_dx,coordinate_system=coordinate_system,lagrangian=lagrangian),destination=destination)
+        return self
+    
+    def add_functional_minimization(self,F:"ExpressionOrNum",with_respect_to:Optional[Union[Expression,List[Expression]]]=None,*,dimensional_dx:bool=False,dimensional_testfunctions:bool=True,lagrangian:bool=False,coordinate_system:"OptionalCoordinateSystem"=None,destination:Optional[str]=None):
+        """Adds the weak form of the functional minimization of W=integral(F dOmega) to the equations.
+
+        Args:
+            F (ExpressionOrNum): Integrand of the functional.
+            with_respect_to (Optional[Union[Expression,List[Expression]]], optional): Optionally only derive with respect to all shape functions appearing in the listed expressions. Defaults to None, meaning all shape functions in F.
+            dimensional_dx (bool, optional): Consider spatial scaling in the weak form integral. Defaults to False.
+            dimensional_testfunctions (bool, optional): Expand by dimensional testfunctions. Defaults to True.
+            lagrangian (bool, optional): Weak formulation is integrated over the Lagrangian domain. Defaults to False.
+            coordinate_system (OptionalCoordinateSystem, optional): Optional coordinate system. Defaults to the equations' coordinate system, then parent equations and eventually the problem coordinate system. Defaults to None.
+            destination (Optional[str], optional): Residual destination identifier. Defaults to None.
+
+        Returns:
+            BaseEquations: Returns self for chaining.
+        """
+        dF=minimize_functional_derivative(F, only_with_respect_to=with_respect_to, dimensional_testfunctions=dimensional_testfunctions,coordinate_system=coordinate_system,lagrangian=lagrangian,dimensional_dx=dimensional_dx)
+        self.add_residual(dF,destination=destination)
         return self
 
     def get_dx(self, use_scaling:bool=True, lagrangian:bool=False,coordsys:Optional[_pyoomph.CustomCoordinateSystem]=None)->"Expression":

@@ -109,7 +109,7 @@ class PseudoElasticMesh(BaseMovingMeshEquations):
             spatial_error_factor (Optional[float]): The spatial error factor. Default is None.
             coordinate_space (Optional[str]): The coordinate space. Default is None.
             constrain_bulk_to_C1 (bool): If True, the bulk position space is constrained to C1. Default is False.
-            coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is None.
+            coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is cartesian.
     """
     def __init__(self, E:ExpressionOrNum=1*scale_factor("spatial")**2, nu:ExpressionOrNum=rational_num(3,10), spatial_error_factor:Optional[float]=None,coordinate_space:Optional[str]=None,constrain_bulk_to_C1:bool=False,coordsys:Optional[BaseCoordinateSystem]=cartesian):
         super(PseudoElasticMesh, self).__init__(coordinate_space=coordinate_space,constrain_bulk_to_C1=constrain_bulk_to_C1,coordsys=coordsys)
@@ -196,6 +196,80 @@ class SingleDirectionLaplaceSmoothedMesh(LaplaceSmoothedMesh):
         for i in range(ndim):
             if i!=self.direction:
                 self.set_Dirichlet_condition("mesh_"+["x","y","z"][i],True)
+
+
+
+class HyperelasticSmoothedMesh(BaseMovingMeshEquations):
+    """Hyperelastic mesh smoothing. The mesh is smoothed by minimizing the energy functional:
+            
+            W = integral( mu/2*(I1-d)+kappa/2*(J-1)**2 dOmega )
+    
+        where I1 is the first invariant of the right Cauchy-Green deformation tensor, J is the determinant of the deformation gradient, mu is the shear modulus, and kappa is the bulk modulus. d is the dimension of the mesh.
+
+    Args:
+        mu (float): The shear modulus. Default is 1.
+        kappa (float): The bulk modulus. Default is 1.
+        coordinate_space (Optional[str]): The coordinate space. Default is None.
+        constrain_bulk_to_C1 (bool): If True, the bulk position space is constrained to C1. Default is False.
+        coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is cartesian.
+    """
+    def __init__(self,mu:float=1,kappa:float=1, coordinate_space: Optional[str] = None, constrain_bulk_to_C1: bool = False, coordsys: Optional[BaseCoordinateSystem] = cartesian,use_subexpressions:bool=False):
+        super().__init__(coordinate_space, constrain_bulk_to_C1, coordsys)
+        self.use_subexpressions=use_subexpressions
+        self.mu=mu
+        self.kappa=kappa
+        
+        
+    def define_residuals(self):
+        x=var("mesh")
+        dxdX=grad(x,lagrangian=True,coordsys=self.coordsys)
+        J=determinant(dxdX)
+        if self.use_subexpressions:
+            J=subexpression(J)
+        I1=trace( matproduct(transpose(dxdX),dxdX) )*J**rational_num(-2,3)        
+        I1min=I1-self.get_nodal_dimension() # or 3?
+        if self.use_subexpressions:
+            I1min=subexpression(I1min)
+        F=self.mu/2*I1min+self.kappa/2*(J-1)**2
+        self.add_functional_minimization(F,dimensional_testfunctions=False,coordinate_system=self.coordsys,lagrangian=True)
+        
+class YeohSmoothedMesh(BaseMovingMeshEquations):
+    """Yeoh mesh smoothing. The mesh is smoothed by minimizing the energy functional:
+                
+                W = integral( 1/2 * (C1*I1min+C2*I1min**2+C3*I1min**3+kappa*(J-1)**2 ) * dOmega )
+        
+            where I1min=I1-d is the first invariant of the right Cauchy-Green deformation tensor minus the dimension d of the mesh, J is the determinant of the deformation gradient, C1, C2, and C3 are the Yeoh constants, and kappa is the bulk modulus.
+
+    Args:
+        kappa (float): The bulk modulus. Default is 1.
+        C1 (float): The Yeoh constant C1. Default is 1.
+        C2 (float): The Yeoh constant C2. Default is 10.
+        C3 (float): The Yeoh constant C3. Default is 0.
+        coordinate_space (Optional[str]): The coordinate space. Default is None.
+        constrain_bulk_to_C1 (bool): If True, the bulk position space is constrained to C1. Default is False.
+        coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is cartesian
+        
+    """
+    def __init__(self,kappa:float=1, C1:float=1,C2:float=10,C3:float=0, coordinate_space: Optional[str] = None, constrain_bulk_to_C1: bool = False, coordsys: Optional[BaseCoordinateSystem] = cartesian,use_subexpressions:bool=False):
+        super().__init__(coordinate_space, constrain_bulk_to_C1, coordsys)
+        self.use_subexpressions=use_subexpressions
+        self.C1=C1
+        self.C2=C2
+        self.C3=C3
+        self.kappa=kappa
+        
+        
+    def define_residuals(self):
+        x=var("mesh")
+        dxdX=grad(x,lagrangian=True,coordsys=self.coordsys)
+        J=determinant(dxdX)
+        if self.use_subexpressions:
+            J=subexpression(J)
+        I1=trace( matproduct(transpose(dxdX),dxdX) )*J**rational_num(-2,3)
+        I1min=I1-self.get_nodal_dimension()
+        F=(self.C1*I1min+self.C2*I1min**2+self.C3*I1min**3+self.kappa*(J-1)**2)/2                                
+        self.add_functional_minimization(meter*F,dxdX,dimensional_testfunctions=False,coordinate_system=self.coordsys,lagrangian=True)
+        
 
 
 

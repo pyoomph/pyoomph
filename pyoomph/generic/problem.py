@@ -1375,7 +1375,7 @@ class Problem(_pyoomph.Problem):
 
     def __iadd__(self,other:Union[MeshTemplate,EquationTree,GenericProblemHooks,"MatplotlibPlotter"]):
         from pyoomph.output.plotting import MatplotlibPlotter
-        if self._initialised:
+        if self._initialised and not isinstance(other,(MatplotlibPlotter,GenericProblemHooks)):
             raise RuntimeError("Cannot add anything to a problem once it is initialized!")
         if isinstance(other,MeshTemplate):
             self.add_mesh(other)

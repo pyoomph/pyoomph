@@ -637,7 +637,7 @@ void PyReg_Expressions(py::module &m)
 		"GiNaC_signum", [](const GiNaC::ex &arg)
 		{ return 0 + pyoomph::expressions::signum(arg); },
 		"Calculates the signum of the argument. Note: It will differentiate to 0, even at x=0");
-
+	
 	m.def("GiNaC_is_a_matrix", [](const GiNaC::ex &arg)
 		  {GiNaC::ex evm=arg.evalm(); return GiNaC::is_a<GiNaC::matrix>(evm); });
 
@@ -897,7 +897,16 @@ void PyReg_Expressions(py::module &m)
 		"GiNaC_trace", [](const GiNaC::ex &arg1)
 		{ return 0 + pyoomph::expressions::trace(arg1); },
 		"Calculates the trace of a matrix");
+	m.def(
+		"GiNaC_determinant", [](const GiNaC::ex &arg,const GiNaC::ex &n)
+		{ return 0 + pyoomph::expressions::determinant(arg,n); },
+		"Calculates the determinant of an n x n matrix");
 
+	m.def(
+		"GiNaC_minimize_functional_derivative", [](const GiNaC::ex &F,const std::vector<GiNaC::ex> &only_wrto,const GiNaC::ex &flags,const GiNaC::ex &coordsys)		
+		{ return 0 + pyoomph::expressions::minimize_functional_derivative(F,GiNaC::lst(only_wrto.begin(),only_wrto.end()),flags,coordsys); },		
+		"Calculates weak formulation of the variation of the functional with integrant F");		
+	
 	m.def(
 		"GiNaC_testfunction", [](const std::string &id, pyoomph::FiniteElementCode *code, std::vector<std::string> tags)
 		{

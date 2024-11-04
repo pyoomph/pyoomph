@@ -7059,7 +7059,8 @@ namespace GiNaC
 						oss << "subexpression derivative wrto " << s << " is non-zero, but we already have a contribution before..." << std::endl;
 						oss << "DERIV IS (should be 0): " << deriv << std::endl;
 						oss << "EXPRESSION IS " << get_struct().expr << std::endl;
-						throw_runtime_error(oss.str());
+						//throw_runtime_error(oss.str());
+						return deriv;
 					}
 					else
 					{

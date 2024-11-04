@@ -412,6 +412,20 @@ def trace(M:Expression)->Expression:
 	"""
 	return _pyoomph.GiNaC_trace(M)
 
+def determinant(M:Expression,n:int=0)->Expression:
+	"""
+	Compute the determinant of a matrix expression.
+
+	Parameters:
+		M (Expression): The matrix expression for which to compute the determinant.
+		n (int): Range of the matrix to consider for the determinant. Default is 0 (extract nonzero block), <0 means full matrix, >0 upper left matrix of n x n.
+  
+
+	Returns:
+		Expression: The determinant of the matrix expression.
+	"""
+	return _pyoomph.GiNaC_determinant(M,Expression(n))
+
 def var_and_test(n: str, tag: List[str] = [], domain: Union[None, str, "FiniteElementCodeGenerator"] = None) -> Tuple[Expression, Expression]:
 	"""
 	Bind a variable of an unknown field the corresponding test function for a given name.

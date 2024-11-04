@@ -316,6 +316,9 @@ namespace pyoomph
     DECLARE_FUNCTION_5P(div)
     DECLARE_FUNCTION_1P(transpose)
     DECLARE_FUNCTION_1P(trace)
+    DECLARE_FUNCTION_2P(determinant)    
+
+    DECLARE_FUNCTION_4P(minimize_functional_derivative)    
 
     DECLARE_FUNCTION_4P(unitvect)
 
@@ -357,6 +360,9 @@ namespace pyoomph
 
     DECLARE_FUNCTION_2P(single_index)
     DECLARE_FUNCTION_3P(double_index)
+
+    
+    
 
     DECLARE_FUNCTION_2P(Diff)
 
