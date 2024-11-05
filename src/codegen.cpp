@@ -794,18 +794,31 @@ namespace pyoomph
 
 	bool operator==(const SpatialIntegralSymbol &lhs, const SpatialIntegralSymbol &rhs)
 	{
-		return lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian && lhs.history_step == rhs.history_step;
+		return lhs.get_code() == rhs.get_code() && 
+		       lhs.is_lagrangian() == rhs.is_lagrangian() && 
+			   lhs.is_derived() == rhs.is_derived() && 
+			   lhs.get_derived_direction() == rhs.get_derived_direction() && 
+			   lhs.is_derived2() == rhs.is_derived2() && 
+			   lhs.get_derived_direction2() == rhs.get_derived_direction2() && 
+			   lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && 
+			   lhs.expansion_mode == rhs.expansion_mode && 
+			   lhs.no_jacobian == rhs.no_jacobian && 
+			   lhs.no_hessian == rhs.no_hessian && 
+			   lhs.history_step == rhs.history_step;
 	}
 	bool operator<(const SpatialIntegralSymbol &lhs, const SpatialIntegralSymbol &rhs)
-	{
-		return lhs.get_code() < rhs.get_code() || (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() < rhs.is_lagrangian()) || (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() < rhs.is_derived()) || (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() < rhs.get_derived_direction()) ||
+	{		
+		return lhs.get_code() < rhs.get_code() || 
+		       (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() < rhs.is_lagrangian()) || 
+			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() < rhs.is_derived()) || 
+			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() < rhs.get_derived_direction()) ||			   
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() < rhs.is_derived2()) ||
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() < rhs.get_derived_direction2()) ||
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) ||
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode < rhs.expansion_mode) ||
-			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) ||
+			   //(lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) ||
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian < rhs.no_jacobian) ||
-			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) ||
+			   //(lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) ||
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian < rhs.no_hessian) || 
 			   (lhs.get_code() == rhs.get_code() && lhs.is_lagrangian() == rhs.is_lagrangian() && lhs.is_derived() == rhs.is_derived() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.is_derived2() == rhs.is_derived2() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian && lhs.history_step<rhs.history_step)
 			;
@@ -3481,16 +3494,31 @@ namespace pyoomph
 
 	GiNaC::ex FiniteElementCode::extract_spatial_integral_part(const GiNaC::ex &inp, bool eulerian, bool lagrangian)
 	{
-		std::set<GiNaC::GiNaCSpatialIntegralSymbol> dx_symbs;
+		//std::set<GiNaC::GiNaCSpatialIntegralSymbol> dx_symbs;
+		std::set<GiNaC::ex, GiNaC::ex_is_less> dx_symbs;
 		// First, gather all dx terms
 		for (GiNaC::const_preorder_iterator i = inp.preorder_begin(); i != inp.preorder_end(); ++i)
 		{
 			if (GiNaC::is_a<GiNaC::GiNaCSpatialIntegralSymbol>(*i))
 			{
+				if (pyoomph_verbose)
+				{
+					std::cout << "	CHECKING DX CONTIBUTION " << (*i) << " FOR eulerian " << eulerian << " lagrangian " << lagrangian << " ALREADY FOUND " << dx_symbs.count(0+GiNaC::ex_to<GiNaC::GiNaCSpatialIntegralSymbol>(*i)) << std::endl;
+					for (auto &dx : dx_symbs)
+						std::cout << 	" DIFFERENCE BETWEEN the current " << (*i) << " and the already added " << dx << " is : " << (*i) - dx << " IS ZERO " << GiNaC::is_zero((*i) - dx) << std::endl;
+				}
 				auto &sp = GiNaC::ex_to<GiNaC::GiNaCSpatialIntegralSymbol>(*i).get_struct();
 				if ((sp.is_lagrangian() && lagrangian) || (!sp.is_lagrangian() && eulerian)) // Only the ones of interest
 				{
-					dx_symbs.insert(GiNaC::ex_to<GiNaC::GiNaCSpatialIntegralSymbol>(*i));
+					if (pyoomph_verbose)
+					{
+						std::cout << " ADDING IT TO THE SET " << (*i) << " which has currently " << dx_symbs.size() << " elements " << std::endl;
+					}
+					dx_symbs.insert(0+GiNaC::ex_to<GiNaC::GiNaCSpatialIntegralSymbol>(*i));
+					if (pyoomph_verbose)
+					{
+						std::cout << " Afterwards, the set has " << dx_symbs.size() << " elements " << std::endl;
+					}
 				}
 			}
 		}
@@ -3498,6 +3526,8 @@ namespace pyoomph
 		GiNaC::ex res = 0;
 		for (auto &dx : dx_symbs)
 		{
+			if (pyoomph_verbose)
+				std::cout << "	USING DX CONTRIBUTION " << dx << " FOR eulerian " << eulerian << " lagrangian " << lagrangian << std::endl;
 			GiNaC::ex contrib = inp.coeff(dx, 1);
 			// We could check here for another dx in contrib. If present, raise error
 			res += contrib * dx;
@@ -3859,6 +3889,11 @@ namespace pyoomph
 		}
 
 		GiNaC::ex spatial_integral_portion_Eulerian = extract_spatial_integral_part(resi, true, false);	  // resi.coeff(get_dx(false), 1) * get_dx(false);
+		if (pyoomph::pyoomph_verbose)
+		{
+			std::cout << "Full residual: " << resi << std::endl;
+			std::cout << "Eulerian part of the residual: " << spatial_integral_portion_Eulerian << std::endl;
+		}
 		GiNaC::ex spatial_integral_portion_Lagrangian = extract_spatial_integral_part(resi, false, true); // resi.coeff(get_dx(true), 1) * get_dx(true);
 		GiNaC::ex spatial_integral_portion_NodalDelta = resi.coeff(get_nodal_delta(), 1);
 
@@ -7308,17 +7343,23 @@ namespace GiNaC
 			testf = code->get_field_by_name("coordinate_x");
 			if (testf && s == testf->get_symbol())
 			{
-				return 0 + GiNaCSpatialIntegralSymbol(code->get_dx_derived(0));
+				pyoomph::SpatialIntegralSymbol sder = code->get_dx_derived(0);
+				sder.expansion_mode = get_struct().expansion_mode;
+				return 0 + GiNaC::GiNaCSpatialIntegralSymbol(sder);
 			}
 			testf = code->get_field_by_name("coordinate_y");
 			if (testf && s == testf->get_symbol())
 			{
-				return 0 + GiNaCSpatialIntegralSymbol(code->get_dx_derived(1));
+				pyoomph::SpatialIntegralSymbol sder = code->get_dx_derived(1);
+				sder.expansion_mode = get_struct().expansion_mode;
+				return 0 + GiNaC::GiNaCSpatialIntegralSymbol(sder);
 			}
 			testf = code->get_field_by_name("coordinate_z");
 			if (testf && s == testf->get_symbol())
 			{
-				return 0 + GiNaCSpatialIntegralSymbol(code->get_dx_derived(2));
+				pyoomph::SpatialIntegralSymbol sder = code->get_dx_derived(2);
+				sder.expansion_mode = get_struct().expansion_mode;
+				return 0 + GiNaC::GiNaCSpatialIntegralSymbol(sder);
 			}
 		}
 		else if (!get_struct().is_derived2())
@@ -7327,17 +7368,23 @@ namespace GiNaC
 			testf = code->get_field_by_name("coordinate_x");
 			if (testf && s == testf->get_symbol())
 			{
-				return 0 + GiNaCSpatialIntegralSymbol(code->get_dx_derived2(dir1, 0));
+				pyoomph::SpatialIntegralSymbol sder = code->get_dx_derived2(dir1, 0);
+				sder.expansion_mode = get_struct().expansion_mode;
+				return 0 + GiNaC::GiNaCSpatialIntegralSymbol(sder);
 			}
 			testf = code->get_field_by_name("coordinate_y");
 			if (testf && s == testf->get_symbol())
 			{
-				return 0 + GiNaCSpatialIntegralSymbol(code->get_dx_derived2(dir1, 1));
+				pyoomph::SpatialIntegralSymbol sder = code->get_dx_derived2(dir1, 1);
+				sder.expansion_mode = get_struct().expansion_mode;
+				return 0 + GiNaC::GiNaCSpatialIntegralSymbol(sder);
 			}
 			testf = code->get_field_by_name("coordinate_z");
 			if (testf && s == testf->get_symbol())
 			{
-				return 0 + GiNaCSpatialIntegralSymbol(code->get_dx_derived2(dir1, 2));
+				pyoomph::SpatialIntegralSymbol sder = code->get_dx_derived2(dir1, 2);
+				sder.expansion_mode = get_struct().expansion_mode;
+				return 0 + GiNaC::GiNaCSpatialIntegralSymbol(sder);
 			}
 		}
 		return 0;

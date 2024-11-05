@@ -2881,6 +2881,8 @@ class GlobalLagrangeMultiplier(ODEEquations):
     def get_information_string(self) -> str:
         return ", ".join([str(n) + " with contrib. " + str(v) for n, v in self._entries.items()])
 
+
+
 class ScalarField(Equations):
     """
     Introduces a scalar field with the given name and the given space. Residuals can be either added in the constructor or by combining with :py:class:`~pyoomph.generic.codegen.WeakContribution`.
