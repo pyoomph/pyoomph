@@ -901,6 +901,10 @@ void PyReg_Expressions(py::module &m)
 		"GiNaC_determinant", [](const GiNaC::ex &arg,const GiNaC::ex &n)
 		{ return 0 + pyoomph::expressions::determinant(arg,n); },
 		"Calculates the determinant of an n x n matrix");
+	m.def(
+		"GiNaC_inverse_matrix", [](const GiNaC::ex &arg,const GiNaC::ex &n,const GiNaC::ex & flags)
+		{ return 0 + pyoomph::expressions::inverse_matrix(arg,n,flags); },
+		"Calculates the inverse of an n x n matrix");
 
 	m.def(
 		"GiNaC_minimize_functional_derivative", [](const GiNaC::ex &F,const std::vector<GiNaC::ex> &only_wrto,const GiNaC::ex &flags,const GiNaC::ex &coordsys)		

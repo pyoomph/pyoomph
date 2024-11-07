@@ -1075,6 +1075,17 @@ namespace pyoomph
 		return lagr_deriv_x[direction];
 	}
 
+	BasisFunction *BasisFunction::get_diff_S(unsigned direction)
+	{
+		if (local_coord_deriv_x.empty())
+		{
+			local_coord_deriv_x.resize(3); // TODO: Let this depend on the space
+			for (unsigned int i = 0; i < local_coord_deriv_x.size(); i++)
+				local_coord_deriv_x[i] = new D1XBasisFunctionLocalCoord(space, i);
+		}
+		return local_coord_deriv_x[direction];
+	}
+
 	std::string BasisFunction::get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const
 	{
 		return "shape_" + space->get_shape_name() + "[" + nodal_index + "]";
@@ -1100,6 +1111,11 @@ namespace pyoomph
 	}
 
 	BasisFunction *D1XBasisFunction::get_diff_X(unsigned direction)
+	{
+		throw_runtime_error("Cannot handle second order derivatives of basis functions yet");
+	}
+
+	BasisFunction *D1XBasisFunction::get_diff_S(unsigned direction)
 	{
 		throw_runtime_error("Cannot handle second order derivatives of basis functions yet");
 	}
@@ -1145,6 +1161,31 @@ namespace pyoomph
 	{
 		return "dX_shape_" + space->get_shape_name() + "[" + nodal_index + "][" + std::to_string(direction) + "]";
 	}
+
+
+
+	std::string D1XBasisFunctionLocalCoord::get_c_varname(FiniteElementCode *forcode, std::string test_index)
+	{
+		return "dS_testfunction[" + test_index + "][" + std::to_string(direction) + "]";
+	}
+	std::string D1XBasisFunctionLocalCoord::to_string()
+	{
+		std::string dx;
+		if (direction == 0)
+			dx = "d/ds^1 ";
+		else if (direction == 1)
+			dx = "d/ds^2 ";
+		else if (direction == 2)
+			dx = "d/ds^3 ";
+		return dx + "of BASIS of " + space->get_name();
+	}
+
+	std::string D1XBasisFunctionLocalCoord::get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const
+	{
+		return "dS_shape_" + space->get_shape_name() + "[" + nodal_index + "][" + std::to_string(direction) + "]";
+	}
+
+
 
 	std::string FiniteElementSpace::get_eqn_number_str(FiniteElementCode *forcode) const
 	{
@@ -2020,6 +2061,7 @@ namespace pyoomph
 			oss << indent << "  double const * testfunction = " << shapeinfo << "->shape_" << this->get_shape_name() << ";" << std::endl;
 			oss << indent << "  DX_SHAPE_FUNCTION_DECL(dx_testfunction) = " << shapeinfo << "->dx_shape_" << this->get_shape_name() << ";" << std::endl;
 			oss << indent << "  DX_SHAPE_FUNCTION_DECL(dX_testfunction) = " << shapeinfo << "->dX_shape_" << this->get_shape_name() << ";" << std::endl;
+			oss << indent << "  DX_SHAPE_FUNCTION_DECL(dS_testfunction) = " << shapeinfo << "->dS_shape_" << this->get_shape_name() << ";" << std::endl;
 
 			oss << indent << "  for (unsigned int l_test=0;l_test<" << numnodes_str << ";l_test++)" << std::endl;
 			oss << indent << "  {" << std::endl;
@@ -5550,6 +5592,12 @@ namespace pyoomph
 			this->register_field("lagrangian_" + dir[i], "Pos")->no_jacobian_at_all = true; // Lagrangian coordinates never have Jacobian entries, since they are fixed
 		}
 
+		for (unsigned int i = 0; i < this->element_dim; i++)
+		{
+			std::vector<std::string> dir{"1", "2", "3"};
+			this->register_field("local_coordinate_" + dir[i], "Pos")->no_jacobian_at_all = true; // Lagrangian coordinates never have Jacobian entries, since they are fixed
+		}		
+
 		for (unsigned int i = 0; i < this->nodal_dim; i++) // Adding the mesh coordinates -> They in fact can be derived by t, whereas the partial_t( coordinate) =0
 		{
 			std::vector<std::string> dir{"x", "y", "z"};
@@ -6641,6 +6689,8 @@ namespace pyoomph
 			std::string nam = f->get_name();
 			if (nam == "lagrangian_x" || nam == "lagrangian_y" || nam == "lagrangian_z")
 				continue;
+			if (nam == "local_coordinate_1" || nam == "local_coordinate_2" || nam == "local_coordinate_3")
+				continue;				
 			if (nam == "mesh_x")
 				nam = "coordinate_x";
 			else if (nam == "mesh_y")
@@ -7992,6 +8042,8 @@ namespace GiNaC
 					return 0;
 				if (sp.field->get_name() == "lagrangian_x" || sp.field->get_name() == "lagrangian_y" || sp.field->get_name() == "lagrangian_z")
 					return 0;
+				if (sp.field->get_name() == "local_coordinate_1" || sp.field->get_name() == "local_coordinate_2" || sp.field->get_name() == "local_coordinate_3")
+					return 0;
 			}
 			std::string timescheme;
 			unsigned dt_order = sp.dt_order + 1;
@@ -8163,6 +8215,45 @@ namespace GiNaC
 				}
 			}
 			auto se = pyoomph::ShapeExpansion(sp.field, sp.dt_order, sp.basis->get_diff_X(dir), sp.dt_scheme);
+			if (sp.no_jacobian)
+				se.no_jacobian = true;
+			if (sp.no_hessian)
+				se.no_hessian = true;
+			if (sp.expansion_mode)
+				se.expansion_mode = sp.expansion_mode;
+			se.is_derived_other_index = sp.is_derived_other_index;
+			return GiNaCShapeExpansion(se);
+		}
+
+		// Local coordinate diffs
+		else if (s == pyoomph::expressions::local_coordinate_1 || s == pyoomph::expressions::local_coordinate_2 || s == pyoomph::expressions::local_coordinate_3)
+		{
+			unsigned dir = (s == pyoomph::expressions::local_coordinate_1 ? 0 : (s == pyoomph::expressions::local_coordinate_2 ? 1 : 2));
+			if (dynamic_cast<pyoomph::PositionFiniteElementSpace *>(sp.field->get_space()))
+			{
+				if (sp.field->get_name() == "local_coordinate_1")
+				{
+					if (dir == 0)
+						return 1;
+					else
+						return 0;
+				}
+				else if (sp.field->get_name() == "local_coordinate_2")
+				{
+					if (dir == 1)
+						return 1;
+					else
+						return 0;
+				}
+				else if (sp.field->get_name() == "local_coordinate_3")
+				{
+					if (dir == 2)
+						return 1;
+					else
+						return 0;
+				}
+			}
+			auto se = pyoomph::ShapeExpansion(sp.field, sp.dt_order, sp.basis->get_diff_S(dir), sp.dt_scheme);
 			if (sp.no_jacobian)
 				se.no_jacobian = true;
 			if (sp.no_hessian)
@@ -8403,6 +8494,27 @@ namespace GiNaC
 			else
 				return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis->get_diff_x(2)));
 		}
+		else if (s == pyoomph::expressions::local_coordinate_1)
+		{
+			if (dynamic_cast<const pyoomph::D0FiniteElementSpace *>(sp.basis->get_space()))
+				return 0;
+			else
+				return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis->get_diff_S(0)));
+		}
+		else if (s == pyoomph::expressions::local_coordinate_2)
+		{
+			if (dynamic_cast<const pyoomph::D0FiniteElementSpace *>(sp.basis->get_space()))
+				return 0;
+			else
+				return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis->get_diff_S(1)));
+		}
+		else if (s == pyoomph::expressions::local_coordinate_3)
+		{
+			if (dynamic_cast<const pyoomph::D0FiniteElementSpace *>(sp.basis->get_space()))
+				return 0;
+			else
+				return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis->get_diff_S(2)));
+		}				
 		else
 		{
 			std::ostringstream oss;

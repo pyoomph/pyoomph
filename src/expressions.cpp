@@ -350,6 +350,9 @@ namespace pyoomph
 		potential_real_symbol nx("normal_x");
 		potential_real_symbol ny("normal_y");
 		potential_real_symbol nz("normal_z");
+		potential_real_symbol local_coordinate_1("local_coordinate_1");
+		potential_real_symbol local_coordinate_2("local_coordinate_2");
+		potential_real_symbol local_coordinate_3("local_coordinate_3");
 		potential_real_symbol timefrac_tracer("timefrac_tracer");
 		potential_real_symbol t("t");
 		potential_real_symbol _dt_BDF1("_dt_BDF1");
@@ -730,6 +733,12 @@ namespace pyoomph
 					return diff(what, Y);
 				else if (sp.field->get_name() == "lagrangian_z")
 					return diff(what, Z);
+				else if (sp.field->get_name() == "local_coordinate_1")
+					return diff(what, local_coordinate_1);
+				else if (sp.field->get_name() == "local_coordinate_2")
+					return diff(what, local_coordinate_2);
+				else if (sp.field->get_name() == "local_coordinate_3")
+					return diff(what, local_coordinate_3);					
 
 				else
 				{
@@ -1590,6 +1599,31 @@ namespace pyoomph
 
 		////////////////
 
+		static int get_nontrivial_matrix_dimension(const matrix &ma)
+		{
+			int _n=std::min(ma.cols(),ma.rows());			
+			while (_n>0)
+			{
+				bool found_nonzero=false;
+				for (unsigned int i=0;i<_n;i++)
+				{							
+					if (!ma(i,_n-1).is_zero())
+					{
+						found_nonzero=true;
+						break;
+					}
+					if (!ma(_n-1,i).is_zero())
+					{
+						found_nonzero=true;
+						break;
+					}
+				}
+				if (found_nonzero) break;
+				_n--;						
+			}
+			return _n;
+		}
+
 		static ex determinant_eval(const ex &v,const ex &n)
 		{
 			ex evmv = v.evalm();
@@ -1603,34 +1637,11 @@ namespace pyoomph
 				//std::cout << "N IS " << _n << std::endl;
 				if (_n<0) return ma.determinant(); // Determinant of the whole matrix
 				else if (_n==0)
-				{
-					// Try to find the size of the nonzero block					
-					_n=std::min(ma.cols(),ma.rows());
-					//std::cout << "N cols rows " << _n << std::endl;
-					while (_n>0)
-					{
-						bool found_nonzero=false;
-						for (unsigned int i=0;i<_n;i++)
-						{							
-							if (!ma(i,_n-1).is_zero())
-							{
-								found_nonzero=true;
-								break;
-							}
-							if (!ma(_n-1,i).is_zero())
-							{
-								found_nonzero=true;
-								break;
-							}
-						}
-						if (found_nonzero) break;
-						_n--;						
-					}
-					//std::cout << "N at end of loop " << _n << std::endl;
+				{					
+					_n=get_nontrivial_matrix_dimension(ma);										
 					if (_n==0) return 0;
 				}
-				
-				
+								
 				// Extract the block
 				if (ma.cols() < _n) throw_runtime_error("Block size is larger than the matrix (colums)");
 				if (ma.rows() < _n) throw_runtime_error("Block size is larger than the matrix (rows)");
@@ -1653,6 +1664,64 @@ namespace pyoomph
 
 		////////////////
 
+
+		static ex inverse_matrix_eval(const ex &v,const ex &n,const ex &flags)
+		{
+			ex evmv = v.evalm();
+			if (need_to_hold(evmv))
+				return inverse_matrix(evmv,n,flags).hold();
+
+			if (is_a<matrix>(evmv))
+			{
+				int _n = GiNaC::ex_to<GiNaC::numeric>(n.evalf()).to_double();
+				int flag = GiNaC::ex_to<GiNaC::numeric>(flags.evalf()).to_double();
+				matrix ma = ex_to<matrix>(evmv);
+				
+				if (_n<0) return ma.inverse(); // Determinant of the whole matrix
+				else if (_n==0)
+				{					
+					_n=get_nontrivial_matrix_dimension(ma);										
+					if (_n==0) throw_runtime_error("Matrix is empty and cannot be inverted");
+				}
+												
+				if (ma.cols() < _n) throw_runtime_error("Block size is larger than the matrix (colums)");
+				if (ma.rows() < _n) throw_runtime_error("Block size is larger than the matrix (rows)");
+				std::vector<GiNaC::ex> entries;
+				if (_n==1) { entries.push_back(1/ma(0,0));}
+				else if (_n==2) {
+					GiNaC::ex det=ma(0,0)*ma(1,1)-ma(0,1)*ma(1,0);
+					if (flag & 1) det=subexpression(det);
+					entries.push_back(ma(1,1)/det);
+					entries.push_back(-ma(0,1)/det);
+					entries.push_back(-ma(1,0)/det);
+					entries.push_back(ma(0,0)/det);
+				}
+				else if (_n==3) {
+					GiNaC::ex det=ma(0,0)*(ma(1,1)*ma(2,2)-ma(1,2)*ma(2,1))
+						-ma(0,1)*(ma(1,0)*ma(2,2)-ma(1,2)*ma(2,0))
+						+ma(0,2)*(ma(1,0)*ma(2,1)-ma(1,1)*ma(2,0));
+					if (flag & 1) det=subexpression(det);
+					entries.push_back((ma(1,1)*ma(2,2)-ma(1,2)*ma(2,1))/det);
+					entries.push_back((ma(0,2)*ma(2,1)-ma(0,1)*ma(2,2))/det);
+					entries.push_back((ma(0,1)*ma(1,2)-ma(0,2)*ma(1,1))/det);
+					entries.push_back((ma(1,2)*ma(2,0)-ma(1,0)*ma(2,2))/det);
+					entries.push_back((ma(0,0)*ma(2,2)-ma(0,2)*ma(2,0))/det);
+					entries.push_back((ma(0,2)*ma(1,0)-ma(0,0)*ma(1,2))/det);
+					entries.push_back((ma(1,0)*ma(2,1)-ma(1,1)*ma(2,0))/det);
+					entries.push_back((ma(0,1)*ma(2,0)-ma(0,0)*ma(2,1))/det);
+					entries.push_back((ma(0,0)*ma(1,1)-ma(0,1)*ma(1,0))/det);					
+				}
+				
+				GiNaC::lst entries_lst(GiNaC::lst(entries.begin(), entries.end()));
+				return GiNaC::matrix(_n, _n, entries_lst);				
+			}
+			throw_runtime_error("inverse_matrix cannot be applied on a non-matrix/vector object");
+		}
+
+		REGISTER_FUNCTION(inverse_matrix, eval_func(inverse_matrix_eval).set_return_type(GiNaC::return_types::noncommutative))
+
+
+		////////////////
 		
 
 		static ex subexpression_eval(const ex &wrapped)

@@ -3283,15 +3283,18 @@ class Problem(_pyoomph.Problem):
         if self.get_bifurcation_tracking_mode()!="":
             raise RuntimeError("Cannot guess the closest bifurcation type when bifurcation tracking is active")
         if self._last_eigenvalues_m is None or len(self._last_eigenvalues_m)==0 or self._last_eigenvalues_m[eigenvector]==0:
-            if abs(numpy.imag(self._last_eigenvalues[eigenvector]))<1e-7:
-                return "fold"
+            if self._last_eigenvalues_k is None or len(self._last_eigenvalues_k)==0 or abs(self._last_eigenvalues_k[eigenvector])<1e-7:
+                if abs(numpy.imag(self._last_eigenvalues[eigenvector]))<1e-7:
+                    return "fold"
+                else:
+                    return "hopf"
             else:
-                return "hopf"
+                return "cartesian_normal_mode"
         else:
             return "azimuthal"
 
 
-    def activate_bifurcation_tracking(self,parameter:Union[str,_pyoomph.GiNaC_GlobalParam],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None):
+    def activate_bifurcation_tracking(self,parameter:Union[str,_pyoomph.GiNaC_GlobalParam],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal","cartesian_normal_mode"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None,cartesian_wavenumber_k:Optional[ExpressionOrNum]=None):
         """
         Activates bifurcation tracking for the specified parameter and bifurcation type. Subsequent calls of solve(...) and arclength_continuation(...) will then track the bifurcation.
 
@@ -3409,7 +3412,7 @@ class Problem(_pyoomph.Problem):
             self._start_bifurcation_tracking(parameter,bifurcation_type,blocksolve,numpy.real(eigenvector),[],0.0,{}) #type:ignore
         elif bifurcation_type=="azimuthal":
             if self._azimuthal_mode_param_m is None:
-                raise RuntimeError("Cannot use azimuthal bifurcation tracking if not called define_problem_for_axial_symmetry_breaking_investigation() before")
+                raise RuntimeError("Cannot use azimuthal bifurcation tracking if not called setup_for_stability_analysis(azimuthal_stability=True) before")
             if azimuthal_mode is None:
                 # Try to get the most unstable mode
                 if self._last_eigenvalues_m is None or len(self._last_eigenvalues_m)==0:
@@ -3466,6 +3469,61 @@ class Problem(_pyoomph.Problem):
             # In the bifurcation tracking, we just negate omega, for the very same result
             self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), -omega,contribs) #type:ignore
             self.assembly_handler_pt().set_global_equations_forced_zero(base_zero_dofs,eigen_zero_dofs) #type:ignore
+            
+        elif bifurcation_type=="cartesian_normal_mode":
+            if self._normal_mode_param_k is None:
+                raise RuntimeError("Cannot use Cartesian normal mode bifurcation tracking if not called setup_for_stability_analysis(additional_cartesian_mode=True) before")
+            if cartesian_wavenumber_k is None:
+                # Try to get the most unstable mode
+                if self._last_eigenvalues_k is None or len(self._last_eigenvalues_k)==0:
+                    raise RuntimeError("Must specify cartesian_wavenumber_k or solve an normal mode eigenproblem before")
+                cartesian_wavenumber_k=self._last_eigenvalues_k[0]
+                assert cartesian_wavenumber_k is not None
+            self._normal_mode_param_k.value=cartesian_wavenumber_k
+            if eigenvector is None:
+                if self._last_eigenvalues_k is None or len(self._last_eigenvalues_k) == 0:
+                    raise RuntimeError("Cannot find a good eigenvector guess since you have not calculated any one for wave number "+str(cartesian_wavenumber_k))
+                # Try to find an eigenvector corresponding to this mode
+                eigenindices = numpy.where(numpy.array(self._last_eigenvalues_k)==cartesian_wavenumber_k)[0] #type:ignore
+                if len(eigenindices)==0:
+                    raise RuntimeError("Cannot find a good eigenvector guess since you have not calculated any one for wave number " + str(cartesian_wavenumber_k))
+                eigenvector = self.get_last_eigenvectors()[eigenindices[0]]
+                if omega is None:
+                    omega=numpy.imag(self.get_last_eigenvalues()[eigenindices[0]]) #type:ignore
+            if omega is None:
+                omega = next(iter(self.get_last_eigenvalues()), None)
+            if omega is not None:
+                omega = numpy.imag(omega) #type:ignore
+            else:
+                omega = 0
+
+            # First, we get all equations which must be zero for the base state and on the eigenvector
+            must_reapply_bcs=self._equation_system._before_eigen_solve(self.get_eigen_solver(), normal_k=cartesian_wavenumber_k)
+            if must_reapply_bcs:
+                self.reapply_boundary_conditions() # Equation numbering might have been changed. Update it here!
+                self._last_bc_setting="eigen"
+            base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),0,None) 
+            eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),None,cartesian_wavenumber_k) 
+
+            # These are sets of strings, we must convert them into lists of equations. We reuse the same class as for the eigenproblem
+            def dof_strings_to_global_equations(string_dof_set:Set[str]):
+                from ..solvers.generic import EigenMatrixSetDofsToZero
+                resolver=EigenMatrixSetDofsToZero(self,*string_dof_set)
+                zeromap:Set[int]=set()
+                for d in resolver.doflist:
+                    eqs=resolver.resolve_equations_by_name(d)
+                    zeromap=zeromap.union(eqs)
+                return zeromap
+
+            base_zero_dofs=dof_strings_to_global_equations(base_zero_dofs)
+            eigen_zero_dofs=dof_strings_to_global_equations(eigen_zero_dofs)
+
+
+            contribs={"azimuthal_real_eigen":self._cartesian_normal_mode_stability.real_contribution_name,"azimuthal_imag_eigen":self._cartesian_normal_mode_stability.imag_contribution_name}
+
+            self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), -omega,contribs) #type:ignore
+            self.assembly_handler_pt().set_global_equations_forced_zero(base_zero_dofs,eigen_zero_dofs) #type:ignore            
+            
         else:
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 

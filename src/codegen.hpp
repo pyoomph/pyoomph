@@ -415,13 +415,14 @@ namespace pyoomph
    {
    protected:
       FiniteElementSpace *space;
-      std::vector<BasisFunction *> basis_deriv_x, lagr_deriv_x;
+      std::vector<BasisFunction *> basis_deriv_x, lagr_deriv_x, local_coord_deriv_x;
 
    public:
       BasisFunction(FiniteElementSpace *_space) : space(_space) {}
       virtual ~BasisFunction();
       virtual BasisFunction *get_diff_x(unsigned direction);
       virtual BasisFunction *get_diff_X(unsigned direction);
+      virtual BasisFunction *get_diff_S(unsigned direction);
       virtual std::string to_string();
       virtual const FiniteElementSpace *get_space() const { return space; }
       virtual std::string get_dx_str() const { return "d0x"; }
@@ -438,6 +439,7 @@ namespace pyoomph
       D1XBasisFunction(FiniteElementSpace *_space, unsigned _direction) : BasisFunction(_space), direction(_direction) {}
       virtual BasisFunction *get_diff_x(unsigned direction);
       virtual BasisFunction *get_diff_X(unsigned direction);
+      virtual BasisFunction *get_diff_S(unsigned direction);
       virtual std::string to_string();
       virtual std::string get_dx_str() const { return "d1x" + std::to_string(direction); }
       virtual std::string get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const;
@@ -451,6 +453,16 @@ namespace pyoomph
       D1XBasisFunctionLagr(FiniteElementSpace *_space, unsigned _direction) : D1XBasisFunction(_space, _direction) {}
       virtual std::string to_string();
       virtual std::string get_dx_str() const { return "d1X" + std::to_string(direction); }
+      virtual std::string get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const;
+      virtual std::string get_c_varname(FiniteElementCode *forcode, std::string test_index);
+   };
+
+   class D1XBasisFunctionLocalCoord : public D1XBasisFunctionLagr
+   {
+   public:
+      D1XBasisFunctionLocalCoord(FiniteElementSpace *_space, unsigned _direction) : D1XBasisFunctionLagr(_space, _direction) {}
+      virtual std::string to_string();
+      virtual std::string get_dx_str() const { return "d1S" + std::to_string(direction); }
       virtual std::string get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const;
       virtual std::string get_c_varname(FiniteElementCode *forcode, std::string test_index);
    };

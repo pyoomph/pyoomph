@@ -284,6 +284,7 @@ namespace pyoomph
     extern GiNaC::potential_real_symbol X;
     extern GiNaC::potential_real_symbol Y; // Lagrangian
     extern GiNaC::potential_real_symbol Z;
+    extern GiNaC::potential_real_symbol local_coordinate_1,local_coordinate_2,local_coordinate_3;
     extern GiNaC::potential_real_symbol nx;
     extern GiNaC::potential_real_symbol ny;
     extern GiNaC::potential_real_symbol nz;
@@ -317,6 +318,7 @@ namespace pyoomph
     DECLARE_FUNCTION_1P(transpose)
     DECLARE_FUNCTION_1P(trace)
     DECLARE_FUNCTION_2P(determinant)    
+    DECLARE_FUNCTION_3P(inverse_matrix)    
 
     DECLARE_FUNCTION_4P(minimize_functional_derivative)    
 

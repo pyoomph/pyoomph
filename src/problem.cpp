@@ -1116,6 +1116,11 @@ namespace pyoomph
 			bifurcation_tracking_mode = "azimuthal";
 			this->activate_my_azimuthal_tracking(valptr, omega, ev1, ev2, special_residual_forms);
 		}
+		else if (typus == "cartesian_normal_mode")
+		{
+			bifurcation_tracking_mode = "cartesian_normal_mode";
+			this->activate_my_azimuthal_tracking(valptr, omega, ev1, ev2, special_residual_forms);
+		}		
 		else if (typus == "pitchfork")
 		{
 			bifurcation_tracking_mode = "pitchfork";

@@ -426,6 +426,23 @@ def determinant(M:Expression,n:int=0)->Expression:
 	"""
 	return _pyoomph.GiNaC_determinant(M,Expression(n))
 
+def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True)->Expression:
+	"""
+	Compute the inverse of a matrix expression.
+
+	Parameters:
+		M (Expression): The matrix expression for which to compute the determinant.
+		n (int): Range of the matrix to consider for the inverse. Default is 0 (extract nonzero block), <0 means full matrix, >0 upper left matrix of n x n.
+		use_subexpression_for_det (bool): Flag indicating whether to use a subexpression for the determinant. Default is True.
+  
+
+	Returns:
+		Expression: The symbolical inverse of the matrix expression.
+	"""
+	flags=1 if use_subexpression_for_det else 0
+	return _pyoomph.GiNaC_inverse_matrix(M,Expression(n),Expression(flags))
+
+
 def var_and_test(n: str, tag: List[str] = [], domain: Union[None, str, "FiniteElementCodeGenerator"] = None) -> Tuple[Expression, Expression]:
 	"""
 	Bind a variable of an unknown field the corresponding test function for a given name.

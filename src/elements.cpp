@@ -2428,27 +2428,32 @@ namespace pyoomph
 		my_alloc_or_free(do_alloc, (*buff)->nodal_shape_C2TB, MAX_NODES, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->dx_shape_C2TB, MAX_NODES, MAX_NODAL_DIM);
 		my_alloc_or_free(do_alloc, (*buff)->dX_shape_C2TB, MAX_NODES, MAX_NODAL_DIM);
+		my_alloc_or_free(do_alloc, (*buff)->dS_shape_C2TB, MAX_NODES, MAX_NODAL_DIM);
 
 		my_alloc_or_free(do_alloc, (*buff)->shape_C2, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->nodal_shape_C2, MAX_NODES, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->dx_shape_C2, MAX_NODES, MAX_NODAL_DIM);
 		my_alloc_or_free(do_alloc, (*buff)->dX_shape_C2, MAX_NODES, MAX_NODAL_DIM);
+		my_alloc_or_free(do_alloc, (*buff)->dS_shape_C2, MAX_NODES, MAX_NODAL_DIM);
 
 
 		my_alloc_or_free(do_alloc, (*buff)->shape_C1TB, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->nodal_shape_C1TB, MAX_NODES, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->dx_shape_C1TB, MAX_NODES, MAX_NODAL_DIM);
 		my_alloc_or_free(do_alloc, (*buff)->dX_shape_C1TB, MAX_NODES, MAX_NODAL_DIM);
+		my_alloc_or_free(do_alloc, (*buff)->dS_shape_C1TB, MAX_NODES, MAX_NODAL_DIM);
 
 		my_alloc_or_free(do_alloc, (*buff)->shape_C1, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->nodal_shape_C1, MAX_NODES, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->dx_shape_C1, MAX_NODES, MAX_NODAL_DIM);
 		my_alloc_or_free(do_alloc, (*buff)->dX_shape_C1, MAX_NODES, MAX_NODAL_DIM);
+		my_alloc_or_free(do_alloc, (*buff)->dS_shape_C1, MAX_NODES, MAX_NODAL_DIM);
 
 		my_alloc_or_free(do_alloc, (*buff)->shape_DL, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->nodal_shape_DL, MAX_NODES, MAX_NODES);
 		my_alloc_or_free(do_alloc, (*buff)->dx_shape_DL, MAX_NODES, MAX_NODAL_DIM);
 		my_alloc_or_free(do_alloc, (*buff)->dX_shape_DL, MAX_NODES, MAX_NODAL_DIM);
+		my_alloc_or_free(do_alloc, (*buff)->dS_shape_DL, MAX_NODES, MAX_NODAL_DIM);
 
 		my_alloc_or_free(do_alloc, (*buff)->normal, MAX_NODAL_DIM);
 
@@ -2651,6 +2656,8 @@ namespace pyoomph
 			}
 			if (eleminfo.nodal_coords[i])
 			{
+				for (unsigned int j = 0; j < this->dim(); j++)
+					delete eleminfo.nodal_coords[i][eleminfo.nodal_dim + codeinst->get_func_table()->lagr_dim +j];
 				free(eleminfo.nodal_coords[i]);
 				eleminfo.nodal_coords[i] = NULL;
 			}
@@ -2725,11 +2732,19 @@ namespace pyoomph
 		numfields += functable->numfields_D0 + functable->numfields_ED0;
 		for (unsigned int i = 0; i < eleminfo.nnode; i++)
 		{
-			eleminfo.nodal_coords[i] = (double **)calloc(eleminfo.nodal_dim + functable->lagr_dim, sizeof(double *));
+			oomph::Vector<double> snode(this->dim(),0.0);
+			if (this->dim()>0)
+			{
+				this->local_coordinate_of_node(i,snode);
+			}
+			
+			eleminfo.nodal_coords[i] = (double **)calloc(eleminfo.nodal_dim + functable->lagr_dim +this->dim(), sizeof(double *));
 			for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
 				eleminfo.nodal_coords[i][j] = dynamic_cast<Node *>(node_pt(i))->variable_position_pt()->value_pt(j);
 			for (unsigned int j = 0; j < functable->lagr_dim; j++)
 				eleminfo.nodal_coords[i][eleminfo.nodal_dim + j] = &(dynamic_cast<Node *>(node_pt(i))->xi(j));
+			for (unsigned int j = 0; j < this->dim(); j++)
+				eleminfo.nodal_coords[i][eleminfo.nodal_dim + functable->lagr_dim +j] = new double(snode[j]);
 
 			/*			unsigned numfields=0;
 			//			numfields+=functable->numfields_Lagr; //Lagrangian everywhere
@@ -3687,6 +3702,16 @@ namespace pyoomph
 		{
 			det_Eulerian = 1.0;
 			JLagr = 1.0;
+			for (unsigned l = 0; l < eleminfo.nnode_C2TB; l++)
+			{
+				shape_info->shape_C2TB[l] = 1.0;
+				for (unsigned int i = 0; i < n_dim; i++)
+					shape_info->dx_shape_C2TB[l][i] = 0.0;
+				for (unsigned int i = 0; i < n_lagr; i++)
+					shape_info->dX_shape_C2TB[l][i] = 0.0;
+				for (unsigned int i = 0; i < el_dim; i++)
+					shape_info->dS_shape_C2TB[l][i] = 0.0;
+			}
 			for (unsigned l = 0; l < eleminfo.nnode_C2; l++)
 			{
 				shape_info->shape_C2[l] = 1.0;
@@ -3694,6 +3719,18 @@ namespace pyoomph
 					shape_info->dx_shape_C2[l][i] = 0.0;
 				for (unsigned int i = 0; i < n_lagr; i++)
 					shape_info->dX_shape_C2[l][i] = 0.0;
+				for (unsigned int i = 0; i < el_dim; i++)
+					shape_info->dS_shape_C2[l][i] = 0.0;
+			}
+			for (unsigned l = 0; l < eleminfo.nnode_C1TB; l++)
+			{
+				shape_info->shape_C1TB[l] = 1.0;
+				for (unsigned int i = 0; i < n_dim; i++)
+					shape_info->dx_shape_C1TB[l][i] = 0.0;
+				for (unsigned int i = 0; i < n_lagr; i++)
+					shape_info->dX_shape_C1TB[l][i] = 0.0;
+				for (unsigned int i = 0; i < el_dim; i++)
+					shape_info->dS_shape_C1TB[l][i] = 0.0;
 			}
 			for (unsigned l = 0; l < eleminfo.nnode_C1; l++)
 			{
@@ -3702,6 +3739,8 @@ namespace pyoomph
 					shape_info->dx_shape_C1[l][i] = 0.0;
 				for (unsigned int i = 0; i < n_lagr; i++)
 					shape_info->dX_shape_C1[l][i] = 0.0;
+				for (unsigned int i = 0; i < el_dim; i++)
+					shape_info->dS_shape_C1[l][i] = 0.0;
 			}
 			for (unsigned l = 0; l < eleminfo.nnode_DL; l++)
 			{
@@ -3710,6 +3749,8 @@ namespace pyoomph
 					shape_info->dx_shape_DL[l][i] = 0.0;
 				for (unsigned int i = 0; i < n_lagr; i++)
 					shape_info->dX_shape_DL[l][i] = 0.0;
+				for (unsigned int i = 0; i < el_dim; i++)
+					shape_info->dS_shape_DL[l][i] = 0.0;
 			}
 			for (unsigned l = 0; l < n_node; l++)
 			{
@@ -3820,9 +3861,12 @@ namespace pyoomph
 					shape_info->dx_shape_C2TB[l][i] = 0.0;
 					for (unsigned b = 0; b < el_dim; b++)
 					{
-						shape_info->dx_shape_C2TB[l][i] += gab_gai[b][i] * dpsids(l, b);
+						shape_info->dx_shape_C2TB[l][i] += gab_gai[b][i] * dpsids(l, b);						
 					}
 				}
+				
+				for (unsigned int i=0; i < this->dim();i++) shape_info->dS_shape_C2TB[l][i] =  dpsids(l, i);
+
 				for (unsigned int i = 0; i < n_lagr; i++)
 				{
 					shape_info->dX_shape_C2TB[l][i] = 0.0;
@@ -3902,6 +3946,9 @@ namespace pyoomph
 						shape_info->dx_shape_C2[l][i] += gab_gai[b][i] * dpsids(l, b);
 					}
 				}
+
+				for (unsigned int i=0; i < this->dim();i++) shape_info->dS_shape_C2[l][i] =  dpsids(l, i);
+
 				for (unsigned int i = 0; i < n_lagr; i++)
 				{
 					shape_info->dX_shape_C2[l][i] = 0.0;
@@ -3974,6 +4021,9 @@ namespace pyoomph
 						shape_info->dx_shape_C1TB[l][i] += gab_gai[b][i] * dpsids(l, b);
 					}
 				}
+
+				for (unsigned int i=0; i < this->dim();i++) shape_info->dS_shape_C1TB[l][i] =  dpsids(l, i);
+
 				for (unsigned int i = 0; i < n_lagr; i++)
 				{
 					shape_info->dX_shape_C1TB[l][i] = 0.0;
@@ -4045,6 +4095,9 @@ namespace pyoomph
 						shape_info->dx_shape_C1[l][i] += gab_gai[b][i] * dpsids(l, b);
 					}
 				}
+
+				for (unsigned int i=0; i < this->dim();i++) shape_info->dS_shape_C1[l][i] =  dpsids(l, i);
+
 				for (unsigned int i = 0; i < n_lagr; i++)
 				{
 					shape_info->dX_shape_C1[l][i] = 0.0;
@@ -4111,6 +4164,9 @@ namespace pyoomph
 						shape_info->dx_shape_DL[l][i] += gab_gai[b][i] * dpsids(l, b);
 					}
 				}
+
+				for (unsigned int i=0; i < this->dim();i++) shape_info->dS_shape_DL[l][i] =  dpsids(l, i);
+
 				for (unsigned int i = 0; i < n_lagr; i++)
 				{
 					shape_info->dX_shape_DL[l][i] = 0.0;
@@ -4433,6 +4489,7 @@ namespace pyoomph
 			shape_info->shape_Pos = shape_info->shape_C2TB;
 			shape_info->dx_shape_Pos = shape_info->dx_shape_C2TB;
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C2TB;
+			shape_info->dS_shape_Pos = shape_info->dS_shape_C2TB;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C2TB;
 		}
 		else if (this->eleminfo.nnode_C2)
@@ -4440,6 +4497,7 @@ namespace pyoomph
 			shape_info->shape_Pos = shape_info->shape_C2;
 			shape_info->dx_shape_Pos = shape_info->dx_shape_C2;
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C2;
+			shape_info->dS_shape_Pos = shape_info->dS_shape_C2;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C2;
 		}
 		else if (required_C1TB)
@@ -4447,6 +4505,7 @@ namespace pyoomph
 			shape_info->shape_Pos = shape_info->shape_C1TB;
 			shape_info->dx_shape_Pos = shape_info->dx_shape_C1TB;
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C1TB;
+			shape_info->dS_shape_Pos = shape_info->dS_shape_C1TB;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C1TB;		
 		}		
 		else
@@ -4455,6 +4514,7 @@ namespace pyoomph
 			shape_info->shape_Pos = shape_info->shape_C1;
 			shape_info->dx_shape_Pos = shape_info->dx_shape_C1;
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C1;
+			shape_info->dS_shape_Pos = shape_info->dS_shape_C1;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C1;
 		}
 	}

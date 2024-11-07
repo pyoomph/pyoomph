@@ -896,6 +896,14 @@ class BaseEquations(_pyoomph.Equations):
                 return vector([vr("lagrangian_x"), vr("lagrangian_y")])
             elif dim == 3:
                 return vector([vr("lagrangian_x"), vr("lagrangian_y"), vr("lagrangian_z")])
+        elif name == "local_coordinate":
+            dim = cg.get_element_dimension()
+            if dim == 1:
+                return vector([vr("local_coordinate_1")])
+            elif dim == 2:
+                return vector([vr("local_coordinate_1"), vr("local_coordinate_2")])
+            elif dim == 3:
+                return vector([vr("local_coordinate_1"), vr("local_coordinate_2"), vr("local_coordinate_3")])            
         elif name == "normal":
             return cg.get_coordinate_system().get_normal_vector_or_component(cg,component=None,only_base_mode=only_base_mode,only_perturbation_mode=only_perturbation_mode,where=where)
             dim = cg.get_nodal_dimension()
@@ -2150,6 +2158,8 @@ class ODEEquations(BaseEquations):
                 name == "coordinate_y" or name == "coordinate_z":
             return _pyoomph.Expression(0)
         elif name == "lagrangian_x" or name == "lagrangian_y" or name == "langrangian_z":
+            return _pyoomph.Expression(0)
+        elif name == "local_coordinate_1" or name == "local_coordinate_2" or name == "local_coordinate_3":
             return _pyoomph.Expression(0)
         else:
             return super(ODEEquations, self).expand_additional_field(name, dimensional, expression,
