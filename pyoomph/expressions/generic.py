@@ -823,7 +823,7 @@ def identity_matrix(dim: int = -1) -> Expression:
 
 
 def dyadic(a: Expression, b: Expression) -> Expression:
-	"""
+    """
 	Compute the dyadic product of two expressions.
 
 	Args:
@@ -832,8 +832,8 @@ def dyadic(a: Expression, b: Expression) -> Expression:
 
 	Returns:
 		Expression: The dyadic product of `a` and `b`.
-	"""
-	return matrix([[a[i] * b[j] for j in range(3)] for i in range(3)])
+    """
+    return matrix([[a[i] * b[j] for j in range(3)] for i in range(3)])
 
 
 def unit_vector(dir: Union[int, Literal["x", "y", "z"]]) -> Expression:

@@ -579,7 +579,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 expr=_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(0))
             
         
-        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z"}
+        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z","local_coordinate_1","local_coordinate_2","local_coordinate_3"}
         if not code._coordinates_as_dofs:
             ignore_fields=ignore_fields.union({"coordinate_x","coordinate_y","coordinate_z","mesh_x","mesh_y","mesh_z"})
         if fieldname in ignore_fields:
@@ -736,34 +736,58 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 #raise RuntimeError("Not implemented")
                 res=diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0) #+ mm * (    )
                 mmterm=0
-                mmterm+=0+I*k*Xk*diff(arg[0], self.xadd) + I*k*Yk*diff(arg[1], self.xadd) 
-
-                mmterm+=0-I*k*Xk*diff(arg[2], x)
-                mmterm+=0-I*k*Yk*diff(arg[2], y)
-
-                if True: # Will matter at maximum for a test function
-                    mmterm+=0-I*k*Xk*t[0]**2 *diff(arg[0], self.xadd)
-                    mmterm+=0-I*k*Xk*t[0]*t[1]*diff(arg[1], self.xadd)
-                    mmterm+=0-I*k*Yk*t[0]*t[1]*diff(arg[0], self.xadd)
-                    mmterm+=0-I*k*Yk*t[1]**2*diff(arg[1], self.xadd)
-                
-                # Until here, it is nicely symmetric, but wrong eigenvalue
-                if True:
-                    mmterm+=0- diff(Xk, x)*diff(arg[0],x) 
-                    mmterm+=0- diff(Yk, y)*diff(arg[1],y)
-                    mmterm+=0- diff(Yk, x)*diff(arg[1], x)
-                    mmterm+=0- diff(Xk, y)*diff(arg[0], y)
                 if False:
-                    
-                     
-                    mmterm+=0- diff(Yk, y)*diff(arg[1],y)
+                    mmterm+=0+I*k*Xk*diff(arg[0], self.xadd) + I*k*Yk*diff(arg[1], self.xadd) 
 
-                    mmterm+=- 1*diff(Xk, x)*diff(arg[1], y) 
-                    mmterm+=- 1*diff(Yk, y)*diff(arg[0],x)                 
-                #mmterm+=- 2*diff(Xk, x)*diff(arg[0], x) 
-                #mmterm+=- 2*diff(X01(s1), s1)*diff(X02(s1), s1)*diff(Xk, s1)*diff(arg[1], s1) 
-                #mmterm+=- 2*diff(X01(s1), s1)*diff(X02(s1), s1)*diff(Yk, s1)*diff(arg[0], s1) 
-                #mmterm+=- 2*diff(Yk, y)*diff(arg[1], y)
+                    mmterm+=0-I*k*Xk*diff(arg[2], x)
+                    mmterm+=0-I*k*Yk*diff(arg[2], y)
+
+                    if True: # Will matter at maximum for a test function
+                        mmterm+=0-I*k*Xk*t[0]**2 *diff(arg[0], self.xadd)
+                        mmterm+=0-I*k*Xk*t[0]*t[1]*diff(arg[1], self.xadd)
+                        mmterm+=0-I*k*Yk*t[0]*t[1]*diff(arg[0], self.xadd)
+                        mmterm+=0-I*k*Yk*t[1]**2*diff(arg[1], self.xadd)
+                    
+                    # Until here, it is nicely symmetric, but wrong eigenvalue
+                    if True:
+                        mmterm+=0- diff(Xk, x)*diff(arg[0],x) 
+                        mmterm+=0- diff(Yk, y)*diff(arg[1],y)
+                        mmterm+=0- diff(Yk, x)*diff(arg[1], x)
+                        mmterm+=0- diff(Xk, y)*diff(arg[0], y)
+                    if False:
+                        
+                        
+                        mmterm+=0- diff(Yk, y)*diff(arg[1],y)
+
+                        mmterm+=- 1*diff(Xk, x)*diff(arg[1], y) 
+                        mmterm+=- 1*diff(Yk, y)*diff(arg[0],x)                 
+                    #mmterm+=- 2*diff(Xk, x)*diff(arg[0], x) 
+                    #mmterm+=- 2*diff(X01(s1), s1)*diff(X02(s1), s1)*diff(Xk, s1)*diff(arg[1], s1) 
+                    #mmterm+=- 2*diff(X01(s1), s1)*diff(X02(s1), s1)*diff(Yk, s1)*diff(arg[0], s1) 
+                    #mmterm+=- 2*diff(Yk, y)*diff(arg[1], y)
+                
+                elif False:
+                    # Duarte's try
+                    s1=var("local_coordinate_1")
+                    X0=self.map_to_zero_epsilon(var("coordinate_x"))
+                    Y0=self.map_to_zero_epsilon(var("coordinate_y"))
+                    lldenom=1/(diff(X0,s1)**2+diff(Y0,s1)**2)
+                    
+                    #n=[n[0],-n[1]]
+                    mmterm+=I*k*diff(arg[0],self.xadd)*(Xk*(1-n[1]**2)-Yk*n[0]*n[1])
+                    mmterm+=I*k*diff(arg[1],self.xadd)*(Yk*(1-n[0]**2)-Xk*n[0]*n[1])
+                    mmterm+=-I*k*lldenom*(Xk*diff(X0,s1)*diff(arg[2],s1)-Yk*diff(Y0,s1)*diff(arg[2],s1))
+                    
+                    mmterm+=lldenom*(diff(arg[0],s1)*(diff(Xk,s1)*(1-2*n[1]**2)-2*n[0]*n[1]*diff(Yk,s1)))
+                    mmterm+=lldenom*(diff(arg[1],s1)*(diff(Yk,s1)*(1-2*n[0]**2)-2*n[0]*n[1]*diff(Xk,s1)))
+                else:
+                    Xk1,Xk2=pcoords[0],pcoords[1]
+                    sadd=self.xadd
+                    u1,u2,u3=arg[0],arg[1],arg[2]
+                    X01=self.map_to_zero_epsilon(var("coordinate_x"))
+                    X02=self.map_to_zero_epsilon(var("coordinate_y"))
+                    s1=var("local_coordinate_1")
+                    mmterm+=I*k*Xk1*diff(u1, sadd) + I*k*Xk2*diff(u2, sadd) - I*k*Xk1*diff(X01, s1)**2*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(X02, s1)*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X01, s1)*diff(X02, s1)*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)**2*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + 2*diff(0, s1)*diff(X01, s1)**2*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X02, s1)**2*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)**2*diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk1, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk2, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X02, s1)**2*diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - diff(0, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - diff(0, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2)
                 res+=mm*mmterm
                 return res
             elif edim==2:
@@ -1490,6 +1514,9 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
         #: Use subexpressions for the transformations
         self.use_subexpressions = True	
         
+        self._values_to_substitute = {} # Values to subsitute at the end of an expansion
+        
+        self._dx_integration_factor=1
         # Cache for the covariant basis vectors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a list of basis vectors        
         self._cached_basis_vectors = {}
         # Cache for the covariant metric tensors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a g_ab
@@ -1507,8 +1534,29 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
         # This function is only used to weight error estimates in the mesh adaptation
         return Expression(1)
 
-	# The following functions usually do not need any overriding
 
+
+	# The following functions usually do not need any overriding
+ 
+    def substitute_values_for_additional_local_coordinates(self,expr:Expression)->Expression:
+        import _pyoomph
+        for k,v in self._values_to_substitute.items():
+            expr=_pyoomph.GiNaC_SymSubs(expr,k,v)
+        return expr 
+
+    def add_additional_parametric_variable(self, name: str,value_to_substitute:Optional[ExpressionOrNum]=0,dx_integration_factor:Optional[ExpressionOrNum]=None) -> Expression:
+        """Add a new local coordinate to the coordinate system. This can be e.g. phi in an axisymmetric coordinate system
+
+        """
+        import _pyoomph
+        res_symb=_pyoomph.GiNaC_new_symbol(name)
+        self.additional_local_coordinates.append(res_symb)
+        if value_to_substitute is not None:
+            value_to_substitute=Expression(value_to_substitute)
+            self._values_to_substitute[res_symb]=value_to_substitute
+        if dx_integration_factor is not None:
+            self._dx_integration_factor*=dx_integration_factor
+        return res_symb
 
     def volumetric_scaling(self, spatial_scale:ExpressionOrNum, elem_dim:int)->ExpressionOrNum:
         eaug=self.get_augmented_edim(None,elem_dim)
@@ -1521,7 +1569,7 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
             J=1        
         else:
             g_ab=self.get_covariant_metric_tensor(nodal_dim,edim,lagrangian,False) # Cannot do it with scales here=> Can mess up the sqrt
-            g=determinant(g_ab)                
+            g=self.substitute_values_for_additional_local_coordinates(determinant(g_ab))
             J=square_root(g)
             if self.use_subexpressions:
                 J=subexpression(J)                                
@@ -1529,7 +1577,7 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
             vs=self.volumetric_scaling(spatial_scale,edim)
         else:
             vs=1
-        return vs*J * nondim("dx_unity") 
+        return self._dx_integration_factor*vs*J * nondim("dx_unity") 
 		
         
         
@@ -1550,7 +1598,7 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
         return [self.get_local_coordinate(i,ndim,edim,lagrangian,dimensional) for i in range(eaug)]
     
     def get_augmented_edim(self, ndim:Optional[int],edim: int) -> int:
-        return edim
+        return edim+len(self.additional_local_coordinates)
 
     def get_covariant_basis_vectors(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> List[Expression]:
         if (lagrangian,dimensional,ndim, edim) in self._cached_basis_vectors:
@@ -1563,7 +1611,7 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
         x=self.get_real_position_vector_from_mesh_coordinates(mesh_coord,ndim,edim,lagrangian,dimensional)
         t=[diff(x,s[i]) for i in range(edim)] # covariant basis vector        
         for sadd in self.additional_local_coordinates:
-            t.append([diff(x,sadd)])
+            t.append(diff(x,sadd))
         if len(t)!=self.get_augmented_edim(ndim,edim):
             raise RuntimeError("The number of basis vectors does not match the augmented dimension. Make sure that the length of additional_local_coordinates is agrees with the augmented dimension, which must be implemented via the get_augmented_edim method.")
         self._cached_basis_vectors[(lagrangian,dimensional,ndim, edim)] = t
@@ -1623,7 +1671,7 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
         eaug=self.get_augmented_edim(ndim,edim)
         s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
         # TODO: This is likely not right!
-        return sum([g_contra[a,b]*t[a]*diff(arg,s[b]) for a in range(eaug) for b in range(eaug)])
+        return self.substitute_values_for_additional_local_coordinates(sum([g_contra[a,b]*t[a]*diff(arg,s[b]) for a in range(eaug) for b in range(eaug)]))
     
     def vector_gradient(self, arg: List[Expression], ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> List[Expression]:
         g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
@@ -1631,13 +1679,13 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
         eaug=self.get_augmented_edim(ndim,edim)
         s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
         # TODO: This is likely not right!
-        return sum([g_contra[a,b]*dyadic(t[a],diff(arg,s[b])) for a in range(eaug) for b in range(eaug)])
+        return self.substitute_values_for_additional_local_coordinates(sum([g_contra[a,b]*dyadic(t[a],diff(arg,s[b])) for a in range(eaug) for b in range(eaug)]))
     
     def vector_divergence(self, arg: Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> Expression:
         g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
         t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,with_scales)
         eaug=self.get_augmented_edim(ndim,edim)
         s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
-        return sum([g_contra[a,b]*dot(t[a],diff(arg,s[b])) for a in range(eaug) for b in range(eaug)])
+        return self.substitute_values_for_additional_local_coordinates(sum([g_contra[a,b]*dot(t[a].evalm(),diff(arg,s[b]).evalm()) for a in range(eaug) for b in range(eaug)]))
     
 
