@@ -63,6 +63,7 @@ namespace pyoomph
       unsigned history_step=0; // For evaluations in past
       bool no_jacobian = false;
       bool no_hessian = false;
+      bool simple_unity_integral = false;  // If true, dx []=J=sqrt(det(g))] from the element won't be considered
 
       bool is_lagrangian() const { return lagrangian; }
       bool is_derived() const { return derived; }
@@ -646,7 +647,7 @@ namespace pyoomph
       std::set<std::string> ignore_assemble_residuals; // E.g. for azimuthal eigenvalue matrices. Residual is not used => don't assemble
       std::map<std::string,std::set<int> > remove_underived_modes; // If in the Jacobian still modes are present that are not derived from interpolated_... to shape_..., they are removed. They can appear in eigenderivatives
       std::map<std::string,int> derive_jacobian_by_expansion_mode; // Derive the Jacobian by the given expansion mode only
-      SpatialIntegralSymbol dx, dX;
+      SpatialIntegralSymbol dx, dX, dx_unity;
       ElementSizeSymbol elemsize_Eulerian, elemsize_Lagrangian, elemsize_Eulerian_Cart, elemsize_Lagrangian_Cart;
       NodalDeltaSymbol nodal_delta;
       std::vector<SpatialIntegralSymbol> dx_derived, dx_derived_lshape2_for_Hessian;
@@ -810,7 +811,7 @@ namespace pyoomph
       virtual void write_generic_RJM(std::ostream &os, std::string funcname, GiNaC::ex resi, bool with_hang);     // Generic Residual/Jacobian/Mass matrix (also for parameter derivatives)
       virtual bool write_generic_Hessian(std::ostream &os, std::string funcname, GiNaC::ex resi, bool with_hang); // Generic Hessian vector product
       virtual void write_code(std::ostream &os);
-      virtual GiNaC::ex get_dx(bool lagrangian);
+      virtual GiNaC::ex get_dx(bool lagrangian,bool unity_only=false);      
       virtual GiNaC::ex get_element_size_symbol(bool lagrangian, bool with_coordsys);
       virtual GiNaC::ex get_integral_dx(bool use_scaling, bool lagrangian, CustomCoordinateSystem *coordsys) { return get_dx(lagrangian); }
       virtual GiNaC::ex get_element_size(bool use_scaling, bool lagrangian, bool with_coordsys, CustomCoordinateSystem *coordsys) { return get_element_size_symbol(lagrangian, with_coordsys); }

@@ -929,11 +929,13 @@ class BaseEquations(_pyoomph.Equations):
             #return cg._get_normal_component(2)
             return cg.get_coordinate_system().get_normal_vector_or_component(cg,component=2,only_base_mode=only_base_mode,only_perturbation_mode=only_perturbation_mode,where=where)
         elif name == "dx":
-            return _pyoomph.FiniteElementCode._get_dx(cg, False)
+            return _pyoomph.FiniteElementCode._get_dx(cg, False,False)
+        elif name == "dx_unity":
+            return _pyoomph.FiniteElementCode._get_dx(cg, False,True)
         elif name == "_nodal_delta":
             return _pyoomph.FiniteElementCode._get_nodal_delta(cg)
         elif name == "dX":
-            return _pyoomph.FiniteElementCode._get_dx(cg, True)
+            return _pyoomph.FiniteElementCode._get_dx(cg, True,False)
         elif name == "element_size_Eulerian":
             return _pyoomph.FiniteElementCode._get_element_size_symbol(cg,False,True)*(cg.get_coordinate_system().volumetric_scaling(scale_factor("spatial"),self.get_element_dimension()) if dimensional else 1)
         elif name == "cartesian_element_size_Eulerian":

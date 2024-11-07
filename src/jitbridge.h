@@ -170,6 +170,7 @@ typedef struct JITShapeInfo
   unsigned int n_int_pt;             // Number of integration points
   double int_pt_weight;            // Eulerian weight at the current integration point
   double int_pt_weight_Lagrangian; // Lagrangian weight at the current integration point
+  double int_pt_weight_unity;            // Weight at the current integration point in s space, i.e. without any mapping [ sqrt(det(g_ab)) ]
   double ARRAY_DECL_NNODE(ARRAY_DECL_NDIM(int_pt_weights_d_coords)); // Weights derived by coordinates, [i_dim,l_node], i.e. w*dJ_Eulerian/dX^l_i
   double ****int_pt_weights_d2_coords; // Weights derived by coordinates, [i_dim,j_dim,l_node_i,l_node_j], i.e. w*d2J_Eulerian/(dX^l_i*dX^l_j)
   

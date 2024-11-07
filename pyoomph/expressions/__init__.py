@@ -426,6 +426,7 @@ def determinant(M:Expression,n:int=0)->Expression:
 	"""
 	return _pyoomph.GiNaC_determinant(M,Expression(n))
 
+
 def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True)->Expression:
 	"""
 	Compute the inverse of a matrix expression.

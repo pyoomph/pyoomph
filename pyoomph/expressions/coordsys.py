@@ -1465,3 +1465,179 @@ class RadialSymmetricCoordinateSystem(BaseCoordinateSystem):
 
     def directional_tensor_derivative(self,T:Expression,direct:Expression,lagrangian:bool,dimensional:bool,ndim:int,edim:int)->Expression:
         raise RuntimeError("Implement the directional tensor derivative for this coordinate system")
+
+
+
+
+
+
+
+
+class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
+    """A coordinate system that uses differential geometry to define grad, div, etc.
+    This is just a base class. Please inherit from this class and implement at least the method :py:meth:`~pyoomph.expressions.coordsys.get_real_position_vector_from_mesh_coordinates`.
+    """
+    def __init__(self):
+        super().__init__()
+        #: Select the maximum supported nodal dimension of the mesh
+        self.max_nodal_dimension = 3
+        #: Select suffixes of the vector components
+        self.vector_component_suffixes = ["x", "y", "z"]
+        #: Additional vector components (used for e.g. additional normal mode)
+        self.additional_vector_component_suffixes = []
+        #: Additional local coordinates (used for e.g. additional normal mode)
+        self.additional_local_coordinates=[]        
+        #: Use subexpressions for the transformations
+        self.use_subexpressions = True	
+        
+        # Cache for the covariant basis vectors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a list of basis vectors        
+        self._cached_basis_vectors = {}
+        # Cache for the covariant metric tensors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a g_ab
+        self._cached_covariant_metrics = {}
+        # Cache for the contravariant metric tensors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a g^ab
+        self._cached_contravariant_metrics = {}
+
+
+	# The following functions must or should be overridden
+
+    def get_real_position_vector_from_mesh_coordinates(self, mesh_xs: Expression, ndim: int, edim: int,dimensional:bool,lagrangian:bool) -> Expression:
+        raise NotImplementedError("Please implement the position of the real position vector in the local coordinate system by overriding the method get_real_position_vector_from_mesh_coordinates of your class "+str(self.__class__))
+
+    def geometric_jacobian(self) -> Expression:
+        # This function is only used to weight error estimates in the mesh adaptation
+        return Expression(1)
+
+	# The following functions usually do not need any overriding
+
+
+    def volumetric_scaling(self, spatial_scale:ExpressionOrNum, elem_dim:int)->ExpressionOrNum:
+        eaug=self.get_augmented_edim(None,elem_dim)
+        return spatial_scale ** (eaug)
+
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:            
+        from ..expressions import determinant,square_root
+        eaug=self.get_augmented_edim(nodal_dim,edim)			
+        if eaug==0:
+            J=1        
+        else:
+            g_ab=self.get_covariant_metric_tensor(nodal_dim,edim,lagrangian,False) # Cannot do it with scales here=> Can mess up the sqrt
+            g=determinant(g_ab)                
+            J=square_root(g)
+            if self.use_subexpressions:
+                J=subexpression(J)                                
+        if with_scale:
+            vs=self.volumetric_scaling(spatial_scale,edim)
+        else:
+            vs=1
+        return vs*J * nondim("dx_unity") 
+		
+        
+        
+    def vector_gradient_dimension(self, basedim:int, lagrangian:bool=False)->int:
+        # Just alwas 3
+        return 3
+    
+    def get_local_coordinate(self, i:int, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> List[Expression]:
+        if i<edim:            
+            return nondim("local_coordinate_"+str(i+1))
+        elif i<edim+len(self.additional_local_coordinates):
+            return self.additional_local_coordinates[i-edim]
+        else:
+            raise RuntimeError("The local coordinate index is out of bounds.")
+        
+    def get_all_local_coordinates(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> List[Expression]:
+        eaug=self.get_augmented_edim(ndim,edim)
+        return [self.get_local_coordinate(i,ndim,edim,lagrangian,dimensional) for i in range(eaug)]
+    
+    def get_augmented_edim(self, ndim:Optional[int],edim: int) -> int:
+        return edim
+
+    def get_covariant_basis_vectors(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> List[Expression]:
+        if (lagrangian,dimensional,ndim, edim) in self._cached_basis_vectors:
+            return self._cached_basis_vectors[(lagrangian,dimensional,ndim, edim)]
+        s = var("local_coordinate")  # Local coordinate
+        if dimensional:
+            mesh_coord=var("lagrangian" if lagrangian else "coordinate")
+        else:
+            mesh_coord=nondim("lagrangian" if lagrangian else "coordinate")
+        x=self.get_real_position_vector_from_mesh_coordinates(mesh_coord,ndim,edim,lagrangian,dimensional)
+        t=[diff(x,s[i]) for i in range(edim)] # covariant basis vector        
+        for sadd in self.additional_local_coordinates:
+            t.append([diff(x,sadd)])
+        if len(t)!=self.get_augmented_edim(ndim,edim):
+            raise RuntimeError("The number of basis vectors does not match the augmented dimension. Make sure that the length of additional_local_coordinates is agrees with the augmented dimension, which must be implemented via the get_augmented_edim method.")
+        self._cached_basis_vectors[(lagrangian,dimensional,ndim, edim)] = t
+        return t
+    
+    def get_covariant_metric_tensor(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> Expression:
+        if (lagrangian,dimensional,ndim, edim) in self._cached_covariant_metrics:
+            return self._cached_covariant_metrics[(lagrangian,dimensional,ndim, edim)]
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,dimensional)
+        eaug=self.get_augmented_edim(ndim,edim)
+        g_covar=matrix([[dot(t[i],t[j]) for j in range(eaug)] for i in range(eaug)])
+        self._cached_covariant_metrics[(lagrangian,dimensional,ndim, edim)] = g_covar
+        return g_covar
+        
+    def get_contravariant_metric_tensor(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> Expression:
+        
+        from ..expressions import inverse_matrix # Don't know why I have to import it manually here
+        
+        if (lagrangian,dimensional,ndim, edim) in self._cached_contravariant_metrics:
+            return self._cached_contravariant_metrics[(lagrangian,dimensional,ndim, edim)]
+        g_covar=self.get_covariant_metric_tensor(ndim,edim,lagrangian,dimensional)
+        g_contra=inverse_matrix(g_covar,n=self.get_augmented_edim(ndim,edim),use_subexpression_for_det=self.use_subexpressions)
+        if self.use_subexpressions:
+            g_contra=subexpression(g_contra)
+        self._cached_contravariant_metrics[(lagrangian,dimensional,ndim, edim)] = g_contra
+        return g_contra
+        
+
+    def define_vector_field(self, name: str, space: "FiniteElementSpaceEnum", ndim: int, element: "Equations") -> Tuple[List[Expression], List[Expression], List[str]]:
+        namelist: List[str] = []
+        if ndim >= self.max_nodal_dimension:
+            raise RuntimeError(
+                "Cannot use a this coordinate system in "+str(ndim)+"D")
+        for i in range(ndim):
+            namelist.append(name + "_" + self.vector_component_suffixes[i])
+        for v in self.additional_vector_component_suffixes:
+            namelist.append(name + "_" + v)  # TODO: Axisymmetric?
+
+        v: List[Expression] = []
+        vtest: List[Expression] = []
+        s = scale_factor(name)
+        S = test_scale_factor(name)
+        for i, f in enumerate(namelist):
+            if i >= ndim+1:
+                break
+            element.set_scaling(**{f: name})
+            vc = element.define_scalar_field(f, space)
+            vc = var(f)
+            v.append(vc / s)
+            element.set_test_scaling(**{f: name})
+            vtest.append(testfunction(f) / S)
+        return v, vtest, namelist
+
+    def scalar_gradient(self, arg: Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> Expression:
+        g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,with_scales)
+        eaug=self.get_augmented_edim(ndim,edim)
+        s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
+        # TODO: This is likely not right!
+        return sum([g_contra[a,b]*t[a]*diff(arg,s[b]) for a in range(eaug) for b in range(eaug)])
+    
+    def vector_gradient(self, arg: List[Expression], ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> List[Expression]:
+        g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,with_scales)
+        eaug=self.get_augmented_edim(ndim,edim)
+        s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
+        # TODO: This is likely not right!
+        return sum([g_contra[a,b]*dyadic(t[a],diff(arg,s[b])) for a in range(eaug) for b in range(eaug)])
+    
+    def vector_divergence(self, arg: Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> Expression:
+        g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,with_scales)
+        eaug=self.get_augmented_edim(ndim,edim)
+        s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
+        return sum([g_contra[a,b]*dot(t[a],diff(arg,s[b])) for a in range(eaug) for b in range(eaug)])
+    
+

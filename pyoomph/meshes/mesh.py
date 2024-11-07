@@ -950,7 +950,7 @@ class MeshFromTemplateBase(BaseMesh):
                     icg._set_lagrangian_dimension(
                         self._codegen.get_lagrangian_dimension())
                     icg._coordinate_space = self._codegen._coordinate_space
-                    icg._do_define_fields(self._codegen.dimension - 1)
+                    icg._do_define_fields(self._codegen.dimension - 2)
 
     def _compile_bulk_equations(self) -> _pyoomph.DynamicBulkElementInstance:
         assert self._problem is not None

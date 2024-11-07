@@ -4527,6 +4527,7 @@ namespace pyoomph
 		double JLagr;
 		double J = fill_shape_info_at_s(s, ipt, required_shapes, JLagr, flag);
 		double w = integral_pt()->weight(ipt);
+		shape_info->int_pt_weight_unity= w;
 		shape_info->int_pt_weight = w * J;
 		shape_info->int_pt_weight_Lagrangian = w * JLagr;
 	}
