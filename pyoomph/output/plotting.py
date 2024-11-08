@@ -2735,6 +2735,7 @@ class MatplotlibPlotter(BasePlotter):
             # Enforce the image size to match it
             dx=self.xmax-self.xmin
             dy=self.ymax-self.ymin
+            #print("DX and DY",dx,dy,self.xmax,self.xmin,self.xmax-self.xmin)
             RX=self.image_size[0]/dx
             RY = self.image_size[1] / dy
 

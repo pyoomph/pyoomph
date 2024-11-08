@@ -263,7 +263,8 @@ namespace GiNaC
   template <>
   GiNaC::ex GiNaCFakeExponentialMode::derivative(const GiNaC::symbol &s) const;
 
-  typedef symbol potential_real_symbol;
+  //typedef symbol potential_real_symbol;
+  typedef realsymbol potential_real_symbol;
 }
 
 namespace pyoomph

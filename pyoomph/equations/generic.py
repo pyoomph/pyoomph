@@ -677,7 +677,10 @@ class IntegralObservables(Equations):
         else:
             dx=self.get_dx(coordsys=self._coordinante_system)
         for k,v in self.integral_observables.items():
+            #import _pyoomph
+            #_pyoomph.set_verbosity_flag(1)
             self.add_integral_function(k, v * dx)
+            #_pyoomph.set_verbosity_flag(0)
         for k,v in self.dependent_funcs.items():
             self.add_dependent_integral_function(k,v)
 

@@ -656,7 +656,6 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
 
     def scalar_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
-        # TODO MOVING COORDINATES
         res:List[ExpressionOrNum] = []
         dcoords=self.map_to_zero_epsilon(self.get_coords(3, with_scales, lagrangian))
         pcoords=self.map_to_first_order_epsilon(self.get_coords(3, with_scales, lagrangian,mesh_coords=True))
@@ -685,25 +684,13 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 res[2]+=mm*( I*k*(-Xk*diff(arg, x) - Yk*diff(arg, y)) )
             elif ndim==1:
                 res[0]+=mm*(-diff(Xk, x)*diff(arg, x))
-                #res[1]+=mm*(-I*k*Xk*diff(arg, x)) # XXX Not according to Duarte
+                res[1]+=mm*(-I*k*Xk*diff(arg, x)) # XXX Not according to Duarte
                 pass
             elif ndim==0:
                 pass
             else:
                 raise RuntimeError("Not implemented")
-        if not lagrangian:
-            print()
-            print()
-            print("SCALAR GRAD of",arg)
-            print("XADD NDIM",self.xadd,ndim)
-            print("RES",res)
-            print("EXPANDED",_pyoomph._currently_generated_element().expand_placeholders(vector(res),True))
-            print("REAL EIGEN",_pyoomph._currently_generated_element().expand_placeholders(self.map_residual_on_normal_mode_eigenproblem_real(vector(res)),True))
-            print("IMAG EIGEN",_pyoomph._currently_generated_element().expand_placeholders(self.map_residual_on_normal_mode_eigenproblem_imag(vector(res)),True))
-            print("DIFF XK X",_pyoomph._currently_generated_element().expand_placeholders(diff(Xk, x),True))
-            print()
-            print()
-
+   
         return vector(res)
     
     
@@ -723,10 +710,17 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 # TODO Such things might be problematic when you e.g. calculate div(var("u",domain=".."))           
                 return diff(arg[1], self.xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], self.xadd) )
             elif edim==1:
+                #k**2*Xk1(x)*u1(x, xadd) - I*k*Xk1(x)*Derivative(u1(x, xadd), xadd) + I*k*u2(x, xadd)*Derivative(Xk1(x), x) - Derivative(Xk1(x), x)*Derivative(u1(x, xadd), x)
                 return diff(arg[0], x) + diff(arg[1], self.xadd)*(1 if not lagrangian else 0) + mm*( -I*Xk*k*diff(arg[1], x) - diff(Xk, x)*diff(arg[0], x) )
         elif ndim==2:
             Yk=pcoords[1]
             y=dcoords[1]
+            
+            order_eps0= diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0)
+            order_eps1= -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y)
+            
+            return order_eps0+mm*order_eps1
+
             if edim==0:
                 return diff(arg[2], self.xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], self.xadd) + I*Yk*k*diff(arg[1], self.xadd) )
             elif edim==1:
@@ -948,34 +942,36 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 #res[0][0]+=mm*(-diff(Xk, x)*diff(vX, x))
                 #res[0][1]+=mm*(-I*k*Xk*diff(vX, x))
             else:
-                """ 
-                XX I*k*Xk(x, y)*Derivative(vZ(x, y, z), x) + I*k*vZ(x, y, z)*Derivative(Xk(x, y), x) + vY(x, y, z)*Derivative(Xk(x, y), x, y) - Derivative(Xk(x, y), x)*Derivative(vX(x, y, z), x) + Derivative(Xk(x, y), y)*Derivative(vY(x, y, z), x) - Derivative(Yk(x, y), x)*Derivative(vX(x, y, z), y)
-                XY I*k*Xk(x, y)*Derivative(vZ(x, y, z), y) + I*k*vZ(x, y, z)*Derivative(Xk(x, y), y) + vY(x, y, z)*Derivative(Xk(x, y), (y, 2)) - Derivative(Xk(x, y), y)*Derivative(vX(x, y, z), x) + Derivative(Xk(x, y), y)*Derivative(vY(x, y, z), y) - Derivative(Yk(x, y), y)*Derivative(vX(x, y, z), y)
-                XZ -k**2*Xk(x, y)*vZ(x, y, z) - I*k*Xk(x, y)*Derivative(vX(x, y, z), x) + I*k*Xk(x, y)*Derivative(vZ(x, y, z), z) - I*k*Yk(x, y)*Derivative(vX(x, y, z), y) + I*k*vY(x, y, z)*Derivative(Xk(x, y), y) + Derivative(Xk(x, y), y)*Derivative(vY(x, y, z), z)
+                if False:
+                    Xk,Yk=pcoords[0],pcoords[1]
+                    vX,vY,vZ=arg[0],arg[1],arg[2]
+                    x,y,z=dcoords[0],dcoords[1],self.xadd
+                    
+                    res[0][0]+=mm*( I*k*Xk*diff(vZ, x) + I*k*vZ*diff(Xk, x) - diff(Xk, x)*diff(vX, x) + diff(Xk, y)*diff(vY, x) - diff(Yk, x)*diff(vX, y) ) # + vY*diff(diff(Xk, x), y)
+                    res[0][1]+=mm*( I*k*Xk*diff(vZ, y) + I*k*vZ*diff(Xk, y) - diff(Xk, y)*diff(vX, x) + diff(Xk, y)*diff(vY, y) - diff(Yk, y)*diff(vX, y) ) # + vY*diff(diff(Xk, y), y) 
+                    res[0][2]+=mm*( -k**2*Xk*vZ - I*k*Xk*diff(vX, x) + I*k*Xk*diff(vZ, z) - I*k*Yk*diff(vX, y) + I*k*vY*diff(Xk, y) + diff(Xk, y)*diff(vY, z) )
 
-                YX I*k*Yk(x, y)*Derivative(vZ(x, y, z), x) + I*k*vZ(x, y, z)*Derivative(Yk(x, y), x) + vX(x, y, z)*Derivative(Yk(x, y), (x, 2)) - Derivative(Xk(x, y), x)*Derivative(vY(x, y, z), x) + Derivative(Yk(x, y), x)*Derivative(vX(x, y, z), x) - Derivative(Yk(x, y), x)*Derivative(vY(x, y, z), y)
-                YY I*k*Yk(x, y)*Derivative(vZ(x, y, z), y) + I*k*vZ(x, y, z)*Derivative(Yk(x, y), y) + vX(x, y, z)*Derivative(Yk(x, y), x, y) - Derivative(Xk(x, y), y)*Derivative(vY(x, y, z), x) + Derivative(Yk(x, y), x)*Derivative(vX(x, y, z), y) - Derivative(Yk(x, y), y)*Derivative(vY(x, y, z), y)
-                YZ -k**2*Yk(x, y)*vZ(x, y, z) - I*k*Xk(x, y)*Derivative(vY(x, y, z), x) - I*k*Yk(x, y)*Derivative(vY(x, y, z), y) + I*k*Yk(x, y)*Derivative(vZ(x, y, z), z) + I*k*vX(x, y, z)*Derivative(Yk(x, y), x) + Derivative(Yk(x, y), x)*Derivative(vX(x, y, z), z)
+                    res[1][0]+=mm*( I*k*Yk*diff(vZ, x) + I*k*vZ*diff(Yk, x)  - diff(Xk, x)*diff(vY, x) + diff(Yk, x)*diff(vX, x) - diff(Yk, x)*diff(vY, y)) # + vX*diff(diff(Yk, x), x) 
+                    res[1][1]+=mm*( I*k*Yk*diff(vZ, y) + I*k*vZ*diff(Yk, y)  - diff(Xk, y)*diff(vY, x) + diff(Yk, x)*diff(vX, y) - diff(Yk, y)*diff(vY, y) ) #+ vX*diff(diff(Yk, x), y)
+                    res[1][2]+=mm*( -k**2*Yk*vZ - I*k*Xk*diff(vY, x) - I*k*Yk*diff(vY, y) + I*k*Yk*diff(vZ, z) + I*k*vX*diff(Yk, x) + diff(Yk, x)*diff(vX, z) )
 
-                ZX -Derivative(Xk(x, y), x)*Derivative(vZ(x, y, z), x) - Derivative(Yk(x, y), x)*Derivative(vZ(x, y, z), y)
-                ZY -Derivative(Xk(x, y), y)*Derivative(vZ(x, y, z), x) - Derivative(Yk(x, y), y)*Derivative(vZ(x, y, z), y)
-                ZZ -I*k*Xk(x, y)*Derivative(vZ(x, y, z), x) - I*k*Yk(x, y)*Derivative(vZ(x, y, z), y)
-                """
-                Xk,Yk=pcoords[0],pcoords[1]
-                vX,vY,vZ=arg[0],arg[1],arg[2]
-                x,y,z=dcoords[0],dcoords[1],self.xadd
-                
-                res[0][0]+=mm*( I*k*Xk*diff(vZ, x) + I*k*vZ*diff(Xk, x) - diff(Xk, x)*diff(vX, x) + diff(Xk, y)*diff(vY, x) - diff(Yk, x)*diff(vX, y) ) # + vY*diff(diff(Xk, x), y)
-                res[0][1]+=mm*( I*k*Xk*diff(vZ, y) + I*k*vZ*diff(Xk, y) - diff(Xk, y)*diff(vX, x) + diff(Xk, y)*diff(vY, y) - diff(Yk, y)*diff(vX, y) ) # + vY*diff(diff(Xk, y), y) 
-                res[0][2]+=mm*( -k**2*Xk*vZ - I*k*Xk*diff(vX, x) + I*k*Xk*diff(vZ, z) - I*k*Yk*diff(vX, y) + I*k*vY*diff(Xk, y) + diff(Xk, y)*diff(vY, z) )
+                    res[2][0]+=mm*( -diff(Xk, x)*diff(vZ, x) - diff(Yk, x)*diff(vZ, y) )
+                    res[2][1]+=mm*( -diff(Xk, y)*diff(vZ, x) - diff(Yk, y)*diff(vZ, y) )
+                    res[2][2]+=mm*(-I*k*Xk*diff(vZ, x) - I*k*Yk*diff(vZ, y) )
+                else:
 
-                res[1][0]+=mm*( I*k*Yk*diff(vZ, x) + I*k*vZ*diff(Yk, x)  - diff(Xk, x)*diff(vY, x) + diff(Yk, x)*diff(vX, x) - diff(Yk, x)*diff(vY, y)) # + vX*diff(diff(Yk, x), x) 
-                res[1][1]+=mm*( I*k*Yk*diff(vZ, y) + I*k*vZ*diff(Yk, y)  - diff(Xk, y)*diff(vY, x) + diff(Yk, x)*diff(vX, y) - diff(Yk, y)*diff(vY, y) ) #+ vX*diff(diff(Yk, x), y)
-                res[1][2]+=mm*( -k**2*Yk*vZ - I*k*Xk*diff(vY, x) - I*k*Yk*diff(vY, y) + I*k*Yk*diff(vZ, z) + I*k*vX*diff(Yk, x) + diff(Yk, x)*diff(vX, z) )
-
-                res[2][0]+=mm*( -diff(Xk, x)*diff(vZ, x) - diff(Yk, x)*diff(vZ, y) )
-                res[2][1]+=mm*( -diff(Xk, y)*diff(vZ, x) - diff(Yk, y)*diff(vZ, y) )
-                res[2][2]+=mm*(-I*k*Xk*diff(vZ, x) - I*k*Yk*diff(vZ, y) )
+                    Xk,Yk=pcoords[0],pcoords[1]
+                    u_x,u_y,u_z=arg[0],arg[1],arg[2]
+                    x,y,z=dcoords[0],dcoords[1],self.xadd
+                    res[0][0]+=mm*( -1*1*diff(Xk, x)*diff(u_x, x) - 1*1*diff(Yk, x)*diff(u_x, y) )
+                    res[0][1]+=mm*( -1*1*diff(Xk, y)*diff(u_x, x) - 1*1*diff(Yk, y)*diff(u_x, y) )
+                    res[0][2]+=mm*( -I*1*k*Xk*1*diff(u_x, x) - I*1*k*Yk*1*diff(u_x, y) )
+                    res[1][0]+=mm*( -1*1*diff(Xk, x)*diff(u_y, x) - 1*1*diff(Yk, x)*diff(u_y, y) )
+                    res[1][1]+=mm*( -1*1*diff(Xk, y)*diff(u_y, x) - 1*1*diff(Yk, y)*diff(u_y, y) )
+                    res[1][2]+=mm*( -I*1*k*Xk*1*diff(u_y, x) - I*1*k*Yk*1*diff(u_y, y) )
+                    res[2][0]+=mm*( -1*(diff(Xk, x)*diff(u_z, x) + diff(Yk, x)*diff(u_z, y))*1 )
+                    res[2][1]+=mm*( -1*(diff(Xk, y)*diff(u_z, x) + diff(Yk, y)*diff(u_z, y))*1 )
+                    res[2][2]+=mm*( -I*1*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y))*1 )
                 
                 #raise RuntimeError("Not implemented")
             
@@ -1059,6 +1055,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             base_factor=0 if only_perturbation_mode else 1
             pert_factor=0 if only_base_mode else 1
             
+            pcoords=self.map_to_first_order_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False,mesh_coords=True))
             
             if component<dim: 
                 
@@ -1066,15 +1063,15 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             elif component==dim:                
 
                 #return base_factor*cg._get_normal_component(component)
-                nr0=cg._get_normal_component(0)
+                nx0=cg._get_normal_component(0)
                 #rm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_x"),_pyoomph.Expression(1))*self.field_mode
-                rm=var("mesh_x",only_perturbation_mode=True)
-                n0_dot_xeigen=nr0*rm
+                Xk=pcoords[0]
+                n0_dot_xeigen=nx0*Xk
                 if dim==2:
-                    nz0=cg._get_normal_component(1)
-                    zm=var("mesh_y",only_perturbation_mode=True)
+                    ny0=cg._get_normal_component(1)
+                    Yk=pcoords[1]
                     #zm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_y"),_pyoomph.Expression(1))*self.field_mode
-                    n0_dot_xeigen+=nz0*zm
+                    n0_dot_xeigen+=ny0*Yk
                 if self.with_normal_component_in_mesh_coordinates:
                     raise RuntimeError("Not implemented")
                     xadd_shift=var("mesh_normal",only_perturbation_mode=True)                     
@@ -1084,7 +1081,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
                 #exit()
                 #return pert_factor*(nr0*phim-self.imaginary_i*self.normal_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
-                return pert_factor*(-self.imaginary_i*self.normal_mode*(n0_dot_xeigen))
+                return pert_factor*(-self.imaginary_i*self.k_symbol*(n0_dot_xeigen))
                 
             else:
                 raise RuntimeError("Normal component "+str(component)+" not available")
@@ -1642,7 +1639,7 @@ class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
 
     def define_vector_field(self, name: str, space: "FiniteElementSpaceEnum", ndim: int, element: "Equations") -> Tuple[List[Expression], List[Expression], List[str]]:
         namelist: List[str] = []
-        if ndim >= self.max_nodal_dimension:
+        if ndim > self.max_nodal_dimension:
             raise RuntimeError(
                 "Cannot use a this coordinate system in "+str(ndim)+"D")
         for i in range(ndim):

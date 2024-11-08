@@ -362,7 +362,7 @@ namespace pyoomph
 		potential_real_symbol dt("dt");
 		symbol nnode("nnode");
 
-		symbol *proj_on_test_function = NULL;
+		potential_real_symbol *proj_on_test_function = NULL;
 
 		idx l_shape(symbol("l_shape"), nnode);
 		idx l_test(symbol("l_test"), nnode);
@@ -400,7 +400,15 @@ namespace pyoomph
 				}
 				else if (GiNaC::is_a<GiNaC::numeric>(cl) || GiNaC::is_a<GiNaC::constant>(cl))
 				{
-					factor *= cl;
+					if (GiNaC::to_double(GiNaC::ex_to<GiNaC::numeric>(cl))<0)
+					{						
+							factor *= -cl;
+							rest *=-1;
+					}
+					else
+					{
+						factor*=cl;
+					}					
 				}
 				else if (GiNaC::is_exactly_a<GiNaC::power>(cl))
 				{
@@ -677,6 +685,23 @@ namespace pyoomph
 				//		if (bu.second==cl.op(i))  {units*=cl.op(i); found=true; break;}
 				if (GiNaC::has(rest, bu.second))
 					return false;
+			}
+
+			// Check whether the factor is positive, try to go for the positive one
+			if (GiNaC::to_double(GiNaC::ex_to<GiNaC::numeric>(factor.evalf()))<0)
+			{
+				factor *= -1;
+				rest *= -1;
+			}
+
+			// However, if the rest is just a negative number, we must make the factor negative instead, so that rest=1 factor=-1 unit=meter in e.g. -1*meter
+			if (GiNaC::is_a<GiNaC::numeric>(rest) || GiNaC::is_a<GiNaC::constant>(rest))
+			{
+				if (GiNaC::to_double(GiNaC::ex_to<GiNaC::numeric>(rest.evalf()))<0)
+				{
+					factor *= -1;
+					rest *= -1;
+				}
 			}
 			return true;
 		}
