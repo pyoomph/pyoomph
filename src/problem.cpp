@@ -545,7 +545,7 @@ namespace pyoomph
 		// if (this->compiler) delete this->compiler;
 		if (logfile)
 		{
-		  if (pyoomph::get_logging_stream()==logfile) pyoomph:set_logging_stream(NULL);
+		  if (pyoomph::get_logging_stream()==logfile) pyoomph::set_logging_stream(NULL);
 		  delete logfile;
 		  logfile=NULL;
 		  

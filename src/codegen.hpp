@@ -130,7 +130,7 @@ namespace pyoomph
       int deriv_direction2;
       bool derived_by_second_index; // indicates that we have derived with respect to l_shape2 in the Hessian. Important for first order derivatives only
    public:
-      bool is_eigenexpansion = false; // Used for symmetry breaking: It gives then dn_i/dX^{0l}_j* X^{ml}_j
+      //bool is_eigenexpansion = false; // Used for symmetry breaking: It gives then dn_i/dX^{0l}_j* X^{ml}_j
       int expansion_mode = 0;         // For mode expansions
       bool no_jacobian = false;
       bool no_hessian = false;
@@ -645,8 +645,9 @@ namespace pyoomph
 
       std::vector<GiNaC::ex> residual;
       std::set<std::string> ignore_assemble_residuals; // E.g. for azimuthal eigenvalue matrices. Residual is not used => don't assemble
-      std::map<std::string,std::set<int> > remove_underived_modes; // If in the Jacobian still modes are present that are not derived from interpolated_... to shape_..., they are removed. They can appear in eigenderivatives
+      //std::map<std::string,std::set<int> > remove_underived_modes; // If in the Jacobian still modes are present that are not derived from interpolated_... to shape_..., they are removed. They can appear in eigenderivatives
       std::map<std::string,int> derive_jacobian_by_expansion_mode; // Derive the Jacobian by the given expansion mode only
+      std::set<std::string> ignore_dpsi_coord_diffs_in_jacobian_set; // Usually, if we derive df/dx=f^l*dpsi^l/dx on a moving mesh, we also get a contribution how dpsi^l/dx changes with the moving mesh. For eigenexpansions, this might be wrong
       SpatialIntegralSymbol dx, dX, dx_unity;
       ElementSizeSymbol elemsize_Eulerian, elemsize_Lagrangian, elemsize_Eulerian_Cart, elemsize_Lagrangian_Cart;
       NodalDeltaSymbol nodal_delta;
@@ -817,13 +818,13 @@ namespace pyoomph
       virtual GiNaC::ex get_element_size(bool use_scaling, bool lagrangian, bool with_coordsys, CustomCoordinateSystem *coordsys) { return get_element_size_symbol(lagrangian, with_coordsys); }
       virtual GiNaC::ex get_nodal_delta();
       virtual GiNaC::ex get_normal_component(unsigned i);
-      virtual GiNaC::ex get_normal_component_eigenexpansion(unsigned i); // Used for azimuthal eigenstab only. Gives dn_i/dX^{0l}_j * X^{ml}_j
+      //virtual GiNaC::ex get_normal_component_eigenexpansion(unsigned i); // Used for azimuthal eigenstab only. Gives dn_i/dX^{0l}_j * X^{ml}_j
       virtual void set_derive_jacobian_by_expansion_mode(std::string residual_name,int expansion_mode) { derive_jacobian_by_expansion_mode[residual_name]=expansion_mode; }      
-      virtual void set_ignore_residual_assembly(std::string residual_name) { ignore_assemble_residuals.insert(residual_name); }
-      virtual void set_remove_underived_modes(std::string residual_name, std::set<int> modes) { remove_underived_modes[residual_name] = modes; }
+      virtual void set_ignore_dpsi_coord_diffs_in_jacobian(std::string residual_name) { ignore_dpsi_coord_diffs_in_jacobian_set.insert(residual_name); }
+      virtual void set_ignore_residual_assembly(std::string residual_name) { ignore_assemble_residuals.insert(residual_name); }   
       virtual bool is_current_residual_assembly_ignored() { return ignore_assemble_residuals.count(residual_names[residual_index]); }
-      virtual std::set<int> get_current_jacobian_remove_underived_modes() { if (remove_underived_modes.count(residual_names[residual_index])) return  remove_underived_modes[residual_names[residual_index]]; else return std::set<int>(); }
       virtual int * get_derive_jacobian_by_expansion_mode() { if (!derive_jacobian_by_expansion_mode.count(residual_names[residual_index])) return NULL; else return &(derive_jacobian_by_expansion_mode[residual_names[residual_index]]) ; }      
+      virtual bool ignore_dpsi_coord_diffs_in_jacobian() { return ignore_dpsi_coord_diffs_in_jacobian_set.count(residual_names[residual_index]); }
 
       virtual int classify_space_type(const FiniteElementSpace *s); // Returns 0 if the space is defined on this element, -1 for bulk element, -2 for other side of interface, >0 for external elements [-1]
       virtual std::string get_owner_prefix(const FiniteElementSpace *sp);

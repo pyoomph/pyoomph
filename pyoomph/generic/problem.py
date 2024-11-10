@@ -1307,6 +1307,8 @@ class Problem(_pyoomph.Problem):
             eqs.get_current_code_generator().set_ignore_residual_assembly(self._cartesian_normal_mode_stability.imag_contribution_name)
             eqs.get_current_code_generator().set_derive_jacobian_by_expansion_mode(self._cartesian_normal_mode_stability.real_contribution_name,1)
             eqs.get_current_code_generator().set_derive_jacobian_by_expansion_mode(self._cartesian_normal_mode_stability.imag_contribution_name,1)
+            eqs.get_current_code_generator().set_ignore_dpsi_coord_diffs_in_jacobian(self._cartesian_normal_mode_stability.real_contribution_name)
+            eqs.get_current_code_generator().set_ignore_dpsi_coord_diffs_in_jacobian(self._cartesian_normal_mode_stability.imag_contribution_name)
             #eqs.get_current_code_generator().set_remove_underived_modes(self._cartesian_normal_mode_stability.real_contribution_name,set([1]))
             #eqs.get_current_code_generator().set_remove_underived_modes(self._cartesian_normal_mode_stability.imag_contribution_name,set([1]))
 

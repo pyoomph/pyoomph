@@ -605,13 +605,20 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         zero = _pyoomph.Expression(0)
         # First order in epsilon is just derive by epsilon and set epsilon to zero afterwards
         #print("IN",residual)
-        #residual=_pyoomph._currently_generated_element().expand_placeholders(residual,False)
-        #print("OUT",residual)
+        debugout=_pyoomph._currently_generated_element().expand_placeholders(residual,False)
+        #print("OUT",debugout)
         #exit()
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
+        #debugout=_pyoomph._currently_generated_element().expand_placeholders(first_order_in_eps,False)
+        #print(">>>first_order_in_eps",debugout)
         replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)
+        #debugout=_pyoomph._currently_generated_element().expand_placeholders(replaced_m,False)
+        #print(">>>replaced_m",debugout)
+        
         # Map on the real/imag part part
         real_or_imag = re_im_mapping(replaced_m)
+        #debugout=_pyoomph._currently_generated_element().expand_placeholders(real_or_imag,False)
+        #print(">>>real_or_imag",debugout)
         # Remove any contributions of the base mode from the Jacobian and mass matrix
         # The Jacobian arises by deriving with respect to all degrees of freedom.
         # Here, we must ensure that we only derive with respect to the perturbed mode, not to the base mode (mode zero)
@@ -629,10 +636,10 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def map_residual_on_normal_mode_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
-        #print("MAPPING REAL",residual)
+        print("MAPPING REAL",residual)
         print(self._map_residal_on_additional_eigenproblem(residual,real_part))
-        #print("EXPANDED",_pyoomph._currently_generated_element().expand_placeholders(self._map_residal_on_additional_eigenproblem(residual,real_part),True))
-        #print("DONE MAPPING REAL")
+        print("EXPANDED",_pyoomph._currently_generated_element().expand_placeholders(self._map_residal_on_additional_eigenproblem(residual,real_part),True))
+        print("DONE MAPPING REAL")
         return self._map_residal_on_additional_eigenproblem(residual,real_part)
 
     def map_residual_on_normal_mode_eigenproblem_imag(self,residual:Expression)->Expression:
@@ -715,9 +722,17 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         elif ndim==2:
             Yk=pcoords[1]
             y=dcoords[1]
+            z=self.xadd
+            u_x,u_y,u_z=arg[0],arg[1],arg[2]
             
-            order_eps0= diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0)
-            order_eps1= -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y)
+            
+            #iv0 Derivative(u_x(x, y, z), x) + Derivative(u_y(x, y, z), y) + Derivative(u_z(x, y, z), z)
+            #diveps (-I*k*Xk(x, y)*Derivative(u_z(x, y, z), x) - I*k*Yk(x, y)*Derivative(u_z(x, y, z), y) - Derivative(Xk(x, y), x)*Derivative(u_x(x, y, z), x) - Derivative(Xk(x, y), y)*Derivative(u_y(x, y, z), x) - Derivative(Yk(x, y), x)*Derivative(u_x(x, y, z), y) - Derivative(Yk(x, y), y)*Derivative(u_y(x, y, z), y))*exp(I*k*z)
+
+            #order_eps0= diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0)
+            #order_eps1= -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y)
+            order_eps0=diff(u_x, x) + diff(u_y, y) + diff(u_z, z)*(1 if not lagrangian else 0)
+            order_eps1=mm*(-I*k*Xk*diff(u_z, x) - I*k*Yk*diff(u_z, y) - diff(Xk, x)*diff(u_x, x) - diff(Xk, y)*diff(u_y, x) - diff(Yk, x)*diff(u_x, y) - diff(Yk, y)*diff(u_y, y))
             
             return order_eps0+mm*order_eps1
 
@@ -866,15 +881,25 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                     return nondim("dx")
             else:
                 #dx_eps= self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(nondim("dx"),_pyoomph.Expression(1))*self.field_mode                
-                dx_eps=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(nondim("dx"),_pyoomph.Expression(1))*self.field_mode
-                dx_eps+=sum([diff(pc,dc) for pc,dc in zip(pcoords,dcoords)])
+                #dx_eps=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(nondim("dx"),_pyoomph.Expression(1))*self.field_mode
+                dx_eps=0
+                dx_eps+=sum([diff(pc,dc) for pc,dc in zip(pcoords,dcoords)])*nondim("dx")
+                #s=[var("local_coordinate_"+str(i+1)) for i in range(edim)]
+                #X0=self.map_to_zero_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian,mesh_coords=True))
+                #denom=square_root(sum([diff(X0[i],s[i])**2 for i in range(edim)]))
+                #raise RuntimeError("TODO: Continue here")
+                
+                
                 
                 #dx_eps*=self.imaginary_i*self.k_symbol*
                 #dx_eps+=self.expansion_eps*(pcoords[0]*self.imaginary_i*self.k_symbol)*self.field_mode
-                mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+                mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")*(1 if not lagrangian else 0)
                 if with_scale:
                     return spatial_scale ** (edim) * (nondim("dx") + mm*dx_eps )
                 else:
+                    #print("ADDING",nondim("dx")+ mm*dx_eps)
+                    #print(_pyoomph._currently_generated_element().get_equations().expand_expression_for_debugging(nondim("dx")+ mm*dx_eps,True,True))
+                    #exit()
                     return nondim("dx")+ mm*dx_eps
     
     
@@ -963,15 +988,15 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                     Xk,Yk=pcoords[0],pcoords[1]
                     u_x,u_y,u_z=arg[0],arg[1],arg[2]
                     x,y,z=dcoords[0],dcoords[1],self.xadd
-                    res[0][0]+=mm*( -1*1*diff(Xk, x)*diff(u_x, x) - 1*1*diff(Yk, x)*diff(u_x, y) )
-                    res[0][1]+=mm*( -1*1*diff(Xk, y)*diff(u_x, x) - 1*1*diff(Yk, y)*diff(u_x, y) )
-                    res[0][2]+=mm*( -I*1*k*Xk*1*diff(u_x, x) - I*1*k*Yk*1*diff(u_x, y) )
-                    res[1][0]+=mm*( -1*1*diff(Xk, x)*diff(u_y, x) - 1*1*diff(Yk, x)*diff(u_y, y) )
-                    res[1][1]+=mm*( -1*1*diff(Xk, y)*diff(u_y, x) - 1*1*diff(Yk, y)*diff(u_y, y) )
-                    res[1][2]+=mm*( -I*1*k*Xk*1*diff(u_y, x) - I*1*k*Yk*1*diff(u_y, y) )
-                    res[2][0]+=mm*( -1*(diff(Xk, x)*diff(u_z, x) + diff(Yk, x)*diff(u_z, y))*1 )
-                    res[2][1]+=mm*( -1*(diff(Xk, y)*diff(u_z, x) + diff(Yk, y)*diff(u_z, y))*1 )
-                    res[2][2]+=mm*( -I*1*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y))*1 )
+                    res[0][0]+=mm*( -diff(Xk, x)*diff(u_x, x) - diff(Yk, x)*diff(u_x, y) )
+                    res[0][1]+=mm*( -diff(Xk, y)*diff(u_x, x) - diff(Yk, y)*diff(u_x, y) )
+                    res[0][2]+=mm*( -I*k*Xk*1*diff(u_x, x) - I*k*Yk*diff(u_x, y) )
+                    res[1][0]+=mm*( -diff(Xk, x)*diff(u_y, x) - diff(Yk, x)*diff(u_y, y) )
+                    res[1][1]+=mm*( -diff(Xk, y)*diff(u_y, x) - diff(Yk, y)*diff(u_y, y) )
+                    res[1][2]+=mm*( -I*k*Xk*1*diff(u_y, x) - I*k*Yk*diff(u_y, y) )
+                    res[2][0]+=mm*( -(diff(Xk, x)*diff(u_z, x) + diff(Yk, x)*diff(u_z, y)) )
+                    res[2][1]+=mm*( -(diff(Xk, y)*diff(u_z, x) + diff(Yk, y)*diff(u_z, y)) )
+                    res[2][2]+=mm*( -I*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y)) )
                 
                 #raise RuntimeError("Not implemented")
             
@@ -1037,6 +1062,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
     
     def get_normal_vector_or_component(self,cg:"FiniteElementCodeGenerator",component:Optional[int]=None,only_base_mode:bool=False,only_perturbation_mode:bool=False,where:str="Residual"):
         dim = cg.get_nodal_dimension()
+        edim=cg.get_element_dimension()
         if not cg._coordinates_as_dofs or (where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python")):
             return super().get_normal_vector_or_component(cg,component,only_base_mode,only_perturbation_mode,where=where)
         
@@ -1055,11 +1081,31 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             base_factor=0 if only_perturbation_mode else 1
             pert_factor=0 if only_base_mode else 1
             
+            dcoords=self.map_to_zero_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False))
             pcoords=self.map_to_first_order_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False,mesh_coords=True))
+            
+            if dim==2:
+                if edim==1:
+                    n0=[cg._get_normal_component(0),cg._get_normal_component(1),0]
+                    Xk,Yk=pcoords[0],pcoords[1]
+                    x,y=dcoords[0],dcoords[1]
+                    I=self.imaginary_i
+                    k=self.k_symbol
+                    mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+                    
+                    #neps2=[-n0[1]*(d_by_dx(Yk)-d_by_dy(Xk))]
+                    #neps2.append(n0[0]*(d_by_dx(Yk)-d_by_dy(Xk)))
+                    #neps2.append(-I*k*(n0[0]*Xk+n0[1]*Yk))
+                    if component==0:
+                        return base_factor*n0[0]-pert_factor* mm*n0[1]*(diff(Yk,x)-diff(Xk,y))
+                    elif component==1:
+                        return base_factor*n0[1]+pert_factor*mm*n0[0]*(diff(Yk,x)-diff(Xk,y))
+                    elif component==2:
+                        return -pert_factor*mm*I*k*(n0[0]*Xk+n0[1]*Yk)
             
             if component<dim: 
                 
-                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component_eigenexpansion(component),Expression(1))*self.field_mode
+                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component(component),Expression(1))*self.field_mode
             elif component==dim:                
 
                 #return base_factor*cg._get_normal_component(component)
@@ -1081,7 +1127,8 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
                 #exit()
                 #return pert_factor*(nr0*phim-self.imaginary_i*self.normal_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
-                return pert_factor*(-self.imaginary_i*self.k_symbol*(n0_dot_xeigen))
+                #return pert_factor*(-self.imaginary_i*self.k_symbol*(n0_dot_xeigen))
+                return pert_factor*((-self.imaginary_i*self.k_symbol*n0_dot_xeigen))
                 
             else:
                 raise RuntimeError("Normal component "+str(component)+" not available")

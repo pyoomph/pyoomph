@@ -103,6 +103,7 @@ namespace pyoomph
 	bool __derive_shapes_by_second_index = false;
 	bool __in_pitchfork_symmetry_constraint = false;
 	int * __derive_only_by_expansion_mode = NULL;
+	bool __ignore_dpsi_coord_diffs_in_jacobian = false;
 	std::set<ShapeExpansion> __all_Hessian_shapeexps;
 	std::set<TestFunction> __all_Hessian_testfuncs;
 	std::set<FiniteElementField *> __all_Hessian_indices_required;
@@ -114,37 +115,6 @@ namespace pyoomph
 	}
 
 
-	class RemoveUnderivedModes : public GiNaC::map_function
-	{
-	protected:
-		std::set<int> remove_modes;
-	public:
-		RemoveUnderivedModes(std::set<int> remove_modes_) : remove_modes(remove_modes_) {}
-		GiNaC::ex operator()(const GiNaC::ex &inp)
-		{
-			if (GiNaC::is_a<GiNaC::GiNaCShapeExpansion>(inp))
-			{
-				auto &shapeexp = (GiNaC::ex_to<GiNaC::GiNaCShapeExpansion>(inp)).get_struct();
-
-				if (remove_modes.count(shapeexp.expansion_mode) && !shapeexp.is_derived)
-				{
-					return 0;
-				}				
-			}
-			else if (GiNaC::is_a<GiNaC::GiNaCNormalSymbol>(inp))
-			{
-				auto &normalsym = (GiNaC::ex_to<GiNaC::GiNaCNormalSymbol>(inp)).get_struct();
-				std::cout << "GOT NORMAL SYMBOL IN MAPPING " << inp << std::endl;
-				std::cout << normalsym.is_eigenexpansion << "  " << remove_modes.count(normalsym.expansion_mode) << "  " << normalsym.get_derived_direction() << "  " << normalsym.is_derived_by_lshape2() << std::endl;
-				if (normalsym.is_eigenexpansion && remove_modes.count(normalsym.expansion_mode) ) // && normalsym.get_derived_direction()==-1 && normalsym.is_derived_by_lshape2()==-1
-				{
-					return 0;
-				}				
-			}
-			return inp.map(*this);
-		}
-
-	};
 
 
 
@@ -850,7 +820,7 @@ namespace pyoomph
       
 	bool operator==(const NormalSymbol &lhs, const NormalSymbol &rhs)
 	{
-		return lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian;
+		return lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2()  && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian == rhs.no_hessian;
 	}
 	bool operator<(const NormalSymbol &lhs, const NormalSymbol &rhs)
 	{
@@ -858,11 +828,10 @@ namespace pyoomph
 		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() < rhs.get_direction()) 
 		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() < rhs.get_derived_direction()) 
 		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() < rhs.get_derived_direction2()) 
-		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) 
-		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion < rhs.is_eigenexpansion) 
-		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode < rhs.expansion_mode) 
-		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian < rhs.no_jacobian) 
-		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.is_eigenexpansion == rhs.is_eigenexpansion && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian < rhs.no_hessian);
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() < rhs.is_derived_by_lshape2()) 		
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode < rhs.expansion_mode) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian < rhs.no_jacobian) 
+		 || (lhs.get_code() == rhs.get_code() && lhs.get_direction() == rhs.get_direction() && lhs.get_derived_direction() == rhs.get_derived_direction() && lhs.get_derived_direction2() == rhs.get_derived_direction2() && lhs.is_derived_by_lshape2() == rhs.is_derived_by_lshape2() && lhs.expansion_mode == rhs.expansion_mode && lhs.no_jacobian == rhs.no_jacobian && lhs.no_hessian < rhs.no_hessian);
 	}
 
 	bool operator<(const SubExpression &lhs, const SubExpression &rhs)
@@ -1960,15 +1929,12 @@ namespace pyoomph
 						  << std::flush;
 			}
 			__derive_only_by_expansion_mode=for_code->get_derive_jacobian_by_expansion_mode();
+			__ignore_dpsi_coord_diffs_in_jacobian=for_code->ignore_dpsi_coord_diffs_in_jacobian();
 			GiNaC::ex diffpart = GiNaC::diff(for_what, f->get_symbol());
 			__derive_only_by_expansion_mode=NULL;
+			__ignore_dpsi_coord_diffs_in_jacobian=false;
 
-			if (for_code->get_current_jacobian_remove_underived_modes().size())
-			{
-				RemoveUnderivedModes remove_underived_modes(for_code->get_current_jacobian_remove_underived_modes());
-				diffpart = remove_underived_modes(diffpart);
-			}
-
+		
 			if (diffpart.is_zero())
 				continue;
 			if (pyoomph_verbose)
@@ -4916,12 +4882,6 @@ namespace pyoomph
 		return 0 + GiNaC::GiNaCNormalSymbol(NormalSymbol(this, i));
 	}
 
-	GiNaC::ex FiniteElementCode::get_normal_component_eigenexpansion(unsigned i)
-	{
-		auto n = NormalSymbol(this, i);
-		n.is_eigenexpansion = true;
-		return 0 + GiNaC::GiNaCNormalSymbol(n);
-	}
 
 	void FiniteElementCode::write_code_initial_condition(std::ostream &os, unsigned int ic_index, std::string ic_name)
 	{
@@ -7603,13 +7563,7 @@ namespace GiNaC
 			const auto &femprint = dynamic_cast<const print_csrc_FEM &>(c);
 			if (femprint.FEM_opts->for_code)
 			{
-			   //c.s << "/* EIGEX: " << sp.is_eigenexpansion << " NOJA " << sp.no_jacobian << " NOHESS " << sp.no_hessian << "*/" << std::endl;
-				if (sp.is_eigenexpansion)
-				{
-					c.s << "NORMAL_EIGEN_EXPANSION_" + std::to_string(sp.get_direction()) + "_DERIVS_" + std::to_string(sp.get_derived_direction()) + "_" + std::to_string(sp.get_derived_direction2()) + "--THIS SHOULD NOT HAPPEN--";
-					// throw_runtime_error("We should not have to print an azimuthal normal eigenexpansion like dn_i/dX^{0l}_j*X^{ml}_j ever");
-					return;
-				}
+
 				std::string prefix = "shapeinfo->";
 				if (femprint.FEM_opts->for_code == sp.get_code())
 				{
@@ -7644,15 +7598,15 @@ namespace GiNaC
 		std::string expansion_mode_str = (sp.expansion_mode != 0 ? "| MODE " + std::to_string(sp.expansion_mode) : "");
 		if (sp.get_derived_direction() == -1)
 		{
-			c.s << "<" << (sp.is_eigenexpansion ? "EIGENEXPANSION OF " : "") << "NORMAL COMPONENT " << sp.get_direction() << " @ " << sp.get_code() << expansion_mode_str << ">";
+			c.s << "<" <<  "NORMAL COMPONENT " << sp.get_direction() << " @ " << sp.get_code() << expansion_mode_str << ">";
 		}
 		else if (sp.get_derived_direction2() == -1)
 		{
-			c.s << "<" << (sp.is_eigenexpansion ? "EIGENEXPANSION OF " : "") << "NORMAL COMPONENT " << sp.get_direction() << " DERIVED in DIR " << sp.get_derived_direction() << " @ " << sp.get_code() << expansion_mode_str << ">";
+			c.s << "<" <<  "NORMAL COMPONENT " << sp.get_direction() << " DERIVED in DIR " << sp.get_derived_direction() << " @ " << sp.get_code() << expansion_mode_str << ">";
 		}
 		else
 		{
-			c.s << "<" << (sp.is_eigenexpansion ? "EIGENEXPANSION OF " : "") << "NORMAL COMPONENT " << sp.get_direction() << " DERIVED in DIRs " << sp.get_derived_direction() << " and " << sp.get_derived_direction2() << " @ " << sp.get_code() << expansion_mode_str << ">";
+			c.s << "<" <<  "NORMAL COMPONENT " << sp.get_direction() << " DERIVED in DIRs " << sp.get_derived_direction() << " and " << sp.get_derived_direction2() << " @ " << sp.get_code() << expansion_mode_str << ">";
 		}
 	}
 	template <>
@@ -8338,7 +8292,8 @@ namespace GiNaC
 					int coord_dir = (sname == "coordinate_x" ? 0 : (sname == "coordinate_y" ? 1 : 2));
 					if (sp.nodal_coord_dir >= 0)
 						throw_runtime_error("Handle second order derivative here");
-					return GiNaCShapeExpansion(se) + GiNaCShapeExpansion(pyoomph::ShapeExpansion(sp.field, sp.dt_order, sp.basis, sp.dt_scheme, false, coord_dir, pyoomph::__derive_shapes_by_second_index));
+					//std::cout << "SHOULD NOT GENERATE A TERM HERE " << pyoomph::__ignore_dpsi_coord_diffs_in_jacobian << "  " << GiNaCShapeExpansion(se) << std::endl;
+					return GiNaCShapeExpansion(se) + (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian ? 0 : 1 )*GiNaCShapeExpansion(pyoomph::ShapeExpansion(sp.field, sp.dt_order, sp.basis, sp.dt_scheme, false, coord_dir, pyoomph::__derive_shapes_by_second_index));
 					/*				  std::ostringstream oss;
 									  oss << (*this) << " WT " << s;
 									  throw_runtime_error("TODO: Derive here "+oss.str()); */
@@ -8389,6 +8344,8 @@ namespace GiNaC
 						if (sp.basis->get_space()->get_code()->coordinates_as_dofs && !pyoomph::ignore_nodal_position_derivatives_for_pitchfork_symmetry())
 						{
 							if ((sp.no_jacobian && (!pyoomph::__derive_shapes_by_second_index)) || (sp.no_hessian && pyoomph::__derive_shapes_by_second_index))
+								return 0;
+							if (sp.nodal_coord_dir <0 && !pyoomph::__derive_shapes_by_second_index && pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
 								return 0;
 							// Ugly construct, but we have to call one of the constructors...
 							auto se = (sp.nodal_coord_dir >= 0
@@ -8569,6 +8526,8 @@ namespace GiNaC
 								}
 								else
 								{
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
+										return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}
@@ -8601,6 +8560,8 @@ namespace GiNaC
 								}
 								else
 								{
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
+										return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}
@@ -8633,6 +8594,8 @@ namespace GiNaC
 								}
 								else
 								{
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
+										return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}
@@ -8665,6 +8628,8 @@ namespace GiNaC
 								}
 								else
 								{
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
+										return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}
