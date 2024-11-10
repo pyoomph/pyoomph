@@ -8526,8 +8526,7 @@ namespace GiNaC
 								}
 								else
 								{
-									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
-										return 0;
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian) return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}
@@ -8560,8 +8559,7 @@ namespace GiNaC
 								}
 								else
 								{
-									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
-										return 0;
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian) return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}
@@ -8594,8 +8592,7 @@ namespace GiNaC
 								}
 								else
 								{
-									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
-										return 0;
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian) return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}
@@ -8628,8 +8625,7 @@ namespace GiNaC
 								}
 								else
 								{
-									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian)
-										return 0;
+									if (pyoomph::__ignore_dpsi_coord_diffs_in_jacobian) return 0;
 									return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis, coord_dir, pyoomph::__derive_shapes_by_second_index));
 								}
 							}

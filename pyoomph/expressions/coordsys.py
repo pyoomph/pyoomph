@@ -603,43 +603,16 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def _map_residal_on_additional_eigenproblem(self,residual:Expression,re_im_mapping:Callable[[Expression],Expression])->Expression:
         zero = _pyoomph.Expression(0)
-        # First order in epsilon is just derive by epsilon and set epsilon to zero afterwards
-        #print("IN",residual)
-        debugout=_pyoomph._currently_generated_element().expand_placeholders(residual,False)
-        #print("OUT",debugout)
-        #exit()
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
-        #debugout=_pyoomph._currently_generated_element().expand_placeholders(first_order_in_eps,False)
-        #print(">>>first_order_in_eps",debugout)
-        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)
-        #debugout=_pyoomph._currently_generated_element().expand_placeholders(replaced_m,False)
-        #print(">>>replaced_m",debugout)
-        
-        # Map on the real/imag part part
-        real_or_imag = re_im_mapping(replaced_m)
-        #debugout=_pyoomph._currently_generated_element().expand_placeholders(real_or_imag,False)
-        #print(">>>real_or_imag",debugout)
-        # Remove any contributions of the base mode from the Jacobian and mass matrix
-        # The Jacobian arises by deriving with respect to all degrees of freedom.
-        # Here, we must ensure that we only derive with respect to the perturbed mode, not to the base mode (mode zero)
-        # For the Hessian, we just want the zero mode terms, i.e. getting the second derivatives with respect to the base mode with the correct I*m-terms
-        rem_jacobian_flag = _pyoomph.Expression(1)
-        azimode = _pyoomph.Expression(1)
-        rem_hessian_flag = _pyoomph.Expression(2)
-        
-        no_jacobian_entries_from_base_mode=real_or_imag
-        #no_jacobian_entries_from_base_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(real_or_imag, zero,rem_jacobian_flag)
-        
-        #no_hessian_entries_from_azimuthal_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(no_jacobian_entries_from_base_mode, azimode,rem_hessian_flag)
-        no_hessian_entries_from_normal_mode=no_jacobian_entries_from_base_mode        
-        return _pyoomph.GiNaC_collect_common_factors(no_hessian_entries_from_normal_mode)
+        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)        
+        return _pyoomph.GiNaC_collect_common_factors(re_im_mapping(replaced_m))
 
     def map_residual_on_normal_mode_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
-        print("MAPPING REAL",residual)
-        print(self._map_residal_on_additional_eigenproblem(residual,real_part))
-        print("EXPANDED",_pyoomph._currently_generated_element().expand_placeholders(self._map_residal_on_additional_eigenproblem(residual,real_part),True))
-        print("DONE MAPPING REAL")
+        #print("MAPPING REAL",residual)
+        #print(self._map_residal_on_additional_eigenproblem(residual,real_part))
+        #print("EXPANDED",_pyoomph._currently_generated_element().expand_placeholders(self._map_residal_on_additional_eigenproblem(residual,real_part),True))
+        #print("DONE MAPPING REAL")
         return self._map_residal_on_additional_eigenproblem(residual,real_part)
 
     def map_residual_on_normal_mode_eigenproblem_imag(self,residual:Expression)->Expression:
@@ -725,136 +698,26 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             z=self.xadd
             u_x,u_y,u_z=arg[0],arg[1],arg[2]
             
-            
-            #iv0 Derivative(u_x(x, y, z), x) + Derivative(u_y(x, y, z), y) + Derivative(u_z(x, y, z), z)
-            #diveps (-I*k*Xk(x, y)*Derivative(u_z(x, y, z), x) - I*k*Yk(x, y)*Derivative(u_z(x, y, z), y) - Derivative(Xk(x, y), x)*Derivative(u_x(x, y, z), x) - Derivative(Xk(x, y), y)*Derivative(u_y(x, y, z), x) - Derivative(Yk(x, y), x)*Derivative(u_x(x, y, z), y) - Derivative(Yk(x, y), y)*Derivative(u_y(x, y, z), y))*exp(I*k*z)
-
-            #order_eps0= diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0)
-            #order_eps1= -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y)
-            order_eps0=diff(u_x, x) + diff(u_y, y) + diff(u_z, z)*(1 if not lagrangian else 0)
-            order_eps1=mm*(-I*k*Xk*diff(u_z, x) - I*k*Yk*diff(u_z, y) - diff(Xk, x)*diff(u_x, x) - diff(Xk, y)*diff(u_y, x) - diff(Yk, x)*diff(u_x, y) - diff(Yk, y)*diff(u_y, y))
-            
-            return order_eps0+mm*order_eps1
 
             if edim==0:
                 return diff(arg[2], self.xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], self.xadd) + I*Yk*k*diff(arg[1], self.xadd) )
             elif edim==1:
-                n=self.map_to_zero_epsilon(var("normal"))
-                #t=[n[0],n[1]]
-                t=[-n[1],n[0]]
-                #raise RuntimeError("Not implemented")
                 res=diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0) #+ mm * (    )
                 mmterm=0
-                if False:
-                    mmterm+=0+I*k*Xk*diff(arg[0], self.xadd) + I*k*Yk*diff(arg[1], self.xadd) 
-
-                    mmterm+=0-I*k*Xk*diff(arg[2], x)
-                    mmterm+=0-I*k*Yk*diff(arg[2], y)
-
-                    if True: # Will matter at maximum for a test function
-                        mmterm+=0-I*k*Xk*t[0]**2 *diff(arg[0], self.xadd)
-                        mmterm+=0-I*k*Xk*t[0]*t[1]*diff(arg[1], self.xadd)
-                        mmterm+=0-I*k*Yk*t[0]*t[1]*diff(arg[0], self.xadd)
-                        mmterm+=0-I*k*Yk*t[1]**2*diff(arg[1], self.xadd)
-                    
-                    # Until here, it is nicely symmetric, but wrong eigenvalue
-                    if True:
-                        mmterm+=0- diff(Xk, x)*diff(arg[0],x) 
-                        mmterm+=0- diff(Yk, y)*diff(arg[1],y)
-                        mmterm+=0- diff(Yk, x)*diff(arg[1], x)
-                        mmterm+=0- diff(Xk, y)*diff(arg[0], y)
-                    if False:
-                        
-                        
-                        mmterm+=0- diff(Yk, y)*diff(arg[1],y)
-
-                        mmterm+=- 1*diff(Xk, x)*diff(arg[1], y) 
-                        mmterm+=- 1*diff(Yk, y)*diff(arg[0],x)                 
-                    #mmterm+=- 2*diff(Xk, x)*diff(arg[0], x) 
-                    #mmterm+=- 2*diff(X01(s1), s1)*diff(X02(s1), s1)*diff(Xk, s1)*diff(arg[1], s1) 
-                    #mmterm+=- 2*diff(X01(s1), s1)*diff(X02(s1), s1)*diff(Yk, s1)*diff(arg[0], s1) 
-                    #mmterm+=- 2*diff(Yk, y)*diff(arg[1], y)
-                
-                elif False:
-                    # Duarte's try
-                    s1=var("local_coordinate_1")
-                    X0=self.map_to_zero_epsilon(var("coordinate_x"))
-                    Y0=self.map_to_zero_epsilon(var("coordinate_y"))
-                    lldenom=1/(diff(X0,s1)**2+diff(Y0,s1)**2)
-                    
-                    #n=[n[0],-n[1]]
-                    mmterm+=I*k*diff(arg[0],self.xadd)*(Xk*(1-n[1]**2)-Yk*n[0]*n[1])
-                    mmterm+=I*k*diff(arg[1],self.xadd)*(Yk*(1-n[0]**2)-Xk*n[0]*n[1])
-                    mmterm+=-I*k*lldenom*(Xk*diff(X0,s1)*diff(arg[2],s1)-Yk*diff(Y0,s1)*diff(arg[2],s1))
-                    
-                    mmterm+=lldenom*(diff(arg[0],s1)*(diff(Xk,s1)*(1-2*n[1]**2)-2*n[0]*n[1]*diff(Yk,s1)))
-                    mmterm+=lldenom*(diff(arg[1],s1)*(diff(Yk,s1)*(1-2*n[0]**2)-2*n[0]*n[1]*diff(Xk,s1)))
-                else:
-                    Xk1,Xk2=pcoords[0],pcoords[1]
-                    sadd=self.xadd
-                    u1,u2,u3=arg[0],arg[1],arg[2]
-                    X01=self.map_to_zero_epsilon(var("coordinate_x"))
-                    X02=self.map_to_zero_epsilon(var("coordinate_y"))
-                    s1=var("local_coordinate_1")
-                    mmterm+=I*k*Xk1*diff(u1, sadd) + I*k*Xk2*diff(u2, sadd) - I*k*Xk1*diff(X01, s1)**2*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(X02, s1)*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X01, s1)*diff(X02, s1)*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)**2*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + 2*diff(0, s1)*diff(X01, s1)**2*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X02, s1)**2*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)**2*diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk1, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk2, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X02, s1)**2*diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - diff(0, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - diff(0, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2)
+                Xk1,Xk2=pcoords[0],pcoords[1]
+                sadd=self.xadd
+                u1,u2,u3=arg[0],arg[1],arg[2]
+                X01=self.map_to_zero_epsilon(var("coordinate_x"))
+                X02=self.map_to_zero_epsilon(var("coordinate_y"))
+                s1=var("local_coordinate_1")
+                mmterm+=I*k*Xk1*diff(u1, sadd) + I*k*Xk2*diff(u2, sadd) - I*k*Xk1*diff(X01, s1)**2*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(X02, s1)*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X01, s1)*diff(X02, s1)*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)**2*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + 2*diff(0, s1)*diff(X01, s1)**2*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X02, s1)**2*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)**2*diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk1, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk2, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X02, s1)**2*diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - diff(0, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - diff(0, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2)
                 res+=mm*mmterm
                 return res
             elif edim==2:
                 return diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0) + mm * ( -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
         raise RuntimeError("Any other combinations are not implemented yet!")
         
-        #from ..expressions import trace
-        #return trace(self.vector_gradient(arg, ndim, edim, with_scales, lagrangian))
         
-        res:Expression = Expression(0)
-        dcoords=self.map_to_zero_epsilon(self.get_coords(3, with_scales, lagrangian))
-        pcoords=self.map_to_first_order_epsilon(self.get_coords(3, with_scales, lagrangian,mesh_coords=True))
-        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
-        
-        for i in range(ndim):
-            res+=diff(arg[i], dcoords[i])            
-            #    res+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*self.k_symbol**2 *arg[i]*pcoords[i]#*(var("normal")[i])
-                
-        if not lagrangian:
-            
-            res+=diff(arg[ndim], self.xadd)
-        
-        
-        
-        I=self.imaginary_i
-        k=self.k_symbol
-        Xk=pcoords[0]        
-        x=dcoords[0]        
-        if not lagrangian:
-            if ndim==1:
-                if edim==0:
-                    #-I*k*Xk1(x)*Derivative(u2(x, xadd), x) - Derivative(Xk1(x), x)*Derivative(u1(x, xadd), x))
-                    res+=mm*(-I*k*Xk*diff(arg[1], x) -diff(Xk, x)*diff(arg[0],self.xadd))
-                elif edim==1:
-                     # -I*k*Xk1(x)*Derivative(u2(x, xadd), x) - Derivative(Xk1(x), x)*Derivative(u1(x, xadd), x))
-                     res+=mm*(-I*k*Xk*diff(arg[1],self.xadd) - diff(Xk, x)*diff(arg[0], x))
-                #res+=mm*(-I*k*Xk*diff(arg[1], x) - diff(Xk, x)*diff(arg[0], x))                
-                #res+=mm*( - diff(Xk, x)*diff(arg[0], x)) ## XXX according to Duarte                
-            elif ndim==2:
-                Yk=pcoords[1]        
-                y=dcoords[1]        
-                res+=mm*(-I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
-            else:
-                raise RuntimeError("Not implemented")
-        
-        if edim==0:
-            print("HERE",arg,self.xadd,ndim)
-            print("RES SO FAR",res)
-            self.expand_with_modes_for_python_debugging=True
-            print()
-            print("RES FOR IMAG",_pyoomph._currently_generated_element().expand_placeholders(self.map_residual_on_normal_mode_eigenproblem_imag(res),True))
-            
-            print()
-            print(_pyoomph._currently_generated_element().expand_placeholders(res,True))
-            #exit()
-        
-        return res
-    
     def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:        
         if lagrangian:
             if with_scale:
@@ -868,39 +731,12 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             dcoords=self.map_to_zero_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian))
             pcoords=self.map_to_first_order_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian,mesh_coords=True))
             
-            
-            #+
-            # mmfactor=mm*(1+ sum([diff(pcoords[i], dcoords[i]) for i in range(nodal_dim)]))
-            #mmfactor=mm*(1+ 0*sum([diff(pcoords[i], dcoords[i]) for i in range(nodal_dim)])+ self.k_symbol*sum([pcoords[i] for i in range(nodal_dim)]))
-            #mmfactor=1
-            
-            if False:
-                if with_scale:
-                    return spatial_scale ** (edim) * nondim("dx" )
-                else:
-                    return nondim("dx")
+            dx_eps=sum([diff(pc,dc) for pc,dc in zip(pcoords,dcoords)])*nondim("dx")            
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            if with_scale:
+                return spatial_scale ** (edim) * (nondim("dx") + mm*dx_eps )
             else:
-                #dx_eps= self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(nondim("dx"),_pyoomph.Expression(1))*self.field_mode                
-                #dx_eps=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(nondim("dx"),_pyoomph.Expression(1))*self.field_mode
-                dx_eps=0
-                dx_eps+=sum([diff(pc,dc) for pc,dc in zip(pcoords,dcoords)])*nondim("dx")
-                #s=[var("local_coordinate_"+str(i+1)) for i in range(edim)]
-                #X0=self.map_to_zero_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian,mesh_coords=True))
-                #denom=square_root(sum([diff(X0[i],s[i])**2 for i in range(edim)]))
-                #raise RuntimeError("TODO: Continue here")
-                
-                
-                
-                #dx_eps*=self.imaginary_i*self.k_symbol*
-                #dx_eps+=self.expansion_eps*(pcoords[0]*self.imaginary_i*self.k_symbol)*self.field_mode
-                mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")*(1 if not lagrangian else 0)
-                if with_scale:
-                    return spatial_scale ** (edim) * (nondim("dx") + mm*dx_eps )
-                else:
-                    #print("ADDING",nondim("dx")+ mm*dx_eps)
-                    #print(_pyoomph._currently_generated_element().get_equations().expand_expression_for_debugging(nondim("dx")+ mm*dx_eps,True,True))
-                    #exit()
-                    return nondim("dx")+ mm*dx_eps
+                return nondim("dx")+ mm*dx_eps
     
     
     def tensor_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
@@ -915,15 +751,11 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             line:List[ExpressionOrNum] = []
             entry = arg[b]
             for a in range(ndim):
-                line.append(diff(entry, dcoords[a]))
-                #if not lagrangian:
-                #    line[-1]+=- _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]                
+                line.append(diff(entry, dcoords[a]))                
             if not lagrangian:
                 line.append(diff(entry, self.xadd))
             else:
                 line.append(0)
-            #if not lagrangian:
-            #        line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol
             res.append(line)
         line:List[ExpressionOrNum] = []
         if not lagrangian:
@@ -940,65 +772,28 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             I=self.imaginary_i
             k=self.k_symbol
             mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
-            if ndim==1:
-                """
-                XX I*k*Xk(x, y)*Derivative(vY(x, y), x) + I*k*vY(x, y)*Derivative(Xk(x, y), x) + vY(x, y)*Derivative(Xk(x, y), x, y) - Derivative(Xk(x, y), x)*Derivative(vX(x, y), x) + Derivative(Xk(x, y), y)*Derivative(vY(x, y), x)
-                XY -k**2*Xk(x, y)*vY(x, y) - I*k*Xk(x, y)*Derivative(vX(x, y), x) + I*k*Xk(x, y)*Derivative(vY(x, y), y) + 2*I*k*vY(x, y)*Derivative(Xk(x, y), y) + vY(x, y)*Derivative(Xk(x, y), (y, 2)) - Derivative(Xk(x, y), y)*Derivative(vX(x, y), x) + Derivative(Xk(x, y), y)*Derivative(vY(x, y), y)
-
-                YX -Derivative(Xk(x, y), x)*Derivative(vY(x, y), x)
-                YY -I*k*Xk(x, y)*Derivative(vY(x, y), x) - Derivative(Xk(x, y), y)*Derivative(vY(x, y), x)
-                
-                XX I*k*Xk(x)*Derivative(vY(x, y), x) + I*k*vY(x, y)*Derivative(Xk(x), x) - Derivative(Xk(x), x)*Derivative(vX(x, y), x)
-                XY -k**2*Xk(x)*vY(x, y) - I*k*Xk(x)*Derivative(vX(x, y), x) + I*k*Xk(x)*Derivative(vY(x, y), y)
-
-                YX -Derivative(Xk(x), x)*Derivative(vY(x, y), x)
-                YY -I*k*Xk(x)*Derivative(vY(x, y), x)
-                """
-                
+            if ndim==1:               
                 Xk=pcoords[0]
                 vX,vY=arg[0],arg[1]                
                 x,y=dcoords[0],self.xadd
-                # XXX This is not according to Duarte
                 res[0][0]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
                 res[0][1]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
                 res[1][0]+=mm*( -diff(Xk, x)*diff(vY, x) )
                 res[1][1]+=mm*( -I*k*Xk*diff(vY, x) )
-                # XXX According to Duarte
-                #res[0][0]+=mm*(-diff(Xk, x)*diff(vX, x))
-                #res[0][1]+=mm*(-I*k*Xk*diff(vX, x))
             else:
-                if False:
-                    Xk,Yk=pcoords[0],pcoords[1]
-                    vX,vY,vZ=arg[0],arg[1],arg[2]
-                    x,y,z=dcoords[0],dcoords[1],self.xadd
-                    
-                    res[0][0]+=mm*( I*k*Xk*diff(vZ, x) + I*k*vZ*diff(Xk, x) - diff(Xk, x)*diff(vX, x) + diff(Xk, y)*diff(vY, x) - diff(Yk, x)*diff(vX, y) ) # + vY*diff(diff(Xk, x), y)
-                    res[0][1]+=mm*( I*k*Xk*diff(vZ, y) + I*k*vZ*diff(Xk, y) - diff(Xk, y)*diff(vX, x) + diff(Xk, y)*diff(vY, y) - diff(Yk, y)*diff(vX, y) ) # + vY*diff(diff(Xk, y), y) 
-                    res[0][2]+=mm*( -k**2*Xk*vZ - I*k*Xk*diff(vX, x) + I*k*Xk*diff(vZ, z) - I*k*Yk*diff(vX, y) + I*k*vY*diff(Xk, y) + diff(Xk, y)*diff(vY, z) )
-
-                    res[1][0]+=mm*( I*k*Yk*diff(vZ, x) + I*k*vZ*diff(Yk, x)  - diff(Xk, x)*diff(vY, x) + diff(Yk, x)*diff(vX, x) - diff(Yk, x)*diff(vY, y)) # + vX*diff(diff(Yk, x), x) 
-                    res[1][1]+=mm*( I*k*Yk*diff(vZ, y) + I*k*vZ*diff(Yk, y)  - diff(Xk, y)*diff(vY, x) + diff(Yk, x)*diff(vX, y) - diff(Yk, y)*diff(vY, y) ) #+ vX*diff(diff(Yk, x), y)
-                    res[1][2]+=mm*( -k**2*Yk*vZ - I*k*Xk*diff(vY, x) - I*k*Yk*diff(vY, y) + I*k*Yk*diff(vZ, z) + I*k*vX*diff(Yk, x) + diff(Yk, x)*diff(vX, z) )
-
-                    res[2][0]+=mm*( -diff(Xk, x)*diff(vZ, x) - diff(Yk, x)*diff(vZ, y) )
-                    res[2][1]+=mm*( -diff(Xk, y)*diff(vZ, x) - diff(Yk, y)*diff(vZ, y) )
-                    res[2][2]+=mm*(-I*k*Xk*diff(vZ, x) - I*k*Yk*diff(vZ, y) )
-                else:
-
-                    Xk,Yk=pcoords[0],pcoords[1]
-                    u_x,u_y,u_z=arg[0],arg[1],arg[2]
-                    x,y,z=dcoords[0],dcoords[1],self.xadd
-                    res[0][0]+=mm*( -diff(Xk, x)*diff(u_x, x) - diff(Yk, x)*diff(u_x, y) )
-                    res[0][1]+=mm*( -diff(Xk, y)*diff(u_x, x) - diff(Yk, y)*diff(u_x, y) )
-                    res[0][2]+=mm*( -I*k*Xk*1*diff(u_x, x) - I*k*Yk*diff(u_x, y) )
-                    res[1][0]+=mm*( -diff(Xk, x)*diff(u_y, x) - diff(Yk, x)*diff(u_y, y) )
-                    res[1][1]+=mm*( -diff(Xk, y)*diff(u_y, x) - diff(Yk, y)*diff(u_y, y) )
-                    res[1][2]+=mm*( -I*k*Xk*1*diff(u_y, x) - I*k*Yk*diff(u_y, y) )
-                    res[2][0]+=mm*( -(diff(Xk, x)*diff(u_z, x) + diff(Yk, x)*diff(u_z, y)) )
-                    res[2][1]+=mm*( -(diff(Xk, y)*diff(u_z, x) + diff(Yk, y)*diff(u_z, y)) )
-                    res[2][2]+=mm*( -I*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y)) )
+                Xk,Yk=pcoords[0],pcoords[1]
+                u_x,u_y,u_z=arg[0],arg[1],arg[2]
+                x,y,z=dcoords[0],dcoords[1],self.xadd
+                res[0][0]+=mm*( -diff(Xk, x)*diff(u_x, x) - diff(Yk, x)*diff(u_x, y) )
+                res[0][1]+=mm*( -diff(Xk, y)*diff(u_x, x) - diff(Yk, y)*diff(u_x, y) )
+                res[0][2]+=mm*( -I*k*Xk*1*diff(u_x, x) - I*k*Yk*diff(u_x, y) )
+                res[1][0]+=mm*( -diff(Xk, x)*diff(u_y, x) - diff(Yk, x)*diff(u_y, y) )
+                res[1][1]+=mm*( -diff(Xk, y)*diff(u_y, x) - diff(Yk, y)*diff(u_y, y) )
+                res[1][2]+=mm*( -I*k*Xk*1*diff(u_y, x) - I*k*Yk*diff(u_y, y) )
+                res[2][0]+=mm*( -(diff(Xk, x)*diff(u_z, x) + diff(Yk, x)*diff(u_z, y)) )
+                res[2][1]+=mm*( -(diff(Xk, y)*diff(u_z, x) + diff(Yk, y)*diff(u_z, y)) )
+                res[2][2]+=mm*( -I*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y)) )
                 
-                #raise RuntimeError("Not implemented")
             
         
         return matrix(res)
