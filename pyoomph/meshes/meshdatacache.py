@@ -686,7 +686,8 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                 new_nodal_field_inds["normal_z"] = max(new_nodal_field_inds.values()) + 1
             
 
-            field_operators["coordinate_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "coordinate_y"] #type:ignore
+            #field_operators["coordinate_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "coordinate_y"] #type:ignore
+            field_operators["coordinate_z"] = [lambda : numpy.repeat(zs,len(base.nodal_values[:,0])).flatten()] #type:ignore
             if "lagrangian_z" in base.nodal_field_inds:
                 field_operators["lagrangian_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "lagrangian_y"] #type:ignore
             field_operators["normal_z"] = [lambda ny: numpy.tile(ny,n_segments+1), "normal_y"] #type:ignore
