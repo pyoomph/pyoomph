@@ -714,6 +714,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 res+=mm*mmterm
                 return res
             elif edim==2:
+                # TODO: Why a minus here in -I*k*Xk*diff(arg[2], x), but not above?
                 return diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0) + mm * ( -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
         raise RuntimeError("Any other combinations are not implemented yet!")
         

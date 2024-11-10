@@ -400,7 +400,7 @@ namespace pyoomph
 				}
 				else if (GiNaC::is_a<GiNaC::numeric>(cl) || GiNaC::is_a<GiNaC::constant>(cl))
 				{
-					if (GiNaC::to_double(GiNaC::ex_to<GiNaC::numeric>(cl))<0)
+					if (GiNaC::to_double(GiNaC::ex_to<GiNaC::numeric>(cl.evalf()))<0)
 					{						
 							factor *= -cl;
 							rest *=-1;
