@@ -3090,7 +3090,7 @@ class Problem(_pyoomph.Problem):
         self._last_eigenvalues_k=None
 
     # Warning: This must be used with "for parameter, eigenvalue in find_bifurcation_via_eigenvalues(...):"
-    def find_bifurcation_via_eigenvalues(self, parameter:Union[str,_pyoomph.GiNaC_GlobalParam], initstep:float, shift:Union[None,float,complex]=0, neigen:int=6, spatial_adapt:int=0, epsilon:float=1e-8, reset_arclength:bool=False, max_ds:Optional[Union[float,Callable[[float],float]]]=None, stay_stable_file:Optional[str]=None, before_eigensolving:Optional[Callable[[float],None]]=None, do_solve:bool=True, azimuthal_m:Optional[Union[int,List[int]]]=None, eigenindex:int=0):
+    def find_bifurcation_via_eigenvalues(self, parameter:Union[str,_pyoomph.GiNaC_GlobalParam], initstep:float, shift:Union[None,float,complex]=0, neigen:int=6, spatial_adapt:int=0, epsilon:float=1e-8, reset_arclength:bool=False, max_ds:Optional[Union[float,Callable[[float],float]]]=None, stay_stable_file:Optional[str]=None, before_eigensolving:Optional[Callable[[float],None]]=None, do_solve:bool=True, azimuthal_m:Optional[Union[int,List[int]]]=None, normal_mode_k:ExpressionNumOrNone=None, eigenindex:int=0):
         """
         Approximates a bifurcation point by bisecting on the basis of the eigenvalues.
         Must be called as a generator, e.g.
@@ -3113,6 +3113,7 @@ class Problem(_pyoomph.Problem):
 				before_eigensolving (Optional[Callable[[float],None]]): A callable function to be called before solving the eigenvalue problem.
 				do_solve (bool): Whether to solve the problem before continuation. If the solution does not depend on the parameter, it can be set to False.
 				azimuthal_m (Optional[Union[int,List[int]]]): The azimuthal mode number if you want to find azimuthal perturbations.
+                normal_mode_k: The wave number(s) for an additional direction in Cartesian coordinates. Defaults to None, i.e. the base mode.
 				eigenindex (int): The index of the eigenvalue to track. Defaults to 0, i.e. the one with the largest real part.
 
         Yields:
@@ -3136,11 +3137,16 @@ class Problem(_pyoomph.Problem):
                 self.initialise()
         if eigenindex>=neigen:
             raise RuntimeError("eigenindex must be less than neigen")
-        # Get the initial eigenvalues                    
-        if azimuthal_m is None or azimuthal_m==0:
-            evals0, _ = self.solve_eigenproblem(neigen, shift=shift)
+        # Get the initial eigenvalues
+        if azimuthal_m is not None and  normal_mode_k is not None:                    
+            raise ValueError("Cannot specify both azimuthal_m and normal_mode_k")
+        if normal_mode_k is not None and not is_zero(normal_mode_k):
+            evals0, _ = self._solve_normal_mode_eigenproblem(neigen, cartesian_k=normal_mode_k, shift=shift)            
         else:
-            evals0, _ = self._solve_normal_mode_eigenproblem(neigen, azimuthal_m, shift=shift)
+            if azimuthal_m is None or azimuthal_m==0 and normal_mode_k is None:
+                evals0, _ = self.solve_eigenproblem(neigen, shift=shift)
+            else:
+                evals0, _ = self._solve_normal_mode_eigenproblem(neigen, azimuthal_m, shift=shift)
         self.invalidate_cached_mesh_data()
         param0 = parameter.value
         sign0 = evals0[eigenindex].real
@@ -3176,10 +3182,13 @@ class Problem(_pyoomph.Problem):
                 self.reset_arc_length_parameters()
             if before_eigensolving is not None:
                 before_eigensolving(param0)
-            if azimuthal_m is None:
-                evals1, _ = self.solve_eigenproblem(neigen, shift=shift)
+            if normal_mode_k is not None and not is_zero(normal_mode_k):
+                evals1, _ = self.solve_eigenproblem(neigen, normal_mode_k=normal_mode_k, shift=shift)
             else:
-                evals1,_=self._solve_normal_mode_eigenproblem(neigen, azimuthal_m, shift=shift)
+                if azimuthal_m is None:
+                    evals1, _ = self.solve_eigenproblem(neigen, shift=shift)
+                else:
+                    evals1,_=self._solve_normal_mode_eigenproblem(neigen, azimuthal_m, shift=shift)
             self.invalidate_cached_mesh_data()
             param1 = parameter.value
             if abs(evals1[eigenindex].real) < epsilon:

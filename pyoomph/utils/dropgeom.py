@@ -161,8 +161,10 @@ class DropletGeometry:
             raise RuntimeError("Not sufficiently specified droplet geometry")
 
         if self.rivulet_instead:
-            raise RuntimeError("Check the result below!")
-            self.volume = ((r0**2+h0**2)**2*acos((r0**2-h0**2)/(r0**2+h0**2))-r0*(r0**2-h0**2))/(2*h0)
+            #raise RuntimeError("Check the result below!")
+            #self.volume = ((r0**2+h0**2)**2*acos((r0**2-h0**2)/(r0**2+h0**2))-r0*(r0**2-h0**2))/(2*h0)
+            c=2*r0
+            self.volume=((c**2+4*h0**2)/(8*h0))**2*acos((c**2-4*h0**2)/(c**2+4*h0**2))-c/(16*h0)*(c**2-4*h0**2)
         else:
             self.volume = pi * h0 / 6.0 * (3.0 * r0 ** 2 + h0 ** 2) if self.volume is None else self.volume
         self.curv_radius = (r0 ** 2 + h0 ** 2) / (2.0 * h0) if self.curv_radius is None else self.curv_radius

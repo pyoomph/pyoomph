@@ -799,36 +799,28 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                         pass
 
 
-        if False:
+        if True:
             for vfield,components in vector_fields.items(): #type:ignore
                 if vfield in completed_eigen_vector_fields:
                     continue
                 if vfield+"_x" in new_nodal_field_inds:
                     if vfield+"_y" in new_nodal_field_inds:
-                        new_nodal_field_inds[vfield+"_z"] = max(new_nodal_field_inds.values()) + 1
-                        field_operators[vfield+"_z"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_y"] #type:ignore
+                        field_operators[vfield+"_y"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_y"] #type:ignore
+                        if vfield+"_normal" in new_nodal_field_inds:                                                
+                            new_nodal_field_inds[vfield+"_z"] = max(new_nodal_field_inds.values()) + 1
+                            field_operators[vfield+"_z"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_normal"] #type:ignore
                     else:
-                        new_nodal_field_inds[vfield + "_y"] = max(new_nodal_field_inds.values()) + 1
-                    if vfield+"_normal" in new_nodal_field_inds:
-                        print(field_operators,"for",vfield)
-                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(phis), vx).flatten()-numpy.outer(numpy.sin(phis), vphi).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
-                        #field_operators[vfield + "_y"] = [lambda vx,vphi: numpy.outer(numpy.sin(phis), vx).flatten()+numpy.outer(numpy.cos(phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
-                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(k*phis), vx).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
-                        #field_operators[vfield + "_y"] = [lambda vx,vphi: numpy.outer(numpy.cos(k*phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
-                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(phis), vx).flatten()-0*numpy.outer(numpy.sin(phis), vphi).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
-                        #field_operators[vfield + "_y"] = [lambda vx,vphi: 0*numpy.outer(numpy.sin(phis), vx).flatten()+numpy.outer(numpy.cos(phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
-
-                        if vfield+"_normal" in new_nodal_field_inds:
+                        field_operators[vfield+"_x"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_x"] #type:ignore
+                        if vfield+"_normal" in new_nodal_field_inds:                                                
+                            new_nodal_field_inds[vfield + "_y"] = max(new_nodal_field_inds.values()) + 1
+                            field_operators[vfield+"_y"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_normal"] #type:ignore
+                    if vfield+"_normal" in new_nodal_field_inds:                                                
                             del new_nodal_field_inds[vfield+"_normal"]
                             newindex=0
                             for name, index in sorted(new_nodal_field_inds.items(), key=lambda item: item[1]): #type:ignore
                                 new_nodal_field_inds[name]=newindex
                                 newindex+=1
 
-                    else:
-                        raise RuntimeError("Normal field not found for "+vfield)
-                        field_operators[vfield + "_x"] = [lambda vx: vx,vfield + "_x"] #type:ignore
-                        field_operators[vfield + "_y"] = [lambda vx: vx,vfield + "_x"] #type:ignore
 
         
                 
@@ -913,7 +905,7 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                         hex27inds+=[mp(eis[0], offs+i), mp(eis[1], offs +i), mp(eis[2], offs+i)] #type:ignore
                     new_elem_indices.append(hex27inds) #type:ignore
                     new_elem_types.append(14) #type:ignore
-                elemental_phi_row=numpy.linspace(0,self.angle,upper_limit//phi_increm,endpoint=not closed)+self.start_angle  
+                elemental_phi_row=numpy.linspace(0,2*numpy.pi,upper_limit//phi_increm,endpoint=True)+self.phase  
                 elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
             elif elemtype==6: # Quad4 -> Tris at the center and hex in bulk
                 for offs in range(0, upper_limit, phi_increm):
