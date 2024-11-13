@@ -1544,7 +1544,13 @@ namespace pyoomph
 		{
 			__all_Hessian_indices_required.insert(f);
 			bool loop2_written = false;
+
+			__derive_only_by_expansion_mode=for_code->get_derive_jacobian_by_expansion_mode();
+			__ignore_dpsi_coord_diffs_in_jacobian=for_code->ignore_dpsi_coord_diffs_in_jacobian();						
 			GiNaC::ex diffpart = GiNaC::diff(for_what, f->get_symbol());
+			__derive_only_by_expansion_mode=NULL;
+			__ignore_dpsi_coord_diffs_in_jacobian=false;
+
 			for_code->subexpressions = __SE_to_struct_hessian->subexpressions;
 			//			std::cout << "HESSIAN  CONTRIBU " << for_what << std::endl;
 			//			std::cout << "DHESSIAN  CONTRIBU " << diffpart << std::endl;
@@ -1678,7 +1684,11 @@ namespace pyoomph
 						}
 					}
 
+					__derive_only_by_expansion_mode=for_code->get_derive_hessian_by_expansion_mode();
+					__ignore_dpsi_coord_diffs_in_jacobian=false;
 					GiNaC::ex diffpart2 = GiNaC::diff(diffpart, f2->get_symbol());
+					__derive_only_by_expansion_mode=NULL;
+					__ignore_dpsi_coord_diffs_in_jacobian=false;
 
 					/*if (!masspart.is_zero())
 					{

@@ -319,12 +319,13 @@ def test_scale_factor(arg:Union[str,NameStrSequence],tag:List[str]=[],domain:Uni
 test_scale_factor.__test__=False
 
 
-def is_zero(arg:ExpressionOrNum)->bool:
+def is_zero(arg:ExpressionOrNum,parameters_to_float:bool=False)->bool:
 	"""
 	Check if the given argument (Expression or numerical value) is zero.
 
 	Parameters:
 	arg (ExpressionOrNum): The argument to be checked.
+ 	parameters_to_float: Flag indicating whether to convert a global parameter to its float values. Defaults to False, i.e. always False applied on a global parameter.
 
 	Returns:
 	bool: True if the argument is zero, False otherwise.
@@ -337,6 +338,11 @@ def is_zero(arg:ExpressionOrNum)->bool:
 		return arg==0
 	elif isinstance(arg,Expression): # type: ignore
 		return arg.is_zero()
+	elif isinstance(arg,_pyoomph.GiNaC_GlobalParam):
+	    if parameters_to_float:
+	        return arg.value==0
+	    else:
+	        return False
 	else:
 		raise ValueError("Cannot test for zero: "+repr(arg))
 

@@ -648,6 +648,7 @@ namespace pyoomph
       //std::map<std::string,std::set<int> > remove_underived_modes; // If in the Jacobian still modes are present that are not derived from interpolated_... to shape_..., they are removed. They can appear in eigenderivatives
       std::map<std::string,int> derive_jacobian_by_expansion_mode; // Derive the Jacobian by the given expansion mode only
       std::set<std::string> ignore_dpsi_coord_diffs_in_jacobian_set; // Usually, if we derive df/dx=f^l*dpsi^l/dx on a moving mesh, we also get a contribution how dpsi^l/dx changes with the moving mesh. For eigenexpansions, this might be wrong
+      std::map<std::string,int> derive_hessian_by_expansion_mode; // Derive the Jacobian by the given expansion mode only
       SpatialIntegralSymbol dx, dX, dx_unity;
       ElementSizeSymbol elemsize_Eulerian, elemsize_Lagrangian, elemsize_Eulerian_Cart, elemsize_Lagrangian_Cart;
       NodalDeltaSymbol nodal_delta;
@@ -820,10 +821,12 @@ namespace pyoomph
       virtual GiNaC::ex get_normal_component(unsigned i);
       //virtual GiNaC::ex get_normal_component_eigenexpansion(unsigned i); // Used for azimuthal eigenstab only. Gives dn_i/dX^{0l}_j * X^{ml}_j
       virtual void set_derive_jacobian_by_expansion_mode(std::string residual_name,int expansion_mode) { derive_jacobian_by_expansion_mode[residual_name]=expansion_mode; }      
+      virtual void set_derive_hessian_by_expansion_mode(std::string residual_name,int expansion_mode) { derive_hessian_by_expansion_mode[residual_name]=expansion_mode; }            
       virtual void set_ignore_dpsi_coord_diffs_in_jacobian(std::string residual_name) { ignore_dpsi_coord_diffs_in_jacobian_set.insert(residual_name); }
       virtual void set_ignore_residual_assembly(std::string residual_name) { ignore_assemble_residuals.insert(residual_name); }   
       virtual bool is_current_residual_assembly_ignored() { return ignore_assemble_residuals.count(residual_names[residual_index]); }
       virtual int * get_derive_jacobian_by_expansion_mode() { if (!derive_jacobian_by_expansion_mode.count(residual_names[residual_index])) return NULL; else return &(derive_jacobian_by_expansion_mode[residual_names[residual_index]]) ; }      
+      virtual int * get_derive_hessian_by_expansion_mode() { if (!derive_hessian_by_expansion_mode.count(residual_names[residual_index])) return NULL; else return &(derive_hessian_by_expansion_mode[residual_names[residual_index]]) ; }            
       virtual bool ignore_dpsi_coord_diffs_in_jacobian() { return ignore_dpsi_coord_diffs_in_jacobian_set.count(residual_names[residual_index]); }
 
       virtual int classify_space_type(const FiniteElementSpace *s); // Returns 0 if the space is defined on this element, -1 for bulk element, -2 for other side of interface, >0 for external elements [-1]

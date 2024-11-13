@@ -452,7 +452,15 @@ class Problem(_pyoomph.Problem):
         self._mesh_data_cache.clear(only_eigens)
 
     def set_tolerance_for_singular_jacobian(self,tol:float):
-        _pyoomph.set_tolerance_for_singular_jacobian(tol)    
+        _pyoomph.set_tolerance_for_singular_jacobian(tol)  
+        
+    def get_current_normal_mode_k(self,dimensional:bool=True):  
+        if self._normal_mode_param_k is None:
+            raise RuntimeError("No normal mode parameter k set. Please use setup_for_stability_analysis(additional_cartesian_mode=True) first.")
+        if dimensional:
+            return self._normal_mode_param_k.value/self.get_scaling("spatial")
+        else:
+            return self._normal_mode_param_k.value
 
     def add_equations(self,eqs:EquationTree)->None:
         """Add equations to the system. Should be called within the define_problem() method.
@@ -1309,6 +1317,8 @@ class Problem(_pyoomph.Problem):
             eqs.get_current_code_generator().set_derive_jacobian_by_expansion_mode(self._cartesian_normal_mode_stability.imag_contribution_name,1)
             eqs.get_current_code_generator().set_ignore_dpsi_coord_diffs_in_jacobian(self._cartesian_normal_mode_stability.real_contribution_name)
             eqs.get_current_code_generator().set_ignore_dpsi_coord_diffs_in_jacobian(self._cartesian_normal_mode_stability.imag_contribution_name)
+            eqs.get_current_code_generator().set_derive_hessian_by_expansion_mode(self._cartesian_normal_mode_stability.real_contribution_name,0)
+            eqs.get_current_code_generator().set_derive_hessian_by_expansion_mode(self._cartesian_normal_mode_stability.imag_contribution_name,0)
             #eqs.get_current_code_generator().set_remove_underived_modes(self._cartesian_normal_mode_stability.real_contribution_name,set([1]))
             #eqs.get_current_code_generator().set_remove_underived_modes(self._cartesian_normal_mode_stability.imag_contribution_name,set([1]))
 
@@ -2706,7 +2716,7 @@ class Problem(_pyoomph.Problem):
         """            
         if analytic_hessian:
             # May not use symmetric Hessian for azimuthal stability
-            self.set_analytic_hessian_products(True,use_hessian_symmetry and not azimuthal_stability)
+            self.set_analytic_hessian_products(True,use_hessian_symmetry and (not azimuthal_stability and not additional_cartesian_mode))
         else:
             self.set_analytic_hessian_products(False)
         #if azimuthal_stability:
@@ -3130,6 +3140,7 @@ class Problem(_pyoomph.Problem):
         max_ds_func=max_ds
         if isinstance(parameter, str):
             parameter = self.get_global_parameter(parameter)
+        param_is_normal_mode_k=is_zero(parameter- self._normal_mode_param_k,parameters_to_float=False)
         if do_solve:
             self.solve(spatial_adapt=spatial_adapt)
         else:
@@ -3140,8 +3151,12 @@ class Problem(_pyoomph.Problem):
         # Get the initial eigenvalues
         if azimuthal_m is not None and  normal_mode_k is not None:                    
             raise ValueError("Cannot specify both azimuthal_m and normal_mode_k")
-        if normal_mode_k is not None and not is_zero(normal_mode_k):
+        if normal_mode_k is not None and not is_zero(normal_mode_k):        
+            if param_is_normal_mode_k:
+                oldk=self._normal_mode_param_k.value
             evals0, _ = self._solve_normal_mode_eigenproblem(neigen, cartesian_k=normal_mode_k, shift=shift)            
+            if param_is_normal_mode_k:
+                self._normal_mode_param_k.value=oldk
         else:
             if azimuthal_m is None or azimuthal_m==0 and normal_mode_k is None:
                 evals0, _ = self.solve_eigenproblem(neigen, shift=shift)
@@ -3183,7 +3198,11 @@ class Problem(_pyoomph.Problem):
             if before_eigensolving is not None:
                 before_eigensolving(param0)
             if normal_mode_k is not None and not is_zero(normal_mode_k):
+                if param_is_normal_mode_k:
+                    oldk=self._normal_mode_param_k.value
                 evals1, _ = self.solve_eigenproblem(neigen, normal_mode_k=normal_mode_k, shift=shift)
+                if param_is_normal_mode_k:
+                    self._normal_mode_param_k.value=oldk
             else:
                 if azimuthal_m is None:
                     evals1, _ = self.solve_eigenproblem(neigen, shift=shift)
@@ -3538,12 +3557,17 @@ class Problem(_pyoomph.Problem):
         else:
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
-    def get_last_eigenvalues(self)->NPComplexArray:
+    def get_last_eigenvalues(self,dimensional:bool=False)->NPComplexArray:
         """Returns the last computed eigenvalues.
 
         Returns:
             NPComplexArray: Eigenvalues as array.
         """                
+        if dimensional:
+            if self._last_eigenvalues is None:
+                return None
+            else:
+                return [x/self.get_scaling("temporal") for x in self._last_eigenvalues]
         return self._last_eigenvalues
 
     def get_last_eigenvectors(self)->NPComplexArray:

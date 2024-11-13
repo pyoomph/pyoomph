@@ -303,6 +303,7 @@ class GmshTemplate(MeshTemplate):
         self._geom:Optional[pygmsh.geo.Geometry] = None
         self._named_entities:Dict[str,List[object]] = {}
         self._rev_names:Dict[object,str] = {}
+        self._dim_tag_names:Dict[Tuple[int,int],Tuple(str,object)] = {}
         
         #: If set, the input mesh will be mirrored and copied along the given axis or axes. Useful to generate symmetric meshes for e.g. pitchfork tracking
         self.mirror_mesh:Optional[Union[Literal["mirror_x","mirror_y"],List[Literal["mirror_x","mirror_y"]]]]=None
@@ -310,6 +311,7 @@ class GmshTemplate(MeshTemplate):
         #self.gmsh_options["algorithm"] = 8
         #self.gmsh_options["recombine_algo"] = 2
         #self.gmsh_options["recombine_algo"] = None
+        self._entities2d:Dict[int,Union[PlaneSurface,Surface]] = {}
         self._entities1d:Dict[int,Union[Line,Spline,BSpline,CircleArc]] = {}
         self._entities0d:Dict[int,Point] = {}
         self._pointhash:Dict[Tuple[float,float,float],Point] = {}
@@ -442,6 +444,7 @@ class GmshTemplate(MeshTemplate):
             self._named_entities[name] = []
         self._named_entities[name].append(obj)
         self._rev_names[obj] = name
+        self._dim_tag_names[obj.dim_tag] = (name,obj)
 
     def _resolve_name(self, typ:str, *args:Union[str,object])->List[object]:
         res:List[object] = []
@@ -941,6 +944,7 @@ class GmshTemplate(MeshTemplate):
             ll = self._geom.add_curve_loop(s) #type:ignore
             #print("holes",holesO)
             res = self._geom.add_plane_surface(ll,holes=holesO) #type:ignore
+            self._entities2d[res._id] = res #type:ignore
             if name is not None:
                 self._store_name(name, res)
             if self.mesh_mode in ["quads","only_quads"]:
@@ -958,6 +962,7 @@ class GmshTemplate(MeshTemplate):
                 s = list(reversed([-x for x in s]))
             ll = self._geom.add_curve_loop(s) #type:ignore
             res = self._geom.add_surface(ll) #type:ignore
+            self._entities2d[res._id] = res #type:ignore
             if name is not None:
                 self._store_name(name, res)
             if self.mesh_mode in ["quads","only_quads"]:
@@ -1194,6 +1199,11 @@ class GmshTemplate(MeshTemplate):
                     perm=[1,2,0,3,5,6,4,7]
                     for q in mycells:
                         domain.add_brick_3d_C1(*self._nodeinds[q[perm]]) #type:ignore
+                elif cells.type =="hexahedron27":
+                    #perm=[1,2,0,3,5,6,4,7]
+                    perm=[1,9,2,8,24,10,0,11,3,17,21,18,22,26,23,16,20,19,5,13,6,12,25,14,4,15,7]
+                    for q in mycells:
+                        domain.add_brick_3d_C2(self._nodeinds[q[perm]]) #type:ignore
                 else:
                     raise RuntimeError("Unsupported cell type: " + cells.type)
 
@@ -1412,3 +1422,106 @@ class GmshTemplate(MeshTemplate):
                 lst=list(map(int,lst.split(",")))
                 PTS=numpy.array([points[l] for l in lst]) #type:ignore
                 self._curved_entities1d[ind]=_pyoomph.CurvedEntityCatmullRomSpline(PTS) #type:ignore
+
+
+
+    class GmshFakeEntry:
+        """ Just a fake entry to store the dimension and tag of an entity """
+        def __init__(self,my_id,dim_tag):
+            self._id=my_id
+            self.dim_tag=dim_tag
+            self.dim_tags=[dim_tag]
+            self.dim=dim_tag[0]
+                
+            
+    def extrude(self,*args,shift:List[ExpressionOrNum]=[0,0,1],recombine:bool=False,start_name=lambda s: s+"_start",end_name=lambda s: s+"_end",layers:Optional[int]=None):
+        """Extrudes the given entities by the given shift. The bulk surface name will become a volume and the line surfaces will become 2d surfaces.
+        Additionally, the start and end surfaces of the extrusion will be named according to the given functions.
+        
+        Args:
+            *args: Variable length arguments representing the entities to extrude. Can be names or the entities themselves.
+            shift: The shift to extrude by. Can be a list of expressions or numbers.
+            recombine: Flag indicating whether to recombine the extruded entities.
+            start_name: Function to generate the start name of the extrusion.
+            end_name: Function to generate the end name of the extrusion.
+            layers: Number of layers to extrude. If None, the extrusion will be determined by the mesh size.        
+        """
+        for i, c in enumerate(shift):
+            c = c / self._problem.get_scaling("spatial")
+            if isinstance(c,Expression):
+                c=c.float_value()
+            shift[i] = c
+        gmsh.model.geo.synchronize()
+        dimtags=[]
+        newdim=0
+        name_list=[]
+        to_extrude=[]
+        def add_name(a):
+            name_list.append(self._rev_names.get(a,None))
+            if a in self._rev_names:
+                del self._named_entities[self._rev_names[a]]
+                del self._rev_names[a]
+                self._store_name(start_name(name_list[-1]),a)
+        for a in args:
+            if isinstance(a,list):
+                for aa in a:
+                    dimtags.append(aa.dim_tag)
+                    to_extrude.append(aa)
+                    add_name(aa)
+            elif isinstance(a,str):
+                raise RuntimeError("Not implemented: Supporting strings as names here")
+                a=gmsh.model.getEntitiesForPhysicalGroup(2,self.get_physical_group(a))[0]
+                dimtags.append(a)
+                to_extrude.append(a)
+                
+            else:
+                dimtags.append(a.dim_tag)
+                to_extrude.append(a)
+                add_name(a)
+            newdim=max(newdim,dimtags[-1][0])
+
+        newdim+=1 # The new dimension
+        self._maxdim=max(self._maxdim,newdim)
+        res=gmsh.model.geo.extrude(dimtags,shift[0],shift[1],shift[2],recombine=recombine,numElements=([layers]*len(dimtags) if layers is not None else None))        
+        
+        gmsh.model.geo.synchronize()
+        bulk_name_index=0
+        for i,entry in enumerate(res):            
+            #print("ADD PHYSICAL GROUP",entry[0],[entry[1]])
+            if entry[0]==newdim:
+                name=name_list[bulk_name_index]
+                if name is not None:
+                    self._store_name(name,GmshTemplate.GmshFakeEntry(entry[1],(entry[0],entry[1])))
+                    assert i>=1
+                    self._store_name(end_name(name),GmshTemplate.GmshFakeEntry(res[i-1][1],(res[i-1][0],res[i-1][1])))                
+                bulk_name_index+=1
+            elif entry[0]==newdim-1:
+                pass
+
+        # Go over it once more, finding the missing entities
+        given_names={a._id for a in self._rev_names}
+        start_index=-1
+        
+        for entry in res:
+            if entry[0]==newdim:
+                start_index+=1
+                sub_index=0
+            if entry[0]==newdim-1:
+                if entry[1] not in given_names:
+                    original=to_extrude[start_index]                    
+                    if isinstance(original,PlaneSurface):
+                        orig_curv=original.curve_loop.curves[sub_index]
+                        dim_tag=(orig_curv.dim_tag[0],abs(orig_curv.dim_tag[1]))
+                        if self._dim_tag_names.get(dim_tag,None) is not None:
+                            #print("Already exists",dim_tag,self._dim_tag_names.get(dim_tag,None))
+                            del self._rev_names[self._dim_tag_names[dim_tag][1]]
+                            del self._named_entities[self._dim_tag_names[dim_tag][0]]                                                        
+                            self._store_name(self._dim_tag_names[dim_tag][0],GmshTemplate.GmshFakeEntry(entry[1],entry))
+                            del self._dim_tag_names[dim_tag]
+                    else:
+                        raise RuntimeError("Not implemented:"+str(original  ))                        
+                    
+                    sub_index+=1                    
+        
+
+        return res

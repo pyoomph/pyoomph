@@ -564,6 +564,13 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         
         self.with_normal_component_in_mesh_coordinates=False # Actually, quite important!
 
+
+    def get_wavenumber_k(self,dimensional:bool=True):
+        return self.k_symbol/(scale_factor("spatial") if dimensional else 1)
+    
+    def get_additional_coordinate(self,dimensional:bool=True):
+        return self.xadd*(scale_factor("spatial") if dimensional else 1)
+    
     def get_mode_expansion_of_var_or_test(self,code:_pyoomph.FiniteElementCode,fieldname:str,is_field:bool,is_dim:bool,expr:Expression,where:str,expansion_mode:int)->Expression:
         if where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python"):
             return expr # Don't do this for integral expressions, fluxes, initial and dirichlets
@@ -639,12 +646,13 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         res:List[ExpressionOrNum] = []
         dcoords=self.map_to_zero_epsilon(self.get_coords(3, with_scales, lagrangian))
         pcoords=self.map_to_first_order_epsilon(self.get_coords(3, with_scales, lagrangian,mesh_coords=True))
+        xadd=self.get_additional_coordinate(with_scales)
         for i, a in enumerate(dcoords):
             if i < ndim:    
                 res.append(diff(arg, a))
             elif i == ndim:                
                 if not lagrangian:
-                    res.append(diff(arg, self.xadd))
+                    res.append(diff(arg, xadd))
                 else:
                     res.append(0) 
             else:
@@ -653,7 +661,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         if not lagrangian:
             mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
             Xk=pcoords[0]                        
-            k=self.k_symbol
+            k=self.get_wavenumber_k(dimensional=with_scales)
             I=self.imaginary_i
             x=dcoords[0]
             if ndim==2:
@@ -677,35 +685,34 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def vector_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
         I=self.imaginary_i
-        k=self.k_symbol
+        k=self.get_wavenumber_k(dimensional=with_scales)
         dcoords=self.map_to_zero_epsilon(self.get_coords(3, with_scales, lagrangian))
         pcoords=self.map_to_first_order_epsilon(self.get_coords(3, with_scales, lagrangian,mesh_coords=True))
         Xk=pcoords[0]
         x=dcoords[0]
+        xadd=self.get_additional_coordinate(with_scales)
         mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")*(1 if not lagrangian else 0)
         if ndim==0:
-            return diff(arg[0], self.xadd) # TODO: Test this
+            return diff(arg[0], xadd) # TODO: Test this
         elif ndim==1:
             if edim==0:     
                 # TODO Such things might be problematic when you e.g. calculate div(var("u",domain=".."))           
-                return diff(arg[1], self.xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], self.xadd) )
+                return diff(arg[1], xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], xadd) )
             elif edim==1:
                 #k**2*Xk1(x)*u1(x, xadd) - I*k*Xk1(x)*Derivative(u1(x, xadd), xadd) + I*k*u2(x, xadd)*Derivative(Xk1(x), x) - Derivative(Xk1(x), x)*Derivative(u1(x, xadd), x)
-                return diff(arg[0], x) + diff(arg[1], self.xadd)*(1 if not lagrangian else 0) + mm*( -I*Xk*k*diff(arg[1], x) - diff(Xk, x)*diff(arg[0], x) )
+                return diff(arg[0], x) + diff(arg[1], xadd)*(1 if not lagrangian else 0) + mm*( -I*Xk*k*diff(arg[1], x) - diff(Xk, x)*diff(arg[0], x) )
         elif ndim==2:
             Yk=pcoords[1]
             y=dcoords[1]
-            z=self.xadd
-            u_x,u_y,u_z=arg[0],arg[1],arg[2]
-            
+           
 
             if edim==0:
-                return diff(arg[2], self.xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], self.xadd) + I*Yk*k*diff(arg[1], self.xadd) )
+                return diff(arg[2], xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], xadd) + I*Yk*k*diff(arg[1], xadd) )
             elif edim==1:
-                res=diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0) #+ mm * (    )
+                res=diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], xadd)*(1 if not lagrangian else 0) #+ mm * (    )
                 mmterm=0
                 Xk1,Xk2=pcoords[0],pcoords[1]
-                sadd=self.xadd
+                sadd=xadd
                 u1,u2,u3=arg[0],arg[1],arg[2]
                 X01=self.map_to_zero_epsilon(var("coordinate_x"))
                 X02=self.map_to_zero_epsilon(var("coordinate_y"))
@@ -715,7 +722,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 return res
             elif edim==2:
                 # TODO: Why a minus here in -I*k*Xk*diff(arg[2], x), but not above?
-                return diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], self.xadd)*(1 if not lagrangian else 0) + mm * ( -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
+                return diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], xadd)*(1 if not lagrangian else 0) + mm * ( -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
         raise RuntimeError("Any other combinations are not implemented yet!")
         
         
@@ -748,13 +755,15 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         # TODO MOVING COORDINATES
         dcoords=self.map_to_zero_epsilon(self.get_coords(ndim, with_scales, lagrangian))
         pcoords=self.map_to_first_order_epsilon(self.get_coords(ndim, with_scales, lagrangian,mesh_coords=True))
+        k=self.get_wavenumber_k(dimensional=with_scales)
+        xadd=self.get_additional_coordinate(with_scales)
         for b in range(ndim):
             line:List[ExpressionOrNum] = []
             entry = arg[b]
             for a in range(ndim):
                 line.append(diff(entry, dcoords[a]))                
             if not lagrangian:
-                line.append(diff(entry, self.xadd))
+                line.append(diff(entry, xadd))
             else:
                 line.append(0)
             res.append(line)
@@ -762,7 +771,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         if not lagrangian:
             for a in range(ndim):
                 line.append(diff(arg[ndim], dcoords[a]))
-            line.append(diff(arg[ndim],self.xadd))
+            line.append(diff(arg[ndim],xadd))
         else:
             for a in range(ndim+1):        
                 line.append(0)            
@@ -770,13 +779,12 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         res.append(line)
         
         if not lagrangian: 
-            I=self.imaginary_i
-            k=self.k_symbol
+            I=self.imaginary_i            
             mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
             if ndim==1:               
                 Xk=pcoords[0]
                 vX,vY=arg[0],arg[1]                
-                x,y=dcoords[0],self.xadd
+                x,y=dcoords[0],xadd
                 res[0][0]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
                 res[0][1]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
                 res[1][0]+=mm*( -diff(Xk, x)*diff(vY, x) )
@@ -784,7 +792,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             else:
                 Xk,Yk=pcoords[0],pcoords[1]
                 u_x,u_y,u_z=arg[0],arg[1],arg[2]
-                x,y,z=dcoords[0],dcoords[1],self.xadd
+                x,y,z=dcoords[0],dcoords[1],xadd
                 res[0][0]+=mm*( -diff(Xk, x)*diff(u_x, x) - diff(Yk, x)*diff(u_x, y) )
                 res[0][1]+=mm*( -diff(Xk, y)*diff(u_x, x) - diff(Yk, y)*diff(u_x, y) )
                 res[0][2]+=mm*( -I*k*Xk*1*diff(u_x, x) - I*k*Yk*diff(u_x, y) )
@@ -886,7 +894,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                     Xk,Yk=pcoords[0],pcoords[1]
                     x,y=dcoords[0],dcoords[1]
                     I=self.imaginary_i
-                    k=self.k_symbol
+                    k=self.get_wavenumber_k(dimensional=True)
                     mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
                     
                     #neps2=[-n0[1]*(d_by_dx(Yk)-d_by_dy(Xk))]

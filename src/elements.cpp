@@ -4491,6 +4491,7 @@ namespace pyoomph
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C2TB;
 			shape_info->dS_shape_Pos = shape_info->dS_shape_C2TB;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C2TB;
+			shape_info->d2_dx2_shape_dcoord_Pos=shape_info->d2_dx2_shape_dcoord_C2TB;
 		}
 		else if (this->eleminfo.nnode_C2)
 		{
@@ -4499,6 +4500,7 @@ namespace pyoomph
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C2;
 			shape_info->dS_shape_Pos = shape_info->dS_shape_C2;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C2;
+			shape_info->d2_dx2_shape_dcoord_Pos=shape_info->d2_dx2_shape_dcoord_C2;
 		}
 		else if (required_C1TB)
 		{
@@ -4507,6 +4509,7 @@ namespace pyoomph
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C1TB;
 			shape_info->dS_shape_Pos = shape_info->dS_shape_C1TB;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C1TB;		
+			shape_info->d2_dx2_shape_dcoord_Pos=shape_info->d2_dx2_shape_dcoord_C1TB;
 		}		
 		else
 		{
@@ -4516,6 +4519,7 @@ namespace pyoomph
 			shape_info->dX_shape_Pos = shape_info->dX_shape_C1;
 			shape_info->dS_shape_Pos = shape_info->dS_shape_C1;
 			shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C1;
+			shape_info->d2_dx2_shape_dcoord_Pos=shape_info->d2_dx2_shape_dcoord_C1;
 		}
 	}
 
