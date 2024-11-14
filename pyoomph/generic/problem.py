@@ -1767,7 +1767,7 @@ class Problem(_pyoomph.Problem):
     
 
     # Can be used for go_to_param or 
-    def remesh_handler_during_continuation(self, force: bool = False, resolve: bool = True, resolve_before_eigen: bool = False, reactivate_biftrack_neigen: int = 4,resolve_max_newton_steps : Optional[int]=None):
+    def remesh_handler_during_continuation(self, force: bool = False, resolve: bool = True, resolve_before_eigen: bool = False, reactivate_biftrack_neigen: int = 4, reactivate_biftrack_shift:float=0,resolve_max_newton_steps : Optional[int]=None):
         """
         Handle remeshing during continuation. We might have to calculate e.g. a new eigenvector when doing bifurcation tracking.
         In that case, set Problem.do_remeshing_when_necessary to False to prevent any automatic remeshing.
@@ -1777,7 +1777,9 @@ class Problem(_pyoomph.Problem):
             resolve (bool, optional): Resolve the problem after remeshing. Defaults to True.
             resolve_before_eigen (bool, optional): Resolve the problem before solving the eigenproblem. Defaults to False.
             reactivate_biftrack_neigen (int, optional): Number of eigenvalues to reactivate bifurcation tracking. Defaults to 4.
+            reactivate_biftrack_shift (float, optional): Shift for the eigenvalues to reactivate bifurcation tracking. Defaults to 0.
             resolve_max_newton_steps (int, optional): Maximum number of Newton steps to resolve the problem. 
+            
 
         Returns:
             bool: True if remeshing was performed, False otherwise.
@@ -1786,6 +1788,15 @@ class Problem(_pyoomph.Problem):
             return False
         biftrack = self.get_bifurcation_tracking_mode()
         biftrack_param = self._bifurcation_tracking_parameter_name
+        if biftrack == "azimuthal":
+            m=self._azimuthal_mode_param_m.value
+            k=None
+        elif biftrack == "cartesian_normal_mode":
+            k=self.get_current_normal_mode_k(dimensional=True)
+            m=None
+        else:
+            m=None
+            k=None
         if biftrack != "":
             self.reset_arc_length_parameters()
             self.deactivate_bifurcation_tracking()
@@ -1795,7 +1806,8 @@ class Problem(_pyoomph.Problem):
             if resolve_before_eigen:
                 self.actions_before_stationary_solve(force_reassign_eqs=True)
                 self.solve(max_newton_iterations=resolve_max_newton_steps)
-            self.solve_eigenproblem(reactivate_biftrack_neigen)
+            print("RESOLVING EIGENPROBLEM AT ",k,m)
+            self.solve_eigenproblem(reactivate_biftrack_neigen,azimuthal_m=m,normal_mode_k=k,shift=reactivate_biftrack_shift)
             self.activate_bifurcation_tracking(biftrack_param, biftrack)
             if resolve:
                 self.solve(max_newton_iterations=resolve_max_newton_steps)
@@ -3013,8 +3025,11 @@ class Problem(_pyoomph.Problem):
             if self.get_bifurcation_tracking_mode() == "azimuthal":
                 assert self._azimuthal_mode_param_m is not None
                 self._last_eigenvalues_m = numpy.array([int(self._azimuthal_mode_param_m.value)], dtype=numpy.int32)  # type:ignore
+            elif self.get_bifurcation_tracking_mode()=="cartesian_normal_mode":
+                    self._last_eigenvalues_k=numpy.array([self._normal_mode_param_k.value]) #type:ignore
             else:
                 self._last_eigenvalues_m = None
+                self._last_eigenvalues_k = None
 
         if not self.is_quiet():
             print("GETTING NEW DS ", newds, "PLANNED", step)
@@ -3869,6 +3884,8 @@ class Problem(_pyoomph.Problem):
                 self._last_eigenvectors=numpy.array([self._get_bifurcation_eigenvector()],dtype=numpy.complex128) #type:ignore
                 if self.get_bifurcation_tracking_mode()=="azimuthal":
                     self._last_eigenvalues_m=numpy.array([int(self._azimuthal_mode_param_m.value)],dtype=numpy.int32) #type:ignore
+                elif self.get_bifurcation_tracking_mode()=="cartesian_normal_mode":
+                    self._last_eigenvalues_k=numpy.array([self._normal_mode_param_k.value]) #type:ignore
                 self._last_eigenvectors=self.process_eigenvectors(self._last_eigenvectors)
             else:
                 self._last_eigenvalues_m=None

@@ -307,6 +307,8 @@ class GmshTemplate(MeshTemplate):
         
         #: If set, the input mesh will be mirrored and copied along the given axis or axes. Useful to generate symmetric meshes for e.g. pitchfork tracking
         self.mirror_mesh:Optional[Union[Literal["mirror_x","mirror_y"],List[Literal["mirror_x","mirror_y"]]]]=None
+        #: If set, the entire mesh will be extruded in the next dimension. The first entry in the tuple is the dimensional distance, the second the number of layers. 
+        self.extrude_generated_mesh:Optional[Tuple[ExpressionOrNum,int]]=None 
         self.gmsh_options:Dict[str,int] = {}
         #self.gmsh_options["algorithm"] = 8
         #self.gmsh_options["recombine_algo"] = 2
@@ -1049,7 +1051,48 @@ class GmshTemplate(MeshTemplate):
                 elif direct=="mirror_z":
                     mirrvec[2]=-1
                 points=numpy.r_[points.copy(),points*numpy.array([mirrvec])]
+        if self.extrude_generated_mesh is not None:
+            if self.mirror_mesh is not None:
+                raise RuntimeError("Cannot extrude and mirror the mesh yet at the same time")
+            dist=self.extrude_generated_mesh[0]
+            dist=self.nondim_size(dist)
+            layers=int(self.extrude_generated_mesh[1])
+            if layers<1:
+                raise RuntimeError("Extrusion must have at least 1 layer")
+            
+            if self._maxdim==2 and self._max_elem_dim==2:
+                if self.order==1:
+                    zs=numpy.linspace(0,dist,layers+1,endpoint=True)
+                elif self.order==2:
+                    zs=numpy.linspace(0,dist,layers*2+1,endpoint=True)
+                numpoints=len(points)
+                points=numpy.transpose(numpy.tile(numpy.transpose(points),len(zs)))
+                zcoords=numpy.repeat(zs,numpoints)
+                points[:,2]=zcoords
+                self._maxdim=3
+                self._max_elem_dim=3
+            else:
+                raise RuntimeError("Implement mesh extrusion for nodal dim "+str(self._maxdim)+" and element dim "+str(self._max_elem_dim))
+            
+                
         return points,reindex
+    
+    
+    def _post_extrude_mesh(self):
+        raise RuntimeError("TODO: Implement post extrusion...")
+        # We now have to cast all the cells to one dimension higher
+        newcells=[]
+        newcell_set={}
+        print(type(self._mesh.cell_sets))
+        for name, entry in self._mesh.cell_sets.items(): #type:ignore
+            if name == "gmsh:bounding_entities":
+                print("SKIPPING BOUNDING ENTITIES",entry)
+                continue
+            print("name",name,entry)
+            
+        self._mesh.cells=newcells
+        self._mesh.cell_sets=newcell_set
+        exit()
     
     def _load_mesh(self,mshfilename:str):
         print("Loading mesh file: "+mshfilename)
@@ -1096,6 +1139,9 @@ class GmshTemplate(MeshTemplate):
                 _nodal_dim = 3
         self._max_nodal_dim = _nodal_dim
         self._nodeinds = numpy.array(self._nodeinds) #type:ignore
+        
+        if self.extrude_generated_mesh is not None:
+            self._post_extrude_mesh()
 
         for name, entry in self._mesh.cell_sets.items(): #type:ignore
             if name == "gmsh:bounding_entities":
