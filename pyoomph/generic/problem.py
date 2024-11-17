@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from ..meshes.remesher import RemesherBase
     from ..meshes.interpolator import BaseMeshToMeshInterpolator
     from .assembly import CustomAssemblyBase
+    from ..utils.num_text_out import NumericalTextOutputFile
 
 Z2ErrorEstimator=_pyoomph.Z2ErrorEstimator
 
@@ -3155,7 +3156,9 @@ class Problem(_pyoomph.Problem):
         max_ds_func=max_ds
         if isinstance(parameter, str):
             parameter = self.get_global_parameter(parameter)
-        param_is_normal_mode_k=is_zero(parameter- self._normal_mode_param_k,parameters_to_float=False)
+        param_is_normal_mode_k=False
+        if self._normal_mode_param_k is not None and is_zero(parameter- self._normal_mode_param_k,parameters_to_float=False):
+            param_is_normal_mode_k=True
         if do_solve:
             self.solve(spatial_adapt=spatial_adapt)
         else:
@@ -3376,10 +3379,12 @@ class Problem(_pyoomph.Problem):
             if bifurcation_type is None:
                 bifurcation_type=self.guess_nearest_bifurcation_type(eigenvector)
                 print("Assuming nearest bifurcation is of type: "+bifurcation_type)
-            if omega is None and bifurcation_type in {"hopf","azimuthal"}:
+            if omega is None and bifurcation_type in {"hopf","azimuthal","cartesian_normal_mode"}:
                 omega=numpy.imag(self.get_last_eigenvalues()[eigenvector])
             if bifurcation_type=="azimuthal" and azimuthal_mode is None:
                 azimuthal_mode=self.get_last_eigenmodes_m()[eigenvector]
+            elif bifurcation_type=="cartesian_normal_mode" and cartesian_wavenumber_k is None:
+                cartesian_wavenumber_k=self.get_last_eigenmodes_k()[eigenvector]
             eigenvector=self.get_last_eigenvectors()[eigenvector]
             
         if bifurcation_type is None:
@@ -3399,7 +3404,7 @@ class Problem(_pyoomph.Problem):
                 raise RuntimeError("Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this error.")
             else:
                 print("WARNING: Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this warning.")
-                
+        
         if not self.is_quiet():
             print("Bifurcation tracking activated for "+parameter)
         self._bifurcation_tracking_parameter_name=parameter
@@ -3408,8 +3413,8 @@ class Problem(_pyoomph.Problem):
 #            if must_reapply_bcs:
 #                self.reapply_boundary_conditions() # Equation numbering might have been changed. Update it here!
 #                self._last_bc_setting="eigen"
-            if azimuthal_mode is not None:
-                raise RuntimeError("Cannot use azimuthal_mode for fold solving")
+            if azimuthal_mode is not None or cartesian_wavenumber_k is not None:
+                raise RuntimeError("Cannot use azimuthal_mode or cartesian_wavenumber_k for fold solving")
             if eigenvector is None:
                 eigenvector = next(iter(self.get_last_eigenvectors()), None)
             if eigenvector is None or len(eigenvector)==0:
@@ -3417,8 +3422,8 @@ class Problem(_pyoomph.Problem):
             else:
                 self._start_bifurcation_tracking(parameter,bifurcation_type,blocksolve,numpy.real(eigenvector),[],0.0,{}) #type:ignore
         elif bifurcation_type=="hopf":
-            if azimuthal_mode is not None:
-                raise RuntimeError("Cannot use azimuthal_mode for fold solving")
+            if azimuthal_mode is not None or cartesian_wavenumber_k is not None:
+                raise RuntimeError("Cannot use azimuthal_mode or cartesian_wavenumber_k for Hopf solving")
             if eigenvector is None:
                 eigenvector=next(iter(self.get_last_eigenvectors()),None)
             if omega is None:
@@ -3448,8 +3453,8 @@ class Problem(_pyoomph.Problem):
                 # In the bifurcation tracking, we just negate omega, for the very same result
                 self._start_bifurcation_tracking(parameter,bifurcation_type,blocksolve,numpy.real(eigenvector),numpy.imag(eigenvector),-omega,{}) #type:ignore
         elif bifurcation_type=="pitchfork":
-            if azimuthal_mode is not None:
-                raise RuntimeError("Cannot use azimuthal_mode for fold solving")
+            if azimuthal_mode is not None or cartesian_wavenumber_k is not None:
+                raise RuntimeError("Cannot use azimuthal_mode or cartesian_wavenumber_k for pitchfork solving")
             if eigenvector is None:
                 eigenvector=next(iter(self.get_last_eigenvectors()),None)
             if eigenvector is None:
@@ -3475,12 +3480,13 @@ class Problem(_pyoomph.Problem):
                 eigenvector = self.get_last_eigenvectors()[eigenindices[0]]
                 if omega is None:
                     omega=numpy.imag(self.get_last_eigenvalues()[eigenindices[0]]) #type:ignore
-            if omega is None:
-                omega = next(iter(self.get_last_eigenvalues()), None)
-            if omega is not None:
-                omega = numpy.imag(omega) #type:ignore
             else:
-                omega = 0
+                if omega is None:
+                    omega = next(iter(self.get_last_eigenvalues()), None)
+                if omega is not None:
+                    omega = numpy.imag(omega) #type:ignore
+                else:
+                    omega = 0
 
             # First, we get all equations which must be zero for the base state and on the eigenvector
             must_reapply_bcs=self._equation_system._before_eigen_solve(self.get_eigen_solver(), azimuthal_mode)
@@ -3515,7 +3521,7 @@ class Problem(_pyoomph.Problem):
             self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), -omega,contribs) #type:ignore
             self.assembly_handler_pt().set_global_equations_forced_zero(base_zero_dofs,eigen_zero_dofs) #type:ignore
             
-        elif bifurcation_type=="cartesian_normal_mode":
+        elif bifurcation_type=="cartesian_normal_mode":            
             if self._normal_mode_param_k is None:
                 raise RuntimeError("Cannot use Cartesian normal mode bifurcation tracking if not called setup_for_stability_analysis(additional_cartesian_mode=True) before")
             if cartesian_wavenumber_k is None:
@@ -3535,19 +3541,20 @@ class Problem(_pyoomph.Problem):
                 eigenvector = self.get_last_eigenvectors()[eigenindices[0]]
                 if omega is None:
                     omega=numpy.imag(self.get_last_eigenvalues()[eigenindices[0]]) #type:ignore
-            if omega is None:
-                omega = next(iter(self.get_last_eigenvalues()), None)
-            if omega is not None:
-                omega = numpy.imag(omega) #type:ignore
             else:
-                omega = 0
+                if omega is None:
+                    omega = next(iter(self.get_last_eigenvalues()), None)                
+                if omega is not None:
+                    omega = numpy.imag(omega) #type:ignore
+                else:
+                    omega = 0
 
             # First, we get all equations which must be zero for the base state and on the eigenvector
             must_reapply_bcs=self._equation_system._before_eigen_solve(self.get_eigen_solver(), normal_k=cartesian_wavenumber_k)
             if must_reapply_bcs:
                 self.reapply_boundary_conditions() # Equation numbering might have been changed. Update it here!
                 self._last_bc_setting="eigen"
-            base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),0,None) 
+            base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),None,None) 
             eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),None,cartesian_wavenumber_k) 
 
             # These are sets of strings, we must convert them into lists of equations. We reuse the same class as for the eigenproblem
@@ -3563,9 +3570,17 @@ class Problem(_pyoomph.Problem):
             base_zero_dofs=dof_strings_to_global_equations(base_zero_dofs)
             eigen_zero_dofs=dof_strings_to_global_equations(eigen_zero_dofs)
 
-
+            #print("BASE DOFS",base_zero_dofs)
+            #print("EIGEN DOFS",eigen_zero_dofs)
+            #print("OMEGA {:g}".format(omega))
             contribs={"azimuthal_real_eigen":self._cartesian_normal_mode_stability.real_contribution_name,"azimuthal_imag_eigen":self._cartesian_normal_mode_stability.imag_contribution_name}
-
+            has_imag=self._set_solved_residual(self._cartesian_normal_mode_stability.imag_contribution_name,raise_error=False)
+            if not has_imag:
+                contribs["azimuthal_imag_eigen"]="<NONE>"
+            self._set_solved_residual("")
+            #print("GOING FOR IT ",parameter, bifurcation_type, blocksolve,  -omega,contribs)
+            #print("KVALUE",self._normal_mode_param_k.value,"HAS IMAG",has_imag)
+            
             self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), -omega,contribs) #type:ignore
             self.assembly_handler_pt().set_global_equations_forced_zero(base_zero_dofs,eigen_zero_dofs) #type:ignore            
             
@@ -3765,6 +3780,8 @@ class Problem(_pyoomph.Problem):
             eigen_k=kv
             
         must_reassign_eqs = self._equation_system._before_eigen_solve(self.get_eigen_solver(),eigen_m,eigen_k) 
+        #print("MUST REASSIGN IS",must_reassign_eqs,eigen_m,eigen_k)
+        #exit()
         if must_reassign_eqs or force_reassign_eqs:
 
             self.reapply_boundary_conditions()
@@ -4552,6 +4569,20 @@ class Problem(_pyoomph.Problem):
         from ..solvers.precice_adapter import get_pyoomph_precice_adapter
         get_pyoomph_precice_adapter().coupled_run(self,maxstep=maxstep,temporal_error=temporal_error,output_initially=output_initially,fast_dof_backup=fast_dof_backup)
 
+
+    def create_text_file_output(self,filename:str,header:Optional[List[str]]=None,relative_to_output_dir:bool=True)->"NumericalTextOutputFile":
+        """Creates a :py:class:`~pyoomph.utils.num_text_out.NumericalTextOutputFile`. By default, in the output directory.
+
+        Args:
+            filename: File name
+            header: Header of the file Defaults to None.
+            relative_to_output_dir: If True, the file is created in the output directory. Defaults to True.        
+        """
+        from ..utils.num_text_out import NumericalTextOutputFile
+        if relative_to_output_dir:
+            filename=self.get_output_directory(filename)
+        return NumericalTextOutputFile(filename,header=header)
+        
 
 ############## DOF SELECTOR ###################
 class _DofSelector:

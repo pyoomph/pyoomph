@@ -479,7 +479,7 @@ class AxisymmetryBC(DirichletBC):
     def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[float]=None,normal_k:Optional[float]=None) -> bool:
         if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
             return False # Nothing must be reassigned
-        if angular_m is None or angular_m==0:
+        if (angular_m is None or angular_m==0) and (normal_k is None or normal_k==0):
             return False
         must_reapply = False
         for_m0, _, _ = self._get_field_information_for_axial_breaking(eqtree.get_code_gen())
@@ -493,7 +493,7 @@ class AxisymmetryBC(DirichletBC):
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool) -> bool:
         if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
             return False # Nothing must be reassigned
-        if self.get_mesh().get_problem().get_bifurcation_tracking_mode()=="azimuthal":
+        if self.get_mesh().get_problem().get_bifurcation_tracking_mode() in {"azimuthal","cartesian_normal_mode"}:
             return False # Don't do anything in this case. It would mess up everything!
         must_reapply = False
         for_m0, _, _ = self._get_field_information_for_axial_breaking(eqtree.get_code_gen())

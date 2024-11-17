@@ -331,24 +331,25 @@ class GenericEigenSolver:
 
 	def get_J_M_n_and_type(self)->Tuple[DefaultMatrixType,DefaultMatrixType,int,bool]:
 		from scipy.sparse import csr_matrix #type:ignore
-		self.problem._set_solved_residual(self.real_contribution)
+		if not self.problem._set_solved_residual(self.real_contribution):
+			raise RuntimeError("Cannot set the residual "+self.real_contribution+" for eigen calculation since it has no contribution at all")
 		n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
 		matM=csr_matrix((M_val, M_ci, M_rs), shape=(n, n))	#TODO: Is csr or csc?
 		matJ=csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
 		is_complex=False
-		if self.imag_contribution is not None:
-			self.problem._set_solved_residual(self.imag_contribution)
-			matM=cast(csr_matrix,matM.copy())
-			matJ=cast(csr_matrix,matJ.copy())
-			n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
-			matMi = csr_matrix((M_val, M_ci, M_rs), shape=(n, n))  # TODO: Is csr or csc?
-			matJi = csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
-			if M_nzz>0:
-				matM=cast(csr_matrix,matM+complex(0,1)*matMi)
-				is_complex = True
-			if J_nzz>0:
-				matJ =cast(csr_matrix,matJ+ complex(0, 1) * matJi)
-				is_complex=True
+		if self.imag_contribution is not None:      
+			if self.problem._set_solved_residual(self.imag_contribution,raise_error=False):					
+				matM=cast(csr_matrix,matM.copy())
+				matJ=cast(csr_matrix,matJ.copy())
+				n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
+				matMi = csr_matrix((M_val, M_ci, M_rs), shape=(n, n))  # TODO: Is csr or csc?
+				matJi = csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
+				if M_nzz>0:
+					matM=cast(csr_matrix,matM+complex(0,1)*matMi)
+					is_complex = True
+				if J_nzz>0:
+					matJ =cast(csr_matrix,matJ+ complex(0, 1) * matJi)
+					is_complex=True
 
 		self.problem._set_solved_residual("")
 

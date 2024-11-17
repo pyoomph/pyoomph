@@ -179,7 +179,8 @@ namespace pyoomph
 		for (unsigned int i = 0; i < functable->num_res_jacs; i++)
 		{
 			std::string n = functable->res_jac_names[i];
-			if (n == name)
+			//std::cout << this->get_file_name() << " " << i << " : " << n << " PRT " << functable->ResidualAndJacobian[i] << std::endl;
+			if (n == name && functable->ResidualAndJacobian[i])
 			{
 				res_jac_index = i;
 				break;
@@ -597,18 +598,19 @@ namespace pyoomph
 
 	*/
 
-	void Problem::_set_solved_residual(std::string name)
+	bool Problem::_set_solved_residual(std::string name,bool raise_error)
 	{
 		unsigned numfound = 0;
 		for (unsigned int i = 0; i < bulk_element_codes.size(); i++)
 		{
 			numfound += bulk_element_codes[i]->_set_solved_residual(name);
 		}
-		if (!numfound)
+		if (!numfound && raise_error)
 		{
 			throw_runtime_error("Cannot activate the residual-Jacobian pair named '" + name + "', since it is defined in no equations at all");
 		}
 		this->_solved_residual = name;
+		return numfound;
 	}
 
 	double &Problem::global_parameter(const std::string &n)
@@ -976,7 +978,6 @@ namespace pyoomph
 	void Problem::activate_my_azimuthal_tracking(double *const &parameter_pt, const double &omega, const oomph::DoubleVector &null_real, const oomph::DoubleVector &null_imag, std::map<std::string, std::string> special_residual_forms)
 	{
 		reset_assembly_handler_to_default();
-		AzimuthalSymmetryBreakingHandler *azi = new AzimuthalSymmetryBreakingHandler(this, parameter_pt, null_real, null_imag, omega);
 		if (!special_residual_forms.count("azimuthal_real_eigen"))
 		{
 			throw_runtime_error("You have not specified a azimuthal_real_eigen as special residual");
@@ -985,6 +986,9 @@ namespace pyoomph
 		{
 			throw_runtime_error("You have not specified a azimuthal_imag_eigen as special residual");
 		}
+		bool has_imag=special_residual_forms["azimuthal_imag_eigen"]!="<NONE>";
+		AzimuthalSymmetryBreakingHandler *azi = new AzimuthalSymmetryBreakingHandler(this, parameter_pt, null_real, null_imag, omega,has_imag);
+
 		azi->setup_solved_azimuthal_contributions(special_residual_forms["azimuthal_real_eigen"], special_residual_forms["azimuthal_imag_eigen"]);
 		this->assembly_handler_pt() = azi;
 	}

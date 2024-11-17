@@ -286,8 +286,10 @@ namespace pyoomph
 
     double FD_step; // Finite difference step (usually small)
 
+    bool has_imaginary_part; // If the imaginary part of the jacobian or mass matrix is present
+
     // Constructors. We must pass a problem, a parameter to optimize (i.e. to change in order to get Re(eigenvalue)=0) and a guess of the eigenvector and the imaginary part of the eigenvector
-    AzimuthalSymmetryBreakingHandler(Problem *const &problem_pt, double *const &parameter_pt, const oomph::DoubleVector &real_eigen, const oomph::DoubleVector &imag_eigen, const double &Omega_guess);
+    AzimuthalSymmetryBreakingHandler(Problem *const &problem_pt, double *const &parameter_pt, const oomph::DoubleVector &real_eigen, const oomph::DoubleVector &imag_eigen, const double &Omega_guess,bool has_imag);
     // Destructor (used for cleaning up memory)
     ~AzimuthalSymmetryBreakingHandler();
 

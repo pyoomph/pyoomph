@@ -322,7 +322,7 @@ namespace pyoomph
     oomph::Vector<oomph::Vector<unsigned>> &GetSparcseAssembleWithArraysPA() { return this->Sparse_assemble_with_arrays_previous_allocation; }
     
     virtual void quiet(bool _quiet);
-    virtual void _set_solved_residual(std::string name);
+    virtual bool _set_solved_residual(std::string name, bool raise_error=true);
     virtual void _replace_RJM_by_param_deriv(std::string name,bool active);
     virtual std::string _get_solved_residual() { return _solved_residual; }
     virtual bool is_quiet() const { return _is_quiet; }
