@@ -38,6 +38,93 @@ using namespace oomph;
 
 namespace pyoomph
 {
+
+
+   void rotate_complex_eigenvector_nicely(oomph::Vector<double> &real_eigen, oomph::Vector<double> &imag_eigen)
+  {
+    // Get the dots of the real and imaginary parts
+    double GrGr = 0.0, GiGi = 0.0, GrGi = 0.0;
+    for (unsigned n = 0; n < real_eigen.size(); n++)
+    {
+      GrGr += real_eigen[n] * real_eigen[n];
+      GiGi += imag_eigen[n] * imag_eigen[n];
+      GrGi += real_eigen[n] * imag_eigen[n];
+    }
+
+    // Sample phi: We search for a phi that gives a rotated eigenvectors by multiplication with exp(-i*phi)
+    // so that <Re(eigenvector),Im(eigenvector)> is zero and <Re(eigenvector),Re(eigenvector)> is maximized
+    const unsigned n_phi_samples=30; // Test so many initial guesses for phi
+    const unsigned n_inter=15;
+    double best_phi=0.0;
+    double best_GrGr=GrGr;
+    for (unsigned iphi=0;iphi<n_phi_samples;iphi++)
+    {
+      double phi=2.0*MathematicalConstants::Pi*double(iphi)/double(n_phi_samples);      
+      // If res==0, <Re(eigenvector),Im(eigenvector)> will be rotated to zero
+      double res=-GiGi*sin(phi)*cos(phi) - GrGi*sin(phi)*sin(phi) + GrGi*cos(phi)*cos(phi) + GrGr*sin(phi)*cos(phi);
+      unsigned iter=0;
+      bool success=false;
+      for  ( unsigned  iter=0; iter<n_inter;iter++)
+      {
+        // Newton iteration to find phi
+        double J=GiGi*sin(phi)*sin(phi) - GiGi*cos(phi)*cos(phi) - 4*GrGi*sin(phi)*cos(phi) - GrGr*sin(phi)*sin(phi) + GrGr*cos(phi)*cos(phi);
+        if (std::fabs(J)<1.0e-10)
+        {         
+          break; // Singular Jacobian
+        }
+        phi-=res/J;
+        res=-GiGi*sin(phi)*cos(phi) - GrGi*sin(phi)*sin(phi) + GrGi*cos(phi)*cos(phi) + GrGr*sin(phi)*cos(phi);
+        if (std::fabs(res)<1.0e-10)
+        {
+          success=true; // Found a good zero
+          break;
+        }
+      }
+      if (!success) continue;      
+      // Test whether it maximizes <Re(eigenvector),Re(eigenvector)>
+      double GrGr_new=GrGr*cos(phi)*cos(phi) + GiGi*sin(phi)*sin(phi) - 2*GrGi*sin(phi)*cos(phi);
+      if (GrGr_new>best_GrGr)
+      {
+        best_GrGr=GrGr_new;
+        best_phi=phi;
+      }
+    }
+
+    // Rotate the eigenvector
+    if (best_phi!=0.0)
+    {      
+      double c=cos(best_phi);
+      double s=sin(best_phi);
+      GrGr = 0.0, GiGi = 0.0, GrGi = 0.0;    
+      for (unsigned n = 0; n < real_eigen.size(); n++)
+      {
+        double new_real=real_eigen[n]*c-imag_eigen[n]*s;
+        double new_imag=real_eigen[n]*s+imag_eigen[n]*c;
+        real_eigen[n]=new_real;
+        imag_eigen[n]=new_imag;
+        GrGr += real_eigen[n] * real_eigen[n];
+        GiGi += imag_eigen[n] * imag_eigen[n];
+        GrGi += real_eigen[n] * imag_eigen[n];
+      }
+      std::cout << "Rotating eigenvector by " << best_phi << " to get <Re(eigenvector),Im(eigenvector)> = " << GrGi <<" ~ 0, maximize <Re(eigenvector),Re(eigenvector)>=" << GrGr << " and <Im(eigenvector),Im(eigenvector)>= " << GiGi << std::endl;
+    }
+
+    // Normalize the eigenvector to its real part
+    double length_eigen_real = 0.0;
+    for (unsigned n = 0; n < real_eigen.size(); n++)
+    {
+      length_eigen_real += real_eigen[n] * real_eigen[n];
+    }
+    length_eigen_real = sqrt(length_eigen_real);
+    for (unsigned n = 0; n < real_eigen.size(); n++)
+    {
+      real_eigen[n] /= length_eigen_real;
+      imag_eigen[n] /= length_eigen_real;
+    }
+
+  }
+
+
   MyHopfHandler::MyHopfHandler(Problem *const &problem_pt,
                                double *const &parameter_pt) : Solve_which_system(0), Parameter_pt(parameter_pt), Omega(0.0)
   {
@@ -209,41 +296,25 @@ namespace pyoomph
     }
 
     // Normalise the guess for phi
-    double length = 0.0, GrGr = 0.0, GrGi = 0.0, GiGi = 0.0;
+
     for (unsigned n = 0; n < Ndof; n++)
     {
-      GrGr += phi[n] * phi[n];
-      GrGi += phi[n] * psi[n];
-      GiGi += psi[n] * psi[n];
+      Phi[n]=phi[n];
+      Psi[n]=psi[n];
     }
+    rotate_complex_eigenvector_nicely(Phi, Psi);
 
-    /// Correct the initial eigenvector guess
-    double rotation_vector = atan2(GrGr - GiGi + sqrt(pow(GrGr - GiGi, 2) + 4 * pow(GrGi, 2)), 2 * GrGi);
-    //  std::cout << "FROM C: Gs: " << GrGr << "  " << GiGi << " " << GrGi << "  " << rotation_vector << std::endl;
-
-    // Now add the real part of the null space components to the problem
-    // unknowns and initialise it all
     for (unsigned n = 0; n < Ndof; n++)
     {
       problem_pt->GetDofPtr().push_back(&Phi[n]);
-      C[n] = Phi[n] = phi[n] * cos(rotation_vector) - psi[n] * sin(rotation_vector);
-      length += Phi[n] * Phi[n];
+      C[n] = Phi[n];
     }
-    length = sqrt(length);
 
     for (unsigned n = 0; n < Ndof; n++)
     {
       problem_pt->GetDofPtr().push_back(&Psi[n]);
-      Psi[n] = phi[n] * sin(rotation_vector) + psi[n] * cos(rotation_vector);
     }
 
-    // Normalize it
-    for (unsigned n = 0; n < Ndof; n++)
-    {
-      C[n] /= length;
-      Phi[n] /= length;
-      Psi[n] /= length;
-    }
 
     // Now add the parameter
     problem_pt->GetDofPtr().push_back(parameter_pt);
@@ -2002,11 +2073,9 @@ namespace pyoomph
     return entry.residual_indices[residual_mode] >= 0;
   }
 
-  ///////////////////////////////////////
 
-  ////////// IMPORTANT PART ////////////
+ 
 
-  //////////////////////////////////////
 
   // Constructors. We must pass a problem, a parameter to optimize (i.e. to change in order to get Re(eigenvalue)=0)
   // and a guess of the eigenvector
@@ -2022,9 +2091,9 @@ namespace pyoomph
     Ndof = problem_pt->ndof();
 
     // Resize the vectors of additional dofs
-    real_eigenvector.resize(Ndof);
-    imag_eigenvector.resize(Ndof);
-    normalization_vector.resize(Ndof);
+    real_eigenvector.resize(Ndof,0);
+    imag_eigenvector.resize(Ndof,0);
+    normalization_vector.resize(Ndof,0);
     Count.resize(Ndof, 0);
 
     // Loop over all the elements in the problem
@@ -2041,46 +2110,26 @@ namespace pyoomph
       }
     }
 
-    // Normalise the guess for the eigenvectors. First getting the lengths
-    double length_eigen_real = 0.0, GrGr = 0.0, GiGi = 0.0, GrGi = 0.0;
-    for (unsigned n = 0; n < Ndof; n++)
+
+    for (unsigned n=0;n<Ndof;n++)
     {
-      GrGr += real_eigen[n] * real_eigen[n];
-      GiGi += imag_eigen[n] * imag_eigen[n];
-      GrGi += real_eigen[n] * imag_eigen[n];
+      real_eigenvector[n]=real_eigen[n];
+      imag_eigenvector[n]=imag_eigen[n];
     }
-
-    /// Correct the initial eigenvector guess
-    double phi=0.0;
-    if (GiGi>1e-10*GrGr)  phi = atan2(GrGr - GiGi + sqrt(pow(GrGr - GiGi, 2) + 4 * pow(GrGi, 2)), 2 * GrGi); // TODO: Check this
-     
-    //std::cout << "Initial guess for the phase is " << phi << " RR " << GrGr << " " << " II " << GrGi << " RI " << GrGi << std::endl;
-    //std::cout << "Has imaginary part " << has_imaginary_part << std::endl;
-
-    // Next add the real and imaginary parts of the eigenvector to be determined to the problem
-    // and initialise it all
-    for (unsigned n = 0; n < Ndof; n++)
+    rotate_complex_eigenvector_nicely(real_eigenvector,imag_eigenvector);
+    for (unsigned n=0;n<Ndof;n++) normalization_vector[n]=real_eigenvector[n];
+    for (unsigned n=0;n<Ndof;n++)
     {
-      problem_pt->GetDofPtr().push_back(&real_eigenvector[n]);
-      normalization_vector[n] = real_eigenvector[n] = real_eigen[n] * cos(phi) - imag_eigen[n] * sin(phi); // Set the real normalization vector and the initial real part of the eigenvector to length 1    length_eigen_real += real_eigenvector[n] * real_eigenvector[n];
-      length_eigen_real += real_eigenvector[n] * real_eigenvector[n];
+       problem_pt->GetDofPtr().push_back(&real_eigenvector[n]);
     }
-
     if (has_imaginary_part)
     {
-      for (unsigned n = 0; n < Ndof; n++)
+      for (unsigned n=0;n<Ndof;n++)
       {
-        problem_pt->GetDofPtr().push_back(&imag_eigenvector[n]);
-        imag_eigenvector[n] = real_eigen[n] * sin(phi) + imag_eigen[n] * cos(phi);
+       problem_pt->GetDofPtr().push_back(&imag_eigenvector[n]);
       }
     }
-
-    for (unsigned n = 0; n < Ndof; n++)
-    {
-      normalization_vector[n] /= sqrt(length_eigen_real);
-      real_eigenvector[n] /= sqrt(length_eigen_real);
-      imag_eigenvector[n] /= sqrt(length_eigen_real);
-    }
+    
 
     // Now add the parameter as degree of freedom
     problem_pt->GetDofPtr().push_back(parameter_pt);
@@ -2091,6 +2140,7 @@ namespace pyoomph
     Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(), (has_imaginary_part ? Ndof *  3 + 2 : Ndof*2+1), false);
     // Remove all previous sparse storage used during Jacobian assembly
     Problem_pt->GetSparcseAssembleWithArraysPA().resize(0);
+    
   }
 
   // Destructor (used for cleaning up memory)
