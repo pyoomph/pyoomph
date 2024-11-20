@@ -3817,6 +3817,7 @@ namespace pyoomph
 		os << "static void " << funcname << "(const JITElementInfo_t * eleminfo, const JITShapeInfo_t * shapeinfo,double * residuals, double *jacobian, double *mass_matrix,unsigned flag)" << std::endl;
 		os << "{" << std::endl;
 		os << "  int local_eqn, local_unknown;" << std::endl;
+		os << "  bool _has_residual_contribution,_has_jacobian_contribution;" << std::endl;
 
 		// TODO: Only if hanging allowed
 		os << "  unsigned nummaster,nummaster2;" << std::endl;

@@ -8,6 +8,8 @@ __all__ = ['AssemblyHandler', 'AzimuthalSymmetryBreakingHandler', 'BulkElementOD
 class AssemblyHandler:
     pass
 class AzimuthalSymmetryBreakingHandler(AssemblyHandler):
+    def set_eigenweight(self, arg0: float) -> None:
+        ...
     def set_global_equations_forced_zero(self, arg0: set[int], arg1: set[int]) -> None:
         ...
 class BulkElementODE0d(OomphGeneralisedElement):

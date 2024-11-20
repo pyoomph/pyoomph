@@ -160,6 +160,7 @@ typedef struct JITHangInfoEntry
 typedef struct JITHangInfo
 {
   int nummaster;
+  bool ARRAY_DECL_NFIELDS(has_contributions); // Is any of the hanging equations non-pinned?
   JITHangInfoEntry_t ARRAY_DECL_NHANG(masters); // 0..nummasters-1
 } JITHangInfo_t;
 

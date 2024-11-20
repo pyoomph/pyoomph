@@ -270,8 +270,10 @@ namespace pyoomph
                                                // indices are the base equations, not the indices of the eigendegrees!).
                                                // For e.g. m=1, equation of velocity_x at axis is part of base_dofs_forced_zero,
                                                // but not of eigen_dofs_forced_zero
+    double eigenweight=1.0;                                               
   public:
     unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)
+    void set_eigenweight(double ew);
 
     // Setter of the forced zero degrees
     void set_global_equations_forced_zero(const std::set<unsigned> &base, const std::set<unsigned> &eigen)

@@ -108,6 +108,10 @@ namespace pyoomph
       }
       std::cout << "Rotating eigenvector by " << best_phi << " to get <Re(eigenvector),Im(eigenvector)> = " << GrGi <<" ~ 0, maximize <Re(eigenvector),Re(eigenvector)>=" << GrGr << " and <Im(eigenvector),Im(eigenvector)>= " << GiGi << std::endl;
     }
+    else
+    {
+      std::cout << "Rotating eigenvector by " << best_phi << " to get <Re(eigenvector),Im(eigenvector)> = " << GrGi <<" ~ 0, maximize <Re(eigenvector),Re(eigenvector)>=" << GrGr << " and <Im(eigenvector),Im(eigenvector)>= " << GiGi << std::endl;
+    }
 
     // Normalize the eigenvector to its real part
     double length_eigen_real = 0.0;
@@ -2234,12 +2238,12 @@ namespace pyoomph
     // Initialise the pen-ultimate residual
     if (has_imaginary_part)
     {
-      residuals[3 * raw_ndof] = -1.0 /(double)(Problem_pt->mesh_pt()->nelement());
+      residuals[3 * raw_ndof] = -1.0 /(double)(Problem_pt->mesh_pt()->nelement())* eigenweight;
       residuals[3 * raw_ndof + 1] = 0.0;
     }
     else
     {
-      residuals[2 * raw_ndof] = -1.0 /(double)(Problem_pt->mesh_pt()->nelement());
+      residuals[2 * raw_ndof] = -1.0 /(double)(Problem_pt->mesh_pt()->nelement())* eigenweight;
     }
 
     // Now multiply to fill in the residuals
@@ -2490,7 +2494,7 @@ namespace pyoomph
 
       // We will fill in the augmented residual vector once more by hand here. Otherwise, it we would call this->get_residual, we would assemble several matrices multiple times
       // Now multiply to fill in the residuals
-      residuals[(has_imaginary_part ? 3 : 2) * raw_ndof] = -1.0 / (double)(Problem_pt->mesh_pt()->nelement());
+      residuals[(has_imaginary_part ? 3 : 2) * raw_ndof] = -1.0 / (double)(Problem_pt->mesh_pt()->nelement())* eigenweight;
       if (has_imaginary_part) residuals[3 * raw_ndof + 1] = 0.0;
       for (unsigned i = 0; i < raw_ndof; i++)
       {
@@ -2713,6 +2717,16 @@ namespace pyoomph
       eigenfunction[0][n] = real_eigenvector[n];
       if (has_imaginary_part) eigenfunction[1][n] = imag_eigenvector[n];
     }
+  }
+
+   void AzimuthalSymmetryBreakingHandler::set_eigenweight(double ew)
+  {
+    for (unsigned n = 0; n < Ndof; n++)
+    {
+      real_eigenvector[n] *= ew / eigenweight;
+      imag_eigenvector[n] *= ew / eigenweight;
+    }
+    eigenweight = ew;
   }
 
   // Pyoomph has different residual contributions. The original residual along with its jacobian and the real and imag part of the azimuthal Jacobian and mass matrix. We get the indices of these contributions in beforehand.

@@ -813,9 +813,13 @@ class _AverageOrIntegralConstraintBase(Equations):
         for field,integral_value in self.constraints.items():
             u,utest=var_and_test(field)
             l,ltest=var_and_test(field,domain=odestorage)
-            self.add_weak(u/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
-            self.add_weak(self.get_integral_contribution(field)/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
+            #self.add_weak(u/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
+            #self.add_weak(self.get_integral_contribution(field)/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
+            self.add_weak(self.get_constraint(field,u),ltest,dimensional_dx=self.dimensional_dx)
             self.add_weak(l,utest/test_scale_factor(field),dimensional_dx=False)
+
+    def get_constraint(self,field:str,u:Expression):
+        return (u-self.get_integral_contribution(field))/scale_factor(field)
 
     def get_global_residual_contribution(self,field:str)-> ExpressionOrNum:
         raise RuntimeError("Must be implemented")

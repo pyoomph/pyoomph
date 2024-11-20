@@ -336,6 +336,7 @@ void PyReg_Problem(py::module &m)
 			 { self->debug_analytical_filling(elem, eps); });
 
 	py::class_<pyoomph::AzimuthalSymmetryBreakingHandler, oomph::AssemblyHandler>(m, "AzimuthalSymmetryBreakingHandler")
+		.def("set_eigenweight", &pyoomph::AzimuthalSymmetryBreakingHandler::set_eigenweight)	
 		.def("set_global_equations_forced_zero", &pyoomph::AzimuthalSymmetryBreakingHandler::set_global_equations_forced_zero);
 
 	py::class_<pyoomph::DynamicBulkElementInstance>(m, "DynamicBulkElementInstance")
