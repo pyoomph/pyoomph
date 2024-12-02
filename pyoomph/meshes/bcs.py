@@ -562,6 +562,8 @@ class PeriodicBC(InterfaceEquations):
         self.other_interface = other_interface        
         if offset is None:
             raise RuntimeError("Please supply an offset")
+        elif not isinstance(offset,(list,tuple)):
+            self.offset=[offset]
         else:
             self.offset = offset
 

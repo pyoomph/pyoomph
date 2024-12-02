@@ -430,7 +430,7 @@ class HertzKnudsenSchrageMassTransferModel(DifferenceDrivenMassTransferModelLiqu
         opp=self._opposite_interface
         ptot=var("absolute_pressure",domain=opp)
         kin_gas_factor=ptot*square_root(M/(2*pi*R*T))
-        if isinstance(self.sticking_coefficient,float):
+        if isinstance(self.sticking_coefficient,(float,int,Expression,GlobalParameter)):
             return self.sticking_coefficient*kin_gas_factor
         elif isinstance(self.sticking_coefficient,dict):
             if name not in self.sticking_coefficient.keys():

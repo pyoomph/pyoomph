@@ -426,7 +426,7 @@ class NavierStokesEquations(StokesEquations):
 
     .. math:: (\\partial_t \\rho, q) + (\\rho \\vec{u}, \\nabla q) = 0
     .. math:: \\rho (\\partial_t \\vec{u}, \\vec{v}) + \\rho (\\vec{u} \\cdot \\nabla \\vec{u}, \\vec{v}) + (-p \\vec{\\vec{I}} + \\mu [\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T}], \\nabla \\vec{v} + (\\nabla \\vec{v})^\\text{T}) - (f,\\vec{v}) 
-    .. math:: - \langle \\vec{n} \\cdot [-p I + \\mu (\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T})], \\vec{v} \\rangle = 0 \\,
+    .. math:: - \\langle \\vec{n} \\cdot [-p I + \\mu (\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T})], \\vec{v} \\rangle = 0 \\,
 
     where :math:`\\vec{v}` and :math:`q` are test functions of the velocity and pressure, respectively.
 

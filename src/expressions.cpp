@@ -651,11 +651,21 @@ namespace pyoomph
 						GiNaC::ex sunits = 1;
 						if (!collect_base_units(cl.op(i).op(0), sfactor, sunits, srest))
 						{
-							std::cerr << "Problem collecting units in " << cl.op(i).op(0) << std::endl;
+							std::cerr << "Problem collecting units in basis " << cl.op(i).op(0) << std::endl;
 							return false;
 						}
+						GiNaC::ex erest = 1;
+						GiNaC::ex efactor = 1;
+						GiNaC::ex eunits = 1;
+						if (!collect_base_units(cl.op(i).op(1), efactor, eunits, erest))
+						{
+							std::cerr << "Problem collecting units in exponent " << cl.op(i).op(1) << std::endl;
+							return false;
+						}						
 						if (pyoomph_verbose)
 							std::cout << "  APPLY POWER " << cl.op(i).op(1) << " on " << sunits << "  ,  " << sfactor << " , " << srest << std::endl;
+						//std::cout << "EXPONENT FACTOR UNIT AND REST " << efactor << "  " << eunits << "  " << erest << std::endl;
+						
 						units *= GiNaC::power(sunits, cl.op(i).op(1));
 						factor *= GiNaC::power(sfactor, cl.op(i).op(1));
 						rest *= GiNaC::power(srest, cl.op(i).op(1));
@@ -688,7 +698,14 @@ namespace pyoomph
 			}
 
 			// Check whether the factor is positive, try to go for the positive one
-			if (GiNaC::to_double(GiNaC::ex_to<GiNaC::numeric>(factor.evalf()))<0)
+			//std::cout << "FACTOR " << factor << std::endl;
+			GiNaC::ex factorf=factor.evalf();
+			if (!GiNaC::is_a<GiNaC::numeric>(factorf))
+			{
+				rest*=factor;
+				factor=1;
+			}
+			else if (GiNaC::to_double(GiNaC::ex_to<GiNaC::numeric>(factorf))<0)
 			{
 				factor *= -1;
 				rest *= -1;

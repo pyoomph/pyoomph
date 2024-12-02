@@ -1912,7 +1912,9 @@ namespace pyoomph
       }
       for (unsigned int i = 0; i < from_fft->numfields_C1 - from_fft->numfields_C1_basebulk; i++)
       {
+        std::cout << "STARTING LOOP " << this->domainname << "  " << i << std::endl << std::flush;
         std::string name2find = from_fft->fieldnames_C1[from_fft->numfields_C1_basebulk + i];
+        std::cout << "RESOLVING " << name2find << std::endl << std::flush;
         from_interface_dofs[name2find] = from_fci->resolve_interface_dof_id(name2find);
       }
       for (auto my : my_interface_dofs)

@@ -3743,7 +3743,6 @@ class Problem(_pyoomph.Problem):
                 self._last_eigenvalues_m=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore
             else:
                 self._last_eigenvalues_k=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.float64) #type:ignore
-
         return self._last_eigenvalues, self._last_eigenvectors
 
     # will be called when a stationary solve is tried after a transient solve or when solving for the first time
