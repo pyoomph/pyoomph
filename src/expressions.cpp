@@ -3270,7 +3270,7 @@ namespace pyoomph
 					if (sexp.no_jacobian || sexp.no_hessian) throw_runtime_error("Cannot minimize wrt a shape expansion with no_jacobian or no_hessian");
 					if (sexp.dt_order!=0) throw_runtime_error("Cannot minimize wrt a shape expansion with a time derivative");
 					// TODO: This should be possible for e.g. bulk domain -> bulk test function
-					if (sexp.field->get_space()->get_code()!=__current_code) throw_runtime_error("Cannot minimize wrt a shape expansion from another domain");
+					//if (sexp.field->get_space()->get_code()!=__current_code) throw_runtime_error("Cannot minimize wrt a shape expansion from another domain");
 
 					//std::cout << "Minimizing wrt " << se << std::endl;					
 					GiNaC::ex F_dummy = F.subs(wrt_ex == derive_dummy);
@@ -3280,7 +3280,11 @@ namespace pyoomph
 					GiNaC::ex tf=0+GiNaC::GiNaCTestFunction(testfunc);
 					if (dim_testfunc)
 					{
-						throw_runtime_error("Dimensional test function here");
+						//throw_runtime_error("Dimensional test function here");
+						std::string id=sexp.field->get_name();
+						if (!pyoomph::__field_name_cache.count(id)) pyoomph::__field_name_cache.insert(std::make_pair(id,GiNaC::realsymbol(id)));						
+	  	  				GiNaC::GiNaCPlaceHolderResolveInfo ri(pyoomph::PlaceHolderResolveInfo(NULL,std::vector<std::string>{"domain:"+sexp.basis->get_space()->get_code()->get_full_domain_name()}));						
+						tf*=(0+pyoomph::expressions::test_scale(pyoomph::__field_name_cache[id],ri));
 					}
 					//std::cout << "dF " << dF << std::endl;
 					res = res + weak(dF,tf,flags,coordsys);

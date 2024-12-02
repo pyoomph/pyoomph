@@ -897,7 +897,7 @@ namespace pyoomph
 					{
 						for (unsigned int f = 0; f < ft->numfields_C2TB_basebulk; f++)
 						{
-						   unsigned foffs=f+ ft->buffer_offset_C2TB_interf;
+						    unsigned foffs=f+ ft->buffer_offset_C2TB_basebulk;
 							if (shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs] >= 0)
 							{
 							   int oldeq=shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs];
@@ -905,7 +905,7 @@ namespace pyoomph
 							   {
 							    throw_runtime_error("Problem remapping C2TB dof, local eq is "+std::to_string(shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs])+" but the eqn_remap buffer only has "+std::to_string(eqn_remap.size())+" entri
 							   }*/
-								shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs] = eqn_remap[shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs]];
+								shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs] = eqn_remap[shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs]];								
 								if (shape_info->hanginfo_C2TB[l].masters[m].local_eqn[foffs] == -666)
 								{
 									std::ostringstream oss;
