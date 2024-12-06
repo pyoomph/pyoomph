@@ -1426,6 +1426,7 @@ class ODEStorageMesh(_pyoomph.ODEStorageMesh):
         self._codegen._index_fields()  # type:ignore
         self._codegen.get_equations()._set_current_codegen(ocg)  # type:ignore
         self._element = None
+        self.ignore_initial_condition=False
         for _, eqtree in self._eqtree.get_children().items():
             raise RuntimeError("ODE domains may not have children yet")
 
@@ -1480,6 +1481,8 @@ class ODEStorageMesh(_pyoomph.ODEStorageMesh):
         return self.get_code_gen().get_code()
 
     def setup_initial_conditions_with_interfaces(self, resetting_first_step: bool, ic_name: str):
+        if self.ignore_initial_condition:
+            return
         self.setup_initial_conditions(resetting_first_step, ic_name)
 
     def elements(self) -> Iterator[_pyoomph.OomphGeneralisedElement]:

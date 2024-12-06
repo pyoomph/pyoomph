@@ -696,16 +696,15 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             return diff(arg[0], xadd) # TODO: Test this
         elif ndim==1:
             if edim==0:     
-                # TODO Such things might be problematic when you e.g. calculate div(var("u",domain=".."))           
+                # TODO Such things might be problematic when you e.g. calculate div(var("u",domain="..")). 
+                # If ".." has edim=ndim, then this expression will likely be evaluated with edim=ndim-1, which is not what we want
                 return diff(arg[1], xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], xadd) )
-            elif edim==1:
-                #k**2*Xk1(x)*u1(x, xadd) - I*k*Xk1(x)*Derivative(u1(x, xadd), xadd) + I*k*u2(x, xadd)*Derivative(Xk1(x), x) - Derivative(Xk1(x), x)*Derivative(u1(x, xadd), x)
+            elif edim==1:                
                 return diff(arg[0], x) + diff(arg[1], xadd)*(1 if not lagrangian else 0) + mm*( -I*Xk*k*diff(arg[1], x) - diff(Xk, x)*diff(arg[0], x) )
         elif ndim==2:
             Yk=pcoords[1]
             y=dcoords[1]
            
-
             if edim==0:
                 return diff(arg[2], xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], xadd) + I*Yk*k*diff(arg[1], xadd) )
             elif edim==1:
@@ -721,7 +720,6 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 res+=mm*mmterm
                 return res
             elif edim==2:
-                # TODO: Why a minus here in -I*k*Xk*diff(arg[2], x), but not above?
                 return diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], xadd)*(1 if not lagrangian else 0) + mm * ( -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
         raise RuntimeError("Any other combinations are not implemented yet!")
         
@@ -779,20 +777,30 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         res.append(line)
         
         if not lagrangian: 
+            if edim!=ndim:
+                raise RuntimeError("Vector gradient on the CartesianCoordinateSystemWithAdditionalNormalMode is not implemented for edim!=ndim. If you need it, implement it!")
             I=self.imaginary_i            
             mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
             if ndim==1:               
                 Xk=pcoords[0]
                 vX,vY=arg[0],arg[1]                
                 x,y=dcoords[0],xadd
-                res[0][0]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
-                res[0][1]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
-                res[1][0]+=mm*( -diff(Xk, x)*diff(vY, x) )
-                res[1][1]+=mm*( -I*k*Xk*diff(vY, x) )
+                
+                #res[0][0]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
+                #res[0][1]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
+                #res[1][0]+=mm*( -diff(Xk, x)*diff(vY, x) )
+                #res[1][1]+=mm*( -I*k*Xk*diff(vY, x) )
+                res[0][0]+=mm*(-diff(Xk, x)*diff(vX, x))
+                res[0][1]+=mm*(-I*k*Xk*diff(vX, x))
+                res[1][0]+=mm*(-diff(Xk, x)*diff(vY, x))
+                res[1][1]+=mm*(-I*k*Xk*diff(vY, x))
+                
+
             else:
                 Xk,Yk=pcoords[0],pcoords[1]
                 u_x,u_y,u_z=arg[0],arg[1],arg[2]
                 x,y,z=dcoords[0],dcoords[1],xadd
+                
                 res[0][0]+=mm*( -diff(Xk, x)*diff(u_x, x) - diff(Yk, x)*diff(u_x, y) )
                 res[0][1]+=mm*( -diff(Xk, y)*diff(u_x, x) - diff(Yk, y)*diff(u_x, y) )
                 res[0][2]+=mm*( -I*k*Xk*1*diff(u_x, x) - I*k*Yk*diff(u_x, y) )
@@ -801,9 +809,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 res[1][2]+=mm*( -I*k*Xk*1*diff(u_y, x) - I*k*Yk*diff(u_y, y) )
                 res[2][0]+=mm*( -(diff(Xk, x)*diff(u_z, x) + diff(Yk, x)*diff(u_z, y)) )
                 res[2][1]+=mm*( -(diff(Xk, y)*diff(u_z, x) + diff(Yk, y)*diff(u_z, y)) )
-                res[2][2]+=mm*( -I*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y)) )
-                
-            
+                res[2][2]+=mm*( -I*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y)) )                                
         
         return matrix(res)
 
