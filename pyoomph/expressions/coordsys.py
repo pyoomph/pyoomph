@@ -1062,9 +1062,9 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             raise RuntimeError("Not implemented")
         mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
         if with_scale:
-            return 2*pi* spatial_scale ** (edim_offs) * (nondim("coordinate_x")* nondim("dx") + mm*dx_eps )
+            return 2*pi* spatial_scale ** (edim_offs) * (dcoords[0]* nondim("dx") + mm*dx_eps )
         else:
-            return 2*pi*(nondim("coordinate_x")*nondim("dx")+ mm*dx_eps)
+            return 2*pi*(dcoords[0]*nondim("dx")+ mm*dx_eps)
             
     def scalar_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
         res:List[ExpressionOrNum] = []
@@ -1088,9 +1088,6 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             m=self.m_angular_symbol
             I=self.imaginary_i
             if ndim==1:
-                
-                #print(_pyoomph._currently_generated_element().get_equations().expand_expression_for_debugging(mm*(-diff(Xp, x)*diff(psi, x)),True))
-                
                 res[0]+=mm*(-diff(Xp, x)*diff(psi, x))
                 res[1]+=mm*(-I*m*Xp*diff(psi, x)/x - Xp*diff(psi, phi)/x**2)         
             elif ndim==2:
