@@ -981,7 +981,7 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
                 expr=_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(0))
             
         
-        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z"}
+        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z","local_coordinate_1","local_coordinate_2","local_coordinate_3"}
         if not code._coordinates_as_dofs:
             ignore_fields=ignore_fields.union({"coordinate_x","coordinate_y","coordinate_z","mesh_x","mesh_y","mesh_z"})
         if fieldname in ignore_fields:
@@ -1007,20 +1007,9 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         zero = _pyoomph.Expression(0)
         # First order in epsilon is just derive by epsilon and set epsilon to zero afterwards
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
-        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.m_angular_symbol, self.angular_mode)
-        # Map on the real/imag part part
-        real_or_imag = re_im_mapping(replaced_m)
-        # Remove any contributions of the base mode from the Jacobian and mass matrix
-        # The Jacobian arises by deriving with respect to all degrees of freedom.
-        # Here, we must ensure that we only derive with respect to the perturbed mode, not to the base mode (mode zero)
-        # For the Hessian, we just want the zero mode terms, i.e. getting the second derivatives with respect to the base mode with the correct I*m-terms
-        rem_jacobian_flag = _pyoomph.Expression(1)
-        azimode = _pyoomph.Expression(1)
-        rem_hessian_flag = _pyoomph.Expression(2)
-        no_jacobian_entries_from_base_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(real_or_imag, zero,rem_jacobian_flag)
-        #no_hessian_entries_from_azimuthal_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(no_jacobian_entries_from_base_mode, azimode,rem_hessian_flag)
-        no_hessian_entries_from_azimuthal_mode=no_jacobian_entries_from_base_mode
-        return _pyoomph.GiNaC_collect_common_factors(no_hessian_entries_from_azimuthal_mode)
+        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.m_angular_symbol, self.angular_mode)        
+        real_or_imag = re_im_mapping(replaced_m)        
+        return _pyoomph.GiNaC_collect_common_factors(real_or_imag)
 
     def map_residual_on_angular_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
@@ -1047,7 +1036,36 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
 
 
-
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:        
+        
+        if edim >= 3:
+            raise RuntimeError("Axisymmetry does not work for dimension " + str(edim))
+        edim_offs=edim+1
+       
+        if lagrangian:
+            if with_scale:
+                return spatial_scale ** edim_offs * 2 * pi * nondim("lagrangian_x") * nondim("dX")
+            else:
+                return 2 * pi * nondim("lagrangian_x") * nondim("dX") 
+            
+        
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+        
+        dcoords=self.map_to_zero_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian))
+        pcoords=self.map_to_first_order_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian,mesh_coords=True))
+        
+        if nodal_dim==2:
+            dx_eps=(dcoords[0]*diff(pcoords[0], dcoords[0]) + dcoords[0]*diff(pcoords[1], dcoords[1]) + pcoords[0])*nondim("dx")            
+        elif nodal_dim==1:
+            dx_eps=(dcoords[0]*diff(pcoords[0], dcoords[0])  + pcoords[0])*nondim("dx")            
+        else:
+            raise RuntimeError("Not implemented")
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+        if with_scale:
+            return 2*pi* spatial_scale ** (edim_offs) * (nondim("coordinate_x")* nondim("dx") + mm*dx_eps )
+        else:
+            return 2*pi*(nondim("coordinate_x")*nondim("dx")+ mm*dx_eps)
+            
     def scalar_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
         res:List[ExpressionOrNum] = []
         coords = self.get_coords(3, with_scales, lagrangian)
@@ -1056,10 +1074,33 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         for i, a in enumerate(dcoords):
             if i < ndim:
                 res.append(diff(arg, a))
-            elif i == ndim:
-                res.append( diff(arg,self.phi) / dcoords[0] - (0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.phi)-arg)/dcoords[0]**2 * pcoords[0])
+            elif i == ndim and not lagrangian:
+                res.append( diff(arg,self.phi) / dcoords[0])
             else:
                 res.append(0)
+        import _pyoomph
+        if not lagrangian:
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            x=dcoords[0]
+            Xp=pcoords[0]
+            psi=arg
+            phi=self.phi
+            m=self.m_angular_symbol
+            I=self.imaginary_i
+            if ndim==1:
+                
+                #print(_pyoomph._currently_generated_element().get_equations().expand_expression_for_debugging(mm*(-diff(Xp, x)*diff(psi, x)),True))
+                
+                res[0]+=mm*(-diff(Xp, x)*diff(psi, x))
+                res[1]+=mm*(-I*m*Xp*diff(psi, x)/x - Xp*diff(psi, phi)/x**2)         
+            elif ndim==2:
+                y=dcoords[1]
+                Yp=pcoords[1]
+                res[0]+=mm*(-diff(Xp, x)*diff(psi, x) - diff(Yp, x)*diff(psi, y))
+                res[1]+=mm*(-diff(Xp, y)*diff(psi, x) - diff(Yp, y)*diff(psi, y))
+                res[2]+=mm*( -I*m*Xp*diff(psi, x)/x - I*m*Yp*diff(psi, y)/x - Xp*diff(psi, phi)/x**2    )
+            else:
+                raise RuntimeError("Not implemented")
         return vector(res)
 
     def vector_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool) -> Expression:
