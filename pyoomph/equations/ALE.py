@@ -25,7 +25,7 @@
 # ========================================================================
  
 from ..meshes.mesh import InterfaceMesh, AnyMesh
-from .. import GlobalLagrangeMultiplier, WeakContribution
+from .. import GlobalLagrangeMultiplier, WeakContribution, IntegralConstraint
 from ..generic import Equations,InterfaceEquations,ODEEquations
 from .generic import get_interface_field_connection_space
 from ..expressions import *  # Import grad et al
@@ -468,3 +468,12 @@ class VolumeEnforcingBoundary(Equations):
 
         self.add_residual(norm*weak(dot(x,n),testfunction(self.storage_var),dimensional_dx=True))
         self.add_residual(norm/dVfactor*weak(self.storage_var,dot(xtest_n,n),dimensional_dx=False))
+
+
+class EnforceVolumeByPressure(IntegralConstraint):
+    def __init__(self,volume:ExpressionOrNum,*,ode_storage_domain: Optional[str] = None, only_for_stationary_solve: bool = False, set_zero_on_normal_mode_eigensolve: bool = True, scaling_factor:Union[str,ExpressionNumOrNone]=None):
+        super().__init__(dimensional_dx=True,ode_storage_domain=ode_storage_domain, only_for_stationary_solve = only_for_stationary_solve, set_zero_on_normal_mode_eigensolve= set_zero_on_normal_mode_eigensolve, scaling_factor=scaling_factor,pressure=volume)        
+        
+    def get_constraint(self,field:str,u:Expression):
+        return 1
+        

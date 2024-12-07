@@ -1117,22 +1117,43 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         # df(v[2],r)        df(v[2],z)               d_by_dt*v[2]/r+v[0]/r
 
 
+        if edim!=ndim:
+            raise RuntimeError("TODO")
+
         df = diff
         zero=Expression(0)
+        I=self.imaginary_i
+        m=self.m_angular_symbol
+        phi=self.phi
         if ndim >= 3:
             raise RuntimeError("Vector gradient in axisymmetry does not work for dimension " + str(ndim))
         if ndim == 1:
             r, = self.get_coords(ndim, with_scales, lagrangian)
-            dr=self.map_to_zero_epsilon(r)
-            pr=self.map_to_first_order_epsilon(r)
+            X0=self.map_to_zero_epsilon(r)
+            Xm=self.map_to_first_order_epsilon(r)
+            
             #res = [[df(v[0], r), d_by_dt * v[0] / r - v[1] / r, 0], [df(v[1], r), d_by_dt * v[1] / r + v[0] / r, 0],[0, 0, 0]]
-            res:List[List[ExpressionOrNum]] = [[df(arg[0], dr), df(arg[0],self.phi) / dr - arg[1] / dr,zero],
-                   [df(arg[1], dr), df(arg[1],self.phi) / dr + arg[0] / dr,zero],[zero,zero,zero]]
+            
+            
 #            res = [[df(v[0], r), df(v[1], r), 0], [d_by_dt * v[0] / r - v[1] / r, d_by_dt * v[1] / r + v[0] / r, 0],[0, 0, 0]]
             if not lagrangian:
-                res[0][1]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[0],self.phi)-arg[1])/dr**2 * pr
-                res[1][1]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[1],self.phi)+arg[0])/dr**2 * pr            
+                res:List[List[ExpressionOrNum]] = [[df(arg[0], X0), df(arg[0],self.phi) / X0 - arg[1] / X0,zero],
+                   [df(arg[1], X0), df(arg[1],self.phi) / X0 + arg[0] / X0,zero],[zero,zero,zero]]
+                mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")                                            
+                if False: # Old stuff
+                    res[0][1]+= -mm*(df(arg[0],self.phi)-arg[1])/dr**2 * pr
+                    res[1][1]+= -mm*(df(arg[1],self.phi)+arg[0])/dr**2 * pr            
+                res[0][0]+=mm*(-df(Xm, X0)*df(arg[0], X0))
+                res[0][1]+=mm*(-I*m*Xm*df(arg[0], X0)/X0 + Xm*arg[1]/X0**2 - Xm*df(arg[0], phi)/X0**2)
+                res[1][0]+=mm*(-df(Xm, X0)*df(arg[1], X0))
+                res[1][1]+=mm*(-I*m*Xm*df(arg[1], X0)/X0 - Xm*arg[0]/X0**2 - Xm*df(arg[1], phi)/X0**2)
+                #[[-Derivative(Xp(x), x)*Derivative(v_x(x, phi), x), -I*m*Xp(x)*Derivative(v_x(x, phi), x)/x + Xp(x)*v_phi(x, phi)/x**2 - Xp(x)*Derivative(v_x(x, phi), phi)/x**2], 
+                # [-Derivative(Xp(x), x)*Derivative(v_phi(x, phi), x), -I*m*Xp(x)*Derivative(v_phi(x, phi), x)/x - Xp(x)*v_x(x, phi)/x**2 - Xp(x)*Derivative(v_phi(x, phi), phi)/x**2]]
+            else:
+                res:List[List[ExpressionOrNum]] = [[diff(arg[0], r), 0, 0], [0, 0, 0], [0, 0, arg[0] / r]]
         else:
+            if lagrangian:
+                return super().vector_gradient(arg, ndim, edim, with_scales, lagrangian)
 #            raise RuntimeError("TODO")
             if arg.nops() != 3:
                 raise RuntimeError(
@@ -1145,7 +1166,8 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             res:List[List[ExpressionOrNum]]=[[ df(arg[0],dr),df(arg[0],dz),df(arg[0],self.phi)/dr-arg[2]/dr],
                  [df(arg[1],dr),df(arg[1],dz),df(arg[1],self.phi)/dr],
                  [df(arg[2],dr) ,df(arg[2],dz),df(arg[2],self.phi)/dr+arg[0]/dr]]
-            if not lagrangian:                
+            if not lagrangian: 
+                raise RuntimeError("TODO")              
                 res[0][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[0],self.phi)-arg[2])/dr**2 * pr
                 res[1][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[1],self.phi))/dr**2 * pr
                 res[2][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[2],self.phi)+arg[0])/dr**2 * pr
@@ -1154,6 +1176,8 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
 
 
     def vector_divergence(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
+        if lagrangian:
+            return super().vector_divergence(arg, ndim, edim, with_scales, lagrangian)
         res = 0
         coords = self.get_coords(arg.nops(), with_scales, lagrangian)
         dcoords=self.map_to_zero_epsilon(coords)
@@ -1166,13 +1190,26 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
         else:
             raise RuntimeError("Cannot use this coordinate system on a 3d mesh")
-        if not lagrangian:
+        
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+        m=self.m_angular_symbol
+        I=self.imaginary_i     
+        phi=self.phi       
+        
+        if ndim==2:
+            raise RuntimeError("TODO")
+        else:
+            # edim=ndim=1                
+            if edim==1:
+                res+=mm*(-I*m*pcoords[0]*diff(arg[1],dcoords[0])/dcoords[0] - diff(pcoords[0], dcoords[0])*diff(arg[0], dcoords[0]) - pcoords[0]*arg[0]/dcoords[0]**2 - pcoords[0]*diff(arg[1], phi)/dcoords[0]**2)
+            else:
+                res+= mm*( I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0] ) 
+                res+= mm*( -pcoords[0]*arg[0]/dcoords[0]**2 )
             #print(coords)
             #if cg._coordinates_as_dofs and (where=="Residual" or (not self.expand_with_modes_for_python_debugging or where!="Python")):
             # Derive the u_r/r term by the denominator 
-            # Only on a moving mesh:
+            # Only on a moving mesh:            
             #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[0]+ diff(arg[ndim],self.phi))/dcoords[0]**2 * pcoords[0]
-            res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[0]+ diff(arg[ndim],self.phi))/dcoords[0]**2 * pcoords[0]
             #if ndim==1:
                 
                 #exit()
@@ -1233,7 +1270,8 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
 
 
     def get_normal_vector_or_component(self,cg:"FiniteElementCodeGenerator",component:Optional[int]=None,only_base_mode:bool=False,only_perturbation_mode:bool=False,where:str="Residual"):
-        dim = cg.get_nodal_dimension()
+        dim = cg.get_nodal_dimension()        
+        edim=cg.get_element_dimension()
         if not cg._coordinates_as_dofs or (where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python")):
             return super().get_normal_vector_or_component(cg,component,only_base_mode,only_perturbation_mode,where=where)
         
@@ -1249,38 +1287,69 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             # Normal expansion            
             base_factor=0 if only_perturbation_mode else 1
             pert_factor=0 if only_base_mode else 1
+            dcoords=self.map_to_zero_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False))
+            pcoords=self.map_to_first_order_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False,mesh_coords=True))
             
-            if component<dim: # Radial normal
-                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component_eigenexpansion(component),Expression(1))*self.field_mode
+            if edim==2:
+                raise RuntimeError("Not implemented")
+                
+            if component<dim:                 
+                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component(component),Expression(1))*self.field_mode
             elif component==dim:                
-                nr0=cg._get_normal_component(0)
-                #rm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_x"),_pyoomph.Expression(1))*self.field_mode
-                rm=var("mesh_x",only_perturbation_mode=True)
-                n0_dot_xeigen=nr0*rm
+
+                #return base_factor*cg._get_normal_component(component)
+                nx0=cg._get_normal_component(0)
+                Xk=pcoords[0]
+                n0_dot_xeigen=nx0*Xk
                 if dim==2:
-                    nz0=cg._get_normal_component(1)
-                    zm=var("mesh_y",only_perturbation_mode=True)
-                    #zm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_y"),_pyoomph.Expression(1))*self.field_mode
-                    n0_dot_xeigen+=nz0*zm
+                    ny0=cg._get_normal_component(1)
+                    Yk=pcoords[1]
+                    n0_dot_xeigen+=ny0*Yk
                 if self.with_phi_component_in_mesh_coordinates:
-                    phim=var("mesh_phi",only_perturbation_mode=True)
+                    raise RuntimeError("Not implemented")
                 else:
-                    phim=0
-                #return pert_factor*self.expansion_eps*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))*self.field_mode
-                #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
-                #exit()
-                return pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
+                    pass
+                return pert_factor*((-self.imaginary_i*self.m_angular_symbol/dcoords[0]*n0_dot_xeigen))
                 
             else:
                 raise RuntimeError("Normal component "+str(component)+" not available")
-        print(dim)
-        exit()
-        if component is None:
-            posscompos=[nondim("normal_"+d,domain=cg) for d in ["x","y","z"]]
-            mycomps=posscompos[:dim]        
-            return vector(*mycomps)
-        else:
-            return cg._get_normal_component(component)            
+            ## Old code
+            if False:
+                # Normal expansion            
+                base_factor=0 if only_perturbation_mode else 1
+                pert_factor=0 if only_base_mode else 1
+                
+                if component<dim: # Radial normal
+                    return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component_eigenexpansion(component),Expression(1))*self.field_mode
+                elif component==dim:                
+                    nr0=cg._get_normal_component(0)
+                    #rm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_x"),_pyoomph.Expression(1))*self.field_mode
+                    rm=var("mesh_x",only_perturbation_mode=True)
+                    n0_dot_xeigen=nr0*rm
+                    if dim==2:
+                        nz0=cg._get_normal_component(1)
+                        zm=var("mesh_y",only_perturbation_mode=True)
+                        #zm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_y"),_pyoomph.Expression(1))*self.field_mode
+                        n0_dot_xeigen+=nz0*zm
+                    if self.with_phi_component_in_mesh_coordinates:
+                        phim=var("mesh_phi",only_perturbation_mode=True)
+                    else:
+                        phim=0
+                    #return pert_factor*self.expansion_eps*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))*self.field_mode
+                    #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
+                    #exit()
+                    return pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
+                    
+                else:
+                    raise RuntimeError("Normal component "+str(component)+" not available")
+            print(dim)
+            exit()
+            if component is None:
+                posscompos=[nondim("normal_"+d,domain=cg) for d in ["x","y","z"]]
+                mycomps=posscompos[:dim]        
+                return vector(*mycomps)
+            else:
+                return cg._get_normal_component(component)            
             
 
     def tensor_divergence(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
