@@ -1183,38 +1183,47 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         dcoords=self.map_to_zero_epsilon(coords)
         #pcoords=[cm-c0 for cm,c0 in zip(coords,dcoords) ] # Perturbed coordinates
         pcoords=self.map_to_first_order_epsilon(coords)
-#        nops = arg.nops()
-        if ndim== 1:
-            res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
-        elif ndim == 2:
-            res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
-        else:
-            raise RuntimeError("Cannot use this coordinate system on a 3d mesh")
-        
         mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
         m=self.m_angular_symbol
         I=self.imaginary_i     
         phi=self.phi       
-        
-        if ndim==2:
-            raise RuntimeError("TODO")
-        else:
-            # edim=ndim=1                
+
+        if ndim== 1:
+            
             if edim==1:
+                res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
                 res+=mm*(-I*m*pcoords[0]*diff(arg[1],dcoords[0])/dcoords[0] - diff(pcoords[0], dcoords[0])*diff(arg[0], dcoords[0]) - pcoords[0]*arg[0]/dcoords[0]**2 - pcoords[0]*diff(arg[1], phi)/dcoords[0]**2)
+                return res
             else:
-                res+= mm*( I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0] ) 
-                res+= mm*( -pcoords[0]*arg[0]/dcoords[0]**2 )
-            #print(coords)
-            #if cg._coordinates_as_dofs and (where=="Residual" or (not self.expand_with_modes_for_python_debugging or where!="Python")):
-            # Derive the u_r/r term by the denominator 
-            # Only on a moving mesh:            
-            #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[0]+ diff(arg[ndim],self.phi))/dcoords[0]**2 * pcoords[0]
-            #if ndim==1:
-                
-                #exit()
-            #else:
-            #    raise RuntimeError("TODO")
+                # edim=0 case #  diff(arg[0], dcoords[0]) does not appear, since there is no derivative at at a point
+                if False:                
+                    res = arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
+                    res+= mm*( I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0] ) 
+                    res+= mm*( -pcoords[0]*arg[0]/dcoords[0]**2 )
+                else:
+                    #res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
+                    #res = arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
+                    #res+=mm*(-pcoords[0]*m**2*diff(arg[0], phi)/dcoords[0]**2 + I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0]**2 - pcoords[0]*diff(arg[1], phi)/dcoords[0]**2)
+                    #res+= mm*( I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0] ) 
+                    #res+= mm*( -pcoords[0]*arg[0]/dcoords[0]**2 )
+                    res=0#arg[1] / dcoords[0]             
+                    # Any derivative with respect to pcoords is zero
+                    # Test functions can produce phi derivatives
+                    # This gives right results for div(testfunc)
+                    #res+=mm*pcoords[0]/dcoords[0]**2 *(I*diff(arg[0],phi)+arg[0] )
+                    
+                    res+=mm*pcoords[0]/dcoords[0]**2 *(I*diff(arg[0],phi)+arg[0] )
+                return res
+
+        elif ndim == 2:
+            res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
+            return res
+            
+        else:
+            raise RuntimeError("Cannot use this coordinate system on a 3d mesh")
+        
+        
+        raise RuntimeError("TODO")
         return res
 
 

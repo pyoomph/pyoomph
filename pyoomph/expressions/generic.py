@@ -965,17 +965,21 @@ def convert_to_expression(a:Union[ExpressionOrNum,NPAnyArray])->Expression:
 	else:
 		return _pyoomph.Expression(a)
 
-def dot(a:ExpressionOrNum,b:ExpressionOrNum)->Expression:    
+def dot(a:Union[ExpressionOrNum,str],b:Union[ExpressionOrNum,str])->Expression:    
 	"""
 	Compute the dot product between two vectors.
 
 	Parameters:
-	a (ExpressionOrNum): The first vector.
-	b (ExpressionOrNum): The second vector.
+	a: The first vector. String will be wrapped in a var expression.
+	b: The second vector. String will be wrapped in a var expression.
 
 	Returns:
 	Expression: The dot product of the two vectors.
 	"""
+	if isinstance(a,str):
+		a=var(a)
+	if isinstance(b,str):
+		b=var(b)
 	if not isinstance(a,_pyoomph.Expression):
 		a=convert_to_expression(a)
 	if not isinstance(b,_pyoomph.Expression):
