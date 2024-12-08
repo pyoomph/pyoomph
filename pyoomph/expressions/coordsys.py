@@ -1195,24 +1195,9 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
                 res+=mm*(-I*m*pcoords[0]*diff(arg[1],dcoords[0])/dcoords[0] - diff(pcoords[0], dcoords[0])*diff(arg[0], dcoords[0]) - pcoords[0]*arg[0]/dcoords[0]**2 - pcoords[0]*diff(arg[1], phi)/dcoords[0]**2)
                 return res
             else:
-                # edim=0 case #  diff(arg[0], dcoords[0]) does not appear, since there is no derivative at at a point
-                if False:                
-                    res = arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
-                    res+= mm*( I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0] ) 
-                    res+= mm*( -pcoords[0]*arg[0]/dcoords[0]**2 )
-                else:
-                    #res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
-                    #res = arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
-                    #res+=mm*(-pcoords[0]*m**2*diff(arg[0], phi)/dcoords[0]**2 + I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0]**2 - pcoords[0]*diff(arg[1], phi)/dcoords[0]**2)
-                    #res+= mm*( I*pcoords[0]*m*diff(arg[0], phi)/dcoords[0] ) 
-                    #res+= mm*( -pcoords[0]*arg[0]/dcoords[0]**2 )
-                    res=0#arg[1] / dcoords[0]             
-                    # Any derivative with respect to pcoords is zero
-                    # Test functions can produce phi derivatives
-                    # This gives right results for div(testfunc)
-                    #res+=mm*pcoords[0]/dcoords[0]**2 *(I*diff(arg[0],phi)+arg[0] )
-                    
-                    res+=mm*pcoords[0]/dcoords[0]**2 *(I*diff(arg[0],phi)+arg[0] )
+                # edim=0 case                     
+                res=(arg[0] + diff(arg[1], phi))/dcoords[0]
+                res+=mm*(pcoords[0]*(-I*m*arg[1] + I*m*diff(arg[0], phi) - arg[0] - diff(arg[1], phi))/dcoords[0]**2)
                 return res
 
         elif ndim == 2:
