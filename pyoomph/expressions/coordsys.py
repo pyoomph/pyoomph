@@ -1101,76 +1101,58 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         return vector(res)
 
     def vector_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool) -> Expression:
-        # dvr/dr        dvr/(r*dt)-vt/r
-        # dvt/dr        dvt/(r*dt)+vr/r
-
-        # Or here:
-        # df(v[0],r)        d_by_dt*v[0]/r-v[1]/r
-        # df(v[1],r)        d_by_dt*v[1]/r+v[0]/r
-
-        # dvr/dr        dvr/(r*dt)-vt/r      dvr/dz
-        # dvt/dr        dvt/(r*dt)+vr/r      dvt/dz
-        # dvz/dr        dvz/(r*dt)           dvz/dz
-        # Or
-        # df(v[0],r)        df(v[0],z)               d_by_dt*v[0]/r-v[2]/r
-        # df(v[1],r)        df(v[1],z)               d_by_dt*v[1]/r
-        # df(v[2],r)        df(v[2],z)               d_by_dt*v[2]/r+v[0]/r
-
+        if lagrangian:
+            return super().vector_gradient(arg, ndim, edim, with_scales, lagrangian)
 
         if edim!=ndim:
-            raise RuntimeError("TODO")
+            raise RuntimeError("TODO: Cannot take a vector gradient in axisymmetry for edim!=ndim")
 
-        df = diff
         zero=Expression(0)
         I=self.imaginary_i
         m=self.m_angular_symbol
         phi=self.phi
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")                                                        
         if ndim >= 3:
             raise RuntimeError("Vector gradient in axisymmetry does not work for dimension " + str(ndim))
         if ndim == 1:
             r, = self.get_coords(ndim, with_scales, lagrangian)
             X0=self.map_to_zero_epsilon(r)
             Xm=self.map_to_first_order_epsilon(r)
-            
-            #res = [[df(v[0], r), d_by_dt * v[0] / r - v[1] / r, 0], [df(v[1], r), d_by_dt * v[1] / r + v[0] / r, 0],[0, 0, 0]]
-            
-            
-#            res = [[df(v[0], r), df(v[1], r), 0], [d_by_dt * v[0] / r - v[1] / r, d_by_dt * v[1] / r + v[0] / r, 0],[0, 0, 0]]
             if not lagrangian:
-                res:List[List[ExpressionOrNum]] = [[df(arg[0], X0), df(arg[0],self.phi) / X0 - arg[1] / X0,zero],
-                   [df(arg[1], X0), df(arg[1],self.phi) / X0 + arg[0] / X0,zero],[zero,zero,zero]]
-                mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")                                            
-                if False: # Old stuff
-                    res[0][1]+= -mm*(df(arg[0],self.phi)-arg[1])/dr**2 * pr
-                    res[1][1]+= -mm*(df(arg[1],self.phi)+arg[0])/dr**2 * pr            
-                res[0][0]+=mm*(-df(Xm, X0)*df(arg[0], X0))
-                res[0][1]+=mm*(-I*m*Xm*df(arg[0], X0)/X0 + Xm*arg[1]/X0**2 - Xm*df(arg[0], phi)/X0**2)
-                res[1][0]+=mm*(-df(Xm, X0)*df(arg[1], X0))
-                res[1][1]+=mm*(-I*m*Xm*df(arg[1], X0)/X0 - Xm*arg[0]/X0**2 - Xm*df(arg[1], phi)/X0**2)
-                #[[-Derivative(Xp(x), x)*Derivative(v_x(x, phi), x), -I*m*Xp(x)*Derivative(v_x(x, phi), x)/x + Xp(x)*v_phi(x, phi)/x**2 - Xp(x)*Derivative(v_x(x, phi), phi)/x**2], 
-                # [-Derivative(Xp(x), x)*Derivative(v_phi(x, phi), x), -I*m*Xp(x)*Derivative(v_phi(x, phi), x)/x - Xp(x)*v_x(x, phi)/x**2 - Xp(x)*Derivative(v_phi(x, phi), phi)/x**2]]
+                res:List[List[ExpressionOrNum]] = [[diff(arg[0], X0), diff(arg[0],self.phi) / X0 - arg[1] / X0,zero],
+                   [diff(arg[1], X0), diff(arg[1],self.phi) / X0 + arg[0] / X0,zero],[zero,zero,zero]]                
+                res[0][0]+=mm*(-diff(Xm, X0)*diff(arg[0], X0))
+                res[0][1]+=mm*(-I*m*Xm*diff(arg[0], X0)/X0 + Xm*arg[1]/X0**2 - Xm*diff(arg[0], phi)/X0**2)
+                res[1][0]+=mm*(-diff(Xm, X0)*diff(arg[1], X0))
+                res[1][1]+=mm*(-I*m*Xm*diff(arg[1], X0)/X0 - Xm*arg[0]/X0**2 - Xm*diff(arg[1], phi)/X0**2)
             else:
                 res:List[List[ExpressionOrNum]] = [[diff(arg[0], r), 0, 0], [0, 0, 0], [0, 0, arg[0] / r]]
         else:
-            if lagrangian:
-                return super().vector_gradient(arg, ndim, edim, with_scales, lagrangian)
-#            raise RuntimeError("TODO")
             if arg.nops() != 3:
                 raise RuntimeError(
                     "Cannot take a 2d axisymmetric vector gradient from a vector with dim!=2:  " + str(arg))
-            r, z = self.get_coords(ndim, with_scales, lagrangian)
-            dr=self.map_to_zero_epsilon(r)
-            dz=self.map_to_zero_epsilon(z)
-            pr=self.map_to_first_order_epsilon(r)
+            xc, yc = self.get_coords(ndim, with_scales, lagrangian)
+            x=self.map_to_zero_epsilon(xc)
+            y=self.map_to_zero_epsilon(yc)
+            Xp=self.map_to_first_order_epsilon(xc)
+            Yp=self.map_to_first_order_epsilon(yc)
             #pr=r-dr            
-            res:List[List[ExpressionOrNum]]=[[ df(arg[0],dr),df(arg[0],dz),df(arg[0],self.phi)/dr-arg[2]/dr],
-                 [df(arg[1],dr),df(arg[1],dz),df(arg[1],self.phi)/dr],
-                 [df(arg[2],dr) ,df(arg[2],dz),df(arg[2],self.phi)/dr+arg[0]/dr]]
-            if not lagrangian: 
-                raise RuntimeError("TODO")              
-                res[0][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[0],self.phi)-arg[2])/dr**2 * pr
-                res[1][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[1],self.phi))/dr**2 * pr
-                res[2][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[2],self.phi)+arg[0])/dr**2 * pr
+            #res:List[List[ExpressionOrNum]]=[[ diff(arg[0],dr),diff(arg[0],dz),diff(arg[0],self.phi)/dr-arg[2]/dr],
+             #    [diff(arg[1],dr),diff(arg[1],dz),diff(arg[1],self.phi)/dr],
+             #    [diff(arg[2],dr) ,diff(arg[2],dz),diff(arg[2],self.phi)/dr+arg[0]/dr]]
+            res:List[List[ExpressionOrNum]]= [[diff(arg[0], x), diff(arg[0], y), -arg[2]/x + diff(arg[0], phi)/x], 
+                                              [diff(arg[1], x), diff(arg[1], y), diff(arg[1], phi)/x], 
+                                              [diff(arg[2], x), diff(arg[2], y), arg[0]/x + diff(arg[2], phi)/x]]
+            res[0][0]+=mm*(-diff(Xp, x)*diff(arg[0], x) - diff(Yp, x)*diff(arg[0], y))
+            res[0][1]+=mm*(-diff(Xp, y)*diff(arg[0], x) - diff(Yp, y)*diff(arg[0], y))
+            res[0][2]+=mm*(-I*m*Xp*diff(arg[0], x)/x - I*m*Yp*diff(arg[0], y)/x + Xp*arg[2]/x**2 - Xp*diff(arg[0], phi)/x**2)
+            res[1][0]+=mm*(-diff(Xp, x)*diff(arg[1], x) - diff(Yp, x)*diff(arg[1], y))
+            res[1][1]+=mm*(-diff(Xp, y)*diff(arg[1], x) - diff(Yp, y)*diff(arg[1], y))
+            res[1][2]+=mm*(-I*m*Xp*diff(arg[1], x)/x - I*m*Yp*diff(arg[1], y)/x - Xp*diff(arg[1], phi)/x**2)
+            res[2][0]+=mm*(-diff(Xp, x)*diff(arg[2], x) - diff(Yp, x)*diff(arg[2], y))
+            res[2][1]+=mm*(-diff(Xp, y)*diff(arg[2], x) - diff(Yp, y)*diff(arg[2], y))
+            res[2][2]+=mm*(-I*m*Xp*diff(arg[2], x)/x - I*m*Yp*diff(arg[2], y)/x - Xp*arg[0]/x**2 - Xp*diff(arg[2], phi)/x**2)
+
         return matrix(res)
 
 
@@ -1181,35 +1163,46 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         res = 0
         coords = self.get_coords(arg.nops(), with_scales, lagrangian)
         dcoords=self.map_to_zero_epsilon(coords)
-        #pcoords=[cm-c0 for cm,c0 in zip(coords,dcoords) ] # Perturbed coordinates
         pcoords=self.map_to_first_order_epsilon(coords)
         mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
         m=self.m_angular_symbol
         I=self.imaginary_i     
         phi=self.phi       
 
-        if ndim== 1:
-            
+        if ndim== 1:            
             if edim==1:
                 res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
                 res+=mm*(-I*m*pcoords[0]*diff(arg[1],dcoords[0])/dcoords[0] - diff(pcoords[0], dcoords[0])*diff(arg[0], dcoords[0]) - pcoords[0]*arg[0]/dcoords[0]**2 - pcoords[0]*diff(arg[1], phi)/dcoords[0]**2)
                 return res
-            else:
-                # edim=0 case                     
+            else: # edim=0 case                     
                 res=(arg[0] + diff(arg[1], phi))/dcoords[0]
                 res+=mm*(pcoords[0]*(-I*m*arg[1] + I*m*diff(arg[0], phi) - arg[0] - diff(arg[1], phi))/dcoords[0]**2)
                 return res
 
         elif ndim == 2:
-            res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
+            x=dcoords[0]
+            y=dcoords[1]
+            Xp=pcoords[0]
+            Yp=pcoords[1]
+            if edim==2:                
+                res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
+                res+=mm*(-I*m*Xp*diff(arg[2], x)/x - I*m*Yp*diff(arg[2], y)/x - diff(Xp, x)*diff(arg[0], x) - diff(Xp, y)*diff(arg[1], x) - diff(Yp, x)*diff(arg[0], y) - diff(Yp, y)*diff(arg[1], y) - Xp*arg[0]/x**2 - Xp*diff(arg[2], phi)/x**2)
+                return res
+            elif edim==1:
+                s=var("local_coordinate_1")
+                res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
+                # TODO: We really must simplify this!
+                res+=mm*( -I*m*Xp*arg[2]/x**2 + I*m*Xp*diff(arg[0], phi)/x**2 + I*m*Yp*diff(arg[1], phi)/x**2 + I*m*Xp*arg[2]*diff(x, s)**2/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Xp*diff(x, s)**2*diff(arg[0], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Xp*diff(x, s)*diff(y, s)*diff(arg[1], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + I*m*Yp*arg[2]*diff(x, s)*diff(y, s)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Yp*diff(x, s)*diff(y, s)*diff(arg[0], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Yp*diff(y, s)**2*diff(arg[1], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Xp*diff(x, s)*diff(arg[2], s)/(x*diff(x, s)**2 + x*diff(y, s)**2) - I*m*Yp*diff(y, s)*diff(arg[2], s)/(x*diff(x, s)**2 + x*diff(y, s)**2) + Xp*arg[0]/x**2 + Xp*diff(arg[2], phi)/x**2 - 2*x**2*diff(x, s)**2*diff(Xp, s)*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x**2*diff(x, s)*diff(Xp, s)*diff(y, s)*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x**2*diff(x, s)*diff(y, s)*diff(Yp, s)*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x**2*diff(y, s)**2*diff(Yp, s)*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(x, s)**3*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(x, s)**2*diff(y, s)*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(x, s)*diff(y, s)**2*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(y, s)**3*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) + diff(Xp, s)*diff(arg[0], s)/(diff(x, s)**2 + diff(y, s)**2) + diff(Yp, s)*diff(arg[1], s)/(diff(x, s)**2 + diff(y, s)**2) - 2*x**3*arg[0]*diff(x, s)*diff(Xp, s)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**3*arg[0]*diff(y, s)*diff(Yp, s)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**3*diff(x, s)*diff(Xp, s)*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**3*diff(y, s)*diff(Yp, s)*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*arg[0]*diff(x, s)**2/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*arg[0]*diff(y, s)**2/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*diff(x, s)**2*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*diff(y, s)**2*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) + 2*x*arg[0]*diff(x, s)*diff(Xp, s)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*x*arg[0]*diff(y, s)*diff(Yp, s)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*x*diff(x, s)*diff(Xp, s)*diff(arg[2], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*x*diff(y, s)*diff(Yp, s)*diff(arg[2], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*Xp*diff(x, s)*diff(arg[0], s)/(x*diff(x, s)**2 + x*diff(y, s)**2) + 2*Xp*diff(y, s)*diff(arg[1], s)/(x*diff(x, s)**2 + x*diff(y, s)**2))
+                return res
+                #raise RuntimeError("divergence with ndim=2, edim=1 not implemented")
+            else:
+                raise RuntimeError("divergence with ndim=2, edim=0 not implemented")
             return res
             
         else:
             raise RuntimeError("Cannot use this coordinate system on a 3d mesh")
         
         
-        raise RuntimeError("TODO")
-        return res
 
 
     def define_vector_field(self, name:str, space:"FiniteElementSpaceEnum", ndim:int, element:"Equations") -> Tuple[List[Expression], List[Expression], List[str]]:
