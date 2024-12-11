@@ -2732,7 +2732,9 @@ class Problem(_pyoomph.Problem):
             improve_pitchfork_position_coordsys (OptionalCoordinateSystem, optional): Coordinate system for improving pitchfork position space. Defaults to None.
             shared_shapes_for_multi_assemble (Optional[bool], optional): Flag indicating whether to use shared shapes for multi-assemble. Defaults to None.
             azimuthal_stability (Optional[bool], optional): Flag indicating whether to set up azimuthal stability code. Defaults to None.
-        """            
+        """           
+        if self.is_initialised():
+            raise RuntimeError("Cannot call setup_for_stability_analysis after problem is initialised") 
         if analytic_hessian:
             # May not use symmetric Hessian for azimuthal stability
             self.set_analytic_hessian_products(True,use_hessian_symmetry and (not azimuthal_stability and not additional_cartesian_mode))
@@ -3510,8 +3512,7 @@ class Problem(_pyoomph.Problem):
             if must_reapply_bcs:
                 self.reapply_boundary_conditions() # Equation numbering might have been changed. Update it here!
                 self._last_bc_setting="eigen"
-            base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),0,None) 
-            eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),azimuthal_mode,None) 
+            
 
             # These are sets of strings, we must convert them into lists of equations. We reuse the same class as for the eigenproblem
             def dof_strings_to_global_equations(string_dof_set:Set[str]):
@@ -3520,10 +3521,16 @@ class Problem(_pyoomph.Problem):
                 zeromap:Set[int]=set()
                 for d in resolver.doflist:
                     eqs=resolver.resolve_equations_by_name(d)
+                    #print("DOF",d,"EQS",eqs)
                     zeromap=zeromap.union(eqs)
                 return zeromap
 
+            #print("BASE DOFS")
+            base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),0,None)             
             base_zero_dofs=dof_strings_to_global_equations(base_zero_dofs)
+            
+            #print("EIGEN DOFS")
+            eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),azimuthal_mode,None) 
             eigen_zero_dofs=dof_strings_to_global_equations(eigen_zero_dofs)
 
 
@@ -3579,7 +3586,7 @@ class Problem(_pyoomph.Problem):
                 from ..solvers.generic import EigenMatrixSetDofsToZero
                 resolver=EigenMatrixSetDofsToZero(self,*string_dof_set)
                 zeromap:Set[int]=set()
-                for d in resolver.doflist:
+                for d in resolver.doflist:                    
                     eqs=resolver.resolve_equations_by_name(d)
                     zeromap=zeromap.union(eqs)
                 return zeromap

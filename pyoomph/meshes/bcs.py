@@ -476,7 +476,6 @@ class AxisymmetryBC(DirichletBC):
     def define_residuals(self):
         for_m0,_,_=self._get_field_information_for_axial_breaking()
         self._dcs={k:0 for k in for_m0}
-        #print(self._dcs)
         super(AxisymmetryBC, self).define_residuals()
 
     # For axial symmetry breaking eigenanalysis, we must deactivate the DirichletBCs at r=0
@@ -507,13 +506,14 @@ class AxisymmetryBC(DirichletBC):
         for_m0, _, _ = self._get_field_information_for_axial_breaking(eqtree.get_code_gen())
         assert eqtree._mesh is not None 
         for k in for_m0:
+            if k =="mesh_x":
+                continue
             if eqtree._mesh._get_dirichlet_active(k) == False: 
                 eqtree._mesh._set_dirichlet_active(k, True) 
                 must_reapply = True # Dirichlets have changed => reassign the equations
         return must_reapply
 
     def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[float],normal_k:Optional[float])->Set[Union[str,int]]:
-        #print("GETTING SET FOR:"+eqtree.get_full_path())
         if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
             #print("RET EMPY")
             return set()
@@ -530,7 +530,7 @@ class AxisymmetryBC(DirichletBC):
                 for_my_m=for_m_geq_2
             #print("ADDING", fullpath,for_my_m)
             res=set([ fullpath+"/"+k for k in for_my_m])
-            #print("RET ",res)
+            #print("RET m",angular_mode, res)
             #print("RET",res)
             return res
 

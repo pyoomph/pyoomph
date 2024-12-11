@@ -182,6 +182,7 @@ class EigenMatrixManipulatorBase:
 					for ni in range(e.nnode()):
 						n=e.node_pt(ni)
 						eqn=n.variable_position_pt().eqn_number(coord_dir_index)
+
 						if eqn>=0:
 							res.add(eqn)
 				else:
@@ -268,7 +269,7 @@ class EigenMatrixSetDofsToZero(EigenMatrixManipulatorBase):
 				eqs=self.resolve_equations_by_name(d)
 			else:
 				eqs=set([d])
-			if _pyoomph.get_verbosity_flag() != 0:
+			if  _pyoomph.get_verbosity_flag() != 0:
 				print("INFO ",d,eqs)
 			self.zeromap=self.zeromap.union(eqs)
 		if len(self.zeromap)>0:
