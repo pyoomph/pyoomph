@@ -2749,6 +2749,17 @@ class Problem(_pyoomph.Problem):
         if additional_cartesian_mode:
             self._setup_additional_cartesian_stability_code=additional_cartesian_mode
         
+    def is_normal_mode_stability_set_up(self)->Union[Literal["azimuthal","cartesian"],Literal[False]]:
+        """
+        Returns True when :py:meth:`~pyoomph.generic.problem.Problem.setup_for_stability_analysis` has been called with ``azimuthal_stability=True`` or ``additional_cartesian_mode=True``.
+        Can be used to e.g. set additional BCs for velocity_phi or similar.
+        """
+        if self._setup_azimuthal_stability_code:
+            return "azimuthal"
+        elif self._setup_additional_cartesian_stability_code:
+            return "cartesian"
+        else:
+            return False
 
 
 

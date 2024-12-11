@@ -465,6 +465,10 @@ class AxisymmetryBC(DirichletBC):
 
         for_m0=set(pin_to_zero.keys())
         for_m1=allfields-for_m0
+        #for_m1.remove("mesh_y")
+        if cg._coordinates_as_dofs:
+            for_m1.add("mesh_y")
+        
         for_m_geq_2=allfields.copy()
 
         return for_m0,for_m1,for_m_geq_2
@@ -485,6 +489,10 @@ class AxisymmetryBC(DirichletBC):
         for_m0, _, _ = self._get_field_information_for_axial_breaking(eqtree.get_code_gen())
         assert eqtree._mesh is not None 
         for k in for_m0:
+            
+            if k=="mesh_x": # I guess it is reasonable to keep the mesh_x=0 condition
+                continue
+            
             if eqtree._mesh._get_dirichlet_active(k):
                 eqtree._mesh._set_dirichlet_active(k, False) 
                 must_reapply = True # Dirichlets have changed => reassign the equations

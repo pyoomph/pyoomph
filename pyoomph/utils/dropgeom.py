@@ -347,6 +347,7 @@ class YoungLaplaceDropletShape(Problem):
         self.drop_geom=drop_geom
         self.sigma = sigma
         self.rho_g_ez = rho_g_ez
+        self.volume_factor=self.define_global_parameter(volume_factor=1) # To find the critical volume if desired
 
         # Fixations are the two parameters (base_radius, apex_height, volume, (microscopic) contact_angle) that are kept constant
         # if not explicitly set, it will take over the ones you set in the constructor if the DropletGeometry object passed to drop_geom
@@ -409,7 +410,7 @@ class YoungLaplaceDropletShape(Problem):
 
         dest_contact_angle=geom.contact_angle
         dest_base_radius=geom.base_radius
-        dest_volume=geom.volume
+        dest_volume=geom.volume*self.volume_factor
         dest_apex_height=geom.apex_height
         if isinstance(self.fixations,dict):
             dest_contact_angle=self.fixations.get("contact_angle",dest_contact_angle)
