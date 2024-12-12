@@ -3361,6 +3361,30 @@ class Problem(_pyoomph.Problem):
             return "azimuthal"
 
 
+    
+    def dof_strings_to_global_equations(self,string_dof_set:Union[str,Set[str],List[str]]):
+        """Takes strings like ``"domain/velocity_x"`` and returns a set of global equations
+
+        Args:
+            string_dof_set: Degrees of freedom you want to resolve to equation numbers
+
+        Returns:
+            Set[int]: Global equation set
+        """
+        from ..solvers.generic import EigenMatrixSetDofsToZero
+        if isinstance(string_dof_set,str):
+            string_dof_set=set([string_dof_set])
+        elif isinstance(string_dof_set,list):
+            string_dof_set=set(string_dof_set)
+        resolver=EigenMatrixSetDofsToZero(self,*string_dof_set)
+        zeromap:Set[int]=set()
+        for d in resolver.doflist:
+            eqs=resolver.resolve_equations_by_name(d)
+            #print("DOF",d,"EQS",eqs)
+            zeromap=zeromap.union(eqs)
+        return zeromap
+            
+
     def activate_bifurcation_tracking(self,parameter:Union[str,_pyoomph.GiNaC_GlobalParam],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal","cartesian_normal_mode"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None,cartesian_wavenumber_k:Optional[ExpressionOrNum]=None):
         """
         Activates bifurcation tracking for the specified parameter and bifurcation type. Subsequent calls of solve(...) and arclength_continuation(...) will then track the bifurcation.
@@ -3514,24 +3538,15 @@ class Problem(_pyoomph.Problem):
                 self._last_bc_setting="eigen"
             
 
-            # These are sets of strings, we must convert them into lists of equations. We reuse the same class as for the eigenproblem
-            def dof_strings_to_global_equations(string_dof_set:Set[str]):
-                from ..solvers.generic import EigenMatrixSetDofsToZero
-                resolver=EigenMatrixSetDofsToZero(self,*string_dof_set)
-                zeromap:Set[int]=set()
-                for d in resolver.doflist:
-                    eqs=resolver.resolve_equations_by_name(d)
-                    #print("DOF",d,"EQS",eqs)
-                    zeromap=zeromap.union(eqs)
-                return zeromap
+            
 
             #print("BASE DOFS")
             base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),0,None)             
-            base_zero_dofs=dof_strings_to_global_equations(base_zero_dofs)
+            base_zero_dofs=self.dof_strings_to_global_equations(base_zero_dofs)
             
             #print("EIGEN DOFS")
             eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),azimuthal_mode,None) 
-            eigen_zero_dofs=dof_strings_to_global_equations(eigen_zero_dofs)
+            eigen_zero_dofs=self.dof_strings_to_global_equations(eigen_zero_dofs)
 
 
             contribs={"azimuthal_real_eigen":self._azimuthal_stability.real_contribution_name,"azimuthal_imag_eigen":self._azimuthal_stability.imag_contribution_name}
@@ -3581,18 +3596,10 @@ class Problem(_pyoomph.Problem):
             base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),None,None) 
             eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),None,cartesian_wavenumber_k) 
 
-            # These are sets of strings, we must convert them into lists of equations. We reuse the same class as for the eigenproblem
-            def dof_strings_to_global_equations(string_dof_set:Set[str]):
-                from ..solvers.generic import EigenMatrixSetDofsToZero
-                resolver=EigenMatrixSetDofsToZero(self,*string_dof_set)
-                zeromap:Set[int]=set()
-                for d in resolver.doflist:                    
-                    eqs=resolver.resolve_equations_by_name(d)
-                    zeromap=zeromap.union(eqs)
-                return zeromap
+            
 
-            base_zero_dofs=dof_strings_to_global_equations(base_zero_dofs)
-            eigen_zero_dofs=dof_strings_to_global_equations(eigen_zero_dofs)
+            base_zero_dofs=self.dof_strings_to_global_equations(base_zero_dofs)
+            eigen_zero_dofs=self.dof_strings_to_global_equations(eigen_zero_dofs)
 
             #print("BASE DOFS",base_zero_dofs)
             #print("EIGEN DOFS",eigen_zero_dofs)
@@ -3647,6 +3654,20 @@ class Problem(_pyoomph.Problem):
             Optional[NPFloatArray]: Array containing the cartesian normal mode numbers corresponding to the eigenvalues.
         """
         return self._last_eigenvalues_k
+
+
+    def rotate_eigenvectors(self,eigenvectors,dofs_to_real:Union[str,List[str],Set[str]],normalize_dofs_to_unity:bool=False):
+        neweigen=[]
+        dofs=self.dof_strings_to_global_equations(dofs_to_real)
+        dofs=numpy.array(list(dofs),dtype=numpy.int64)
+        for ev in eigenvectors:
+            avg_angle=numpy.average(numpy.angle(ev[dofs]))
+            if normalize_dofs_to_unity:
+                magnitude=numpy.average(numpy.absolute(ev[dofs]))
+            else:
+                magnitude=1
+            neweigen.append(ev*numpy.exp(-1j*avg_angle)/magnitude)
+        return numpy.array(neweigen)
 
     
     def define_problem_for_axial_symmetry_breaking_investigation(self):

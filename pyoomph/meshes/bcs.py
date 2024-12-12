@@ -466,7 +466,7 @@ class AxisymmetryBC(DirichletBC):
         for_m0=set(pin_to_zero.keys())
         for_m1=allfields-for_m0
         #for_m1.remove("mesh_y")
-        if cg._coordinates_as_dofs:
+        if cg._coordinates_as_dofs and cg.get_nodal_dimension()>1:
             for_m1.add("mesh_y")
         
         for_m_geq_2=allfields.copy()

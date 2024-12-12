@@ -1062,7 +1062,7 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             raise RuntimeError("Not implemented")
         mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
         if with_scale:
-            return 2*pi* spatial_scale ** (edim_offs) * (dcoords[0]* nondim("dx") + mm*dx_eps )
+            return 2*pi* spatial_scale ** (edim) * (dcoords[0]* nondim("dx") + mm*dx_eps )
         else:
             return 2*pi*(dcoords[0]*nondim("dx")+ mm*dx_eps)
             
@@ -1105,7 +1105,7 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             return super().vector_gradient(arg, ndim, edim, with_scales, lagrangian)
 
         if edim!=ndim:
-            raise RuntimeError("TODO: Cannot take a vector gradient in axisymmetry for edim!=ndim")
+            raise RuntimeError("TODO: Cannot take a vector gradient in axisymmetry-breaking coordinate system for edim!=ndim")
 
         zero=Expression(0)
         I=self.imaginary_i
