@@ -1033,21 +1033,24 @@ class Problem(_pyoomph.Problem):
                 print("OUTPUT of proc " + str(get_mpi_rank()) + " at t=" + str(self.get_current_time()) + paramstr)
         self._equation_system._do_output(self._output_step, stage)
 
-        if self.plotter is not None:
-            if self._plotting_process is None:
-                self.perform_plot()
-
         if self.write_states:
             statedir = os.path.join(self.get_output_directory(), "_states")
             Path(statedir).mkdir(parents=True, exist_ok=True)
             statefname = os.path.join(statedir, "state_{:06d}.dump".format(self._output_step))
             self.save_state(statefname)
-            if self._plotting_process is not None:
-                if self._plotting_process.poll() is not None:
-                    raise RuntimeError("Plotting process failed. Have a look at " + self.get_output_directory("_dedicated_plotter_log.txt"))
-                print("State file written, invoking plotting process")
-                self._plotting_process.stdin.write((statefname + "\n").encode("utf-8"))
-                self._plotting_process.stdin.flush()
+            
+        if self.plotter is not None:
+            if self._plotting_process is None:
+                self.perform_plot()
+
+
+        if self._plotting_process is not None:
+            if self._plotting_process.poll() is not None:
+                raise RuntimeError("Plotting process failed. Have a look at " + self.get_output_directory("_dedicated_plotter_log.txt"))
+            print("State file written, invoking plotting process")
+            self._plotting_process.stdin.write((statefname + "\n").encode("utf-8"))
+            self._plotting_process.stdin.flush()
+
 
             self._output_step += 1  # Write with the updated outstep here ??
         else:

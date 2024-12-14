@@ -30,7 +30,7 @@ import _pyoomph
 from ..typings import Optional
 
 from ..meshes.mesh import assert_spatial_mesh,InterfaceMesh,ODEStorageMesh
-from ..expressions import AxisymmetryBreakingCoordinateSystem, find_dominant_element_space, scale_factor, vector,matrix,evaluate_in_domain,testfunction,weak,var,nondim,Expression,rational_num,minimize_functional_derivative
+from ..expressions import AxisymmetryBreakingCoordinateSystem,AxisymmetricCoordinateSystem, find_dominant_element_space, scale_factor, vector,matrix,evaluate_in_domain,testfunction,weak,var,nondim,Expression,rational_num,minimize_functional_derivative
 
 # from ..expressions import var, get_global_symbol, nondim, vector, testfunction, scale_factor, cartesian, partial_t
 from ..expressions.coordsys import ODECoordinateSystem, BaseCoordinateSystem
@@ -408,6 +408,14 @@ class BaseEquations(_pyoomph.Equations):
         self._fields_defined_on_my_domain:Dict[str,FiniteElementSpaceEnum]={}
         #: Set this to true if you require internal facet contributions for DG methods, at best in the constructor
         self.requires_interior_facet_terms:bool=False 
+        
+        # Stores the data to pin for azimuthal stuff
+        self._azimuthal_r0_info:dict[int,set(str)]={} # Which fields will be pinned at the azimuthal symmetry axis for a given azimuthal mode
+        self._azimuthal_r0_info[0]=set()
+        self._azimuthal_r0_info[1]=set()
+        self._azimuthal_r0_info[2]=set()
+        
+    
 
     def interior_facet_terms_required(self):
         return self.requires_interior_facet_terms
@@ -603,6 +611,10 @@ class BaseEquations(_pyoomph.Equations):
 
     def _perform_define_fields(self):
         master = self._get_combined_element()
+        if self.get_parent_domain() is not None:
+            p=self.get_parent_domain().get_equations().get_azimuthal_r0_info()
+            for i in range(3):
+                master._azimuthal_r0_info[i]=p[i].copy()
         master.define_fields()
         master.sanity_check()
 
@@ -1944,6 +1956,23 @@ class Equations(BaseEquations):
             cg._coordinate_space = coordinate_space
             if coordinate_space not in ["C2TB", "C2", "C1TB", "C1"]:
                 raise ValueError("Can only set the coordinate space to either C2TB, C2, C1TB or C1")
+        rcomponent="_x"
+        zcomponent="_y"
+        csys=self.get_coordinate_system()
+        if isinstance(csys,AxisymmetricCoordinateSystem):
+            if csys.use_x_as_symmetry_axis:
+                rcomponent="_y"
+                zcomponent="_x"
+        if self.get_nodal_dimension()<2:
+            zcomponent=None
+        # x-axis is always pinned
+        master._azimuthal_r0_info[0].add("mesh"+rcomponent)
+        master._azimuthal_r0_info[1].add("mesh"+rcomponent)
+        master._azimuthal_r0_info[2].add("mesh"+rcomponent)
+        if zcomponent is not None:
+            master._azimuthal_r0_info[1].add("mesh"+zcomponent)
+            master._azimuthal_r0_info[2].add("mesh"+zcomponent)
+        
 
     def define_scalar_field(self, name:str, space:"FiniteElementSpaceEnum",scale:Optional[Union["ExpressionOrNum",str]]=None,testscale:Optional[Union["ExpressionOrNum",str]]=None,discontinuous_refinement_exponent:Optional[float]=None):
         """
@@ -1980,6 +2009,11 @@ class Equations(BaseEquations):
             self.set_scaling(**{name: scale})
         if testscale is not None:
             self.set_test_scaling(**{name:testscale})
+            
+        # Scalar fields are pinned by default for |m|=1 and |m|>=2
+        if space!="D0":
+            master._azimuthal_r0_info[1].add(name)
+            master._azimuthal_r0_info[2].add(name)
 
 
     def define_vector_field(self, name:str, space:"FiniteElementSpaceEnum", dim:Optional[int]=None,scale:"ExpressionNumOrNone"=None,testscale:"ExpressionNumOrNone"=None):
@@ -2007,6 +2041,39 @@ class Equations(BaseEquations):
             self.set_scaling(**{name:scale})
         if testscale is not None:
             self.set_test_scaling(**{name:testscale})
+            
+        # Vector fields are pinned by default for |m|=1 and |m|>=2
+        if space!="D0":
+            rcomponent="_x"
+            zcomponent="_y"
+            csys=self.get_coordinate_system()
+            if isinstance(csys,AxisymmetricCoordinateSystem):
+                if csys.use_x_as_symmetry_axis:
+                    rcomponent="_y"
+                    zcomponent="_x"
+            if dim<2:
+                zcomponent=None
+            mst._azimuthal_r0_info[0].add(name+rcomponent)
+            if name+rcomponent in mst._azimuthal_r0_info[1]:
+                mst._azimuthal_r0_info[1].remove(name+rcomponent)
+            mst._azimuthal_r0_info[2].add(name+rcomponent)
+            if zcomponent is not None:
+                mst._azimuthal_r0_info[1].add(name+zcomponent)
+                mst._azimuthal_r0_info[2].add(name+zcomponent)
+            if isinstance(csys,AxisymmetryBreakingCoordinateSystem):
+                mst._azimuthal_r0_info[0].add(name+"_phi")          
+                if name+"_phi" in mst._azimuthal_r0_info[1]:
+                    mst._azimuthal_r0_info[1].remove(name+"_phi")      
+                mst._azimuthal_r0_info[2].add(name+"_phi")
+                
+    def get_azimuthal_r0_info(self):
+        """Returns a dict [0,1,2]-> Set[str] with the names of the fields that are pinned at r=0 for azimuthal symmetry.
+        Entry 0 contains the names of the fields that are pinned to zero at r=0 for normal (axisymmetric solves). This pinning is strongly enforced.
+        Entry 1 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|=1. This pinning is implemented by modifying the eigenproblem matrices.
+        Entry 2 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|>=2. This pinning is implemented by modifying the eigenproblem matrices.        
+        """
+        master=self._get_combined_element()
+        return master._azimuthal_r0_info
 
     def define_tensor_field(self, name:str, space:"FiniteElementSpaceEnum", dim:Optional[int]=None,scale:"ExpressionNumOrNone"=None,testscale:"ExpressionNumOrNone"=None, symmetric:bool=False):
         dim = dim if dim is not None else self.get_nodal_dimension()  # TODO: Here, it should be nodal_dimension!
@@ -2021,6 +2088,7 @@ class Equations(BaseEquations):
             self.set_scaling(**{name:scale})
         if testscale is not None:
             self.set_test_scaling(**{name:testscale})
+        # TODO: set the azimuthal r=0 info for tensor fields
 
 
 

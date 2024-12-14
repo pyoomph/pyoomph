@@ -171,6 +171,17 @@ class EnforcedBC(InterfaceEquations):
                 else:
                     raise RuntimeError("EnforcedBC only works the following bulk spaces:"+", ".join(allowed_spaces)+". problem for field " + k + " on space " + sp)
             self.define_scalar_field(self.get_lagrange_multiplier_name(k), cast(FiniteElementSpaceEnum, sp), scale=1 / test_scale_factor(k),testscale=1 / scale_factor(k))
+        
+        aziinfo=self.get_azimuthal_r0_info()
+        for k in self.constraints.keys():
+            ln=self.get_lagrange_multiplier_name(k)
+            for i in [0,1,2]:
+                if k in aziinfo[i]:
+                    aziinfo[i].add(ln)
+                else:
+                    if ln in aziinfo[i]:
+                        aziinfo[i].remove(ln)
+
 
     def define_residuals(self):
         for k, v in self.constraints.items():
@@ -377,9 +388,7 @@ class InactiveDirichletBC(DirichletBC):
     
 
 
-# Will pin all radial components (e.g. velocity_x=0) of vector fields
-# If the mesh is moving, it also will set mesh_x=0
-class AxisymmetryBC(DirichletBC):
+class AxisymmetryBC(InterfaceEquations):
     r"""
     Add this to the axis of symmetry to automatically enforce the boundary condition required by symmetry.
     Also automatically sets the correct boundary conditions for azimuthal eigenvalue problems.
@@ -391,8 +400,7 @@ class AxisymmetryBC(DirichletBC):
         :math:`|m|=1`:  scalar fields and axial vector components are set to zero, radial and azimuthal components are not.
         :math:`|m|\geq 2`: scalar fields and all vector components are set to zero
     
-    Args:
-        automatic_toggle_active_for_axisymmetry_breaking_eigenvalues (bool, optional): Flag indicating whether to automatically adjust the boundary conditions for azimuthal eigenproblems. Defaults to True.
+    If you write an equation, where you want to change this behavior, you can manually change the conditions by obtaining the (writeable) field information via :py:meth:`~pyoomph.generic.codegen.Equations.get_azimuthal_r0_info` after the definition via :py:meth:`~pyoomph.generic.codegen.Equations.define_scalar_field` or :py:meth:`~pyoomph.generic.codegen.Equations.define_vector_field`.
 
     Notes:
         Must be also added to intersections of other boundaries with the axis of symmetry, when the other boundaries define additional fields, e.g.
@@ -402,137 +410,69 @@ class AxisymmetryBC(DirichletBC):
             bulk+=NavierStokesFreeSurface()@"interface"
             bulk+=AxisymmetryBC()@"interface/axis" # This is important, since the free surface introduces new fields at the interface
     """
-
-    def __init__(self,automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:bool=True):
-        super(AxisymmetryBC, self).__init__()
-        self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues=automatic_toggle_active_for_axisymmetry_breaking_eigenvalues
-        self._dcs_for_nonzero_m={}
-
-    def _get_field_information_for_axial_breaking(self,cg:Optional["FiniteElementCodeGenerator"]=None) -> Tuple[Set[str], Set[str], Set[str]]:
-        vector_fields_merge:List[Dict[str,List[str]]] = []
-        current = self._get_combined_element()
-        assert isinstance(current,BaseEquations)
-        if isinstance(current,Equations):
-            vector_fields_merge.append(current._vectorfields) 
-        check_spaces={"C2TB","C1TB","C2","C1"}
-        if cg is None:
-            cg=current._assert_codegen()
-        allfields = cg.get_all_fieldnames(check_spaces)
-        #print("CURRENT",repr(current),current.get_parent_domain(),current._assert_codegen().get_parent_domain())
-        #print("ADDFIELDS",cg.get_full_name(), allfields)
-        #print("ADDFIELDS FULL",cg.get_full_name(), cg.get_all_fieldnames(set()))
-        parent = cg.get_parent_domain()
-        #parent = current._assert_codegen().get_parent_domain()
-        local_expressions=set()
-        local_expressions.update(set(cg._mesh.list_local_expressions()))
-        while parent is not None:
-            peqs=parent.get_equations()
-            if isinstance(peqs,Equations):                
-                vector_fields_merge.append(peqs._vectorfields) 
-            allfields.update(parent.get_all_fieldnames(check_spaces))
-            local_expressions.update(set(parent._mesh.list_local_expressions()))
-            #print("ADDFIELDS PARENT FULL",parent.get_full_name(), parent.get_all_fieldnames(set()))            
-            parent = parent.get_parent_domain()
-        to_remove = {"lagrangian_x", "lagrangian_y", "lagrangian_z", "coordinate_x", "coordinate_y", "coordinate_z"}
-        
-        allfields -= to_remove
-
-        vector_fields = {k: v for a in vector_fields_merge for k, v in a.items()}
-        #print(vector_fields,"LOCL",local_expressions)
-        if cg._coordinates_as_dofs:
-            if cg.get_nodal_dimension()==2:
-                vector_fields["mesh"] = ["mesh_x","mesh_y"]  # TODO: Also theta
-            elif cg.get_nodal_dimension()==1:
-                vector_fields["mesh"] = ["mesh_x"]
-            else:
-                raise RuntimeError("TODO here")
-            #raise RuntimeError("ALSO mesh_phi?")
-            pass
-        else:
-            allfields-={"mesh_x", "mesh_y", "mesh_z"}
-
-        csys=self.get_coordinate_system()
-        if isinstance(csys,AxisymmetricCoordinateSystem) and csys.use_x_as_symmetry_axis:
-            pin_to_zero = {v[1]: 0 for _, v in vector_fields.items() if v[1] not in local_expressions}
-        else:
-            pin_to_zero = {v[0]: 0 for _, v in vector_fields.items() if v[0] not in local_expressions}
-        # Also add e.g. velocity_phi=0 at r=0
-        if isinstance(csys, AxisymmetryBreakingCoordinateSystem):
-            for _, v in vector_fields.items():
-                for entry in v:
-                    if entry.endswith("_phi"):
-                        pin_to_zero[entry] = 0
-
-        for_m0=set(pin_to_zero.keys())
-        for_m1=allfields-for_m0
-        #for_m1.remove("mesh_y")
-        if cg._coordinates_as_dofs and cg.get_nodal_dimension()>1:
-            for_m1.add("mesh_y")
-        
-        for_m_geq_2=allfields.copy()
-
-        return for_m0,for_m1,for_m_geq_2
-
+    def __init__(self):
+        super().__init__()
+                                
+    
     def define_residuals(self):
-        for_m0,_,_=self._get_field_information_for_axial_breaking()
-        self._dcs={k:0 for k in for_m0}
-        super(AxisymmetryBC, self).define_residuals()
-
-    # For axial symmetry breaking eigenanalysis, we must deactivate the DirichletBCs at r=0
+        print("AxisymmetryBC: Setting zero DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",self.get_azimuthal_r0_info()[0])
+        for k in self.get_azimuthal_r0_info()[0]:            
+            self.set_Dirichlet_condition(k,0)
+                
+                
+    def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
+        must_reapply=False
+        if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
+            return False  # Don't do anything in this case. It would mess up everything!
+        mesh=eqtree._mesh
+        assert mesh is not None
+        print("AxisymmetryBC: DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",self.get_azimuthal_r0_info()[0])
+        activated_bcs=set()
+        for k in self.get_azimuthal_r0_info()[0]:
+            if mesh._get_dirichlet_active(k) == False: 
+                activated_bcs.add(k)                
+                mesh._set_dirichlet_active(k, True)
+                must_reapply = True 
+        if len(activated_bcs)>0:
+            print("AxisymmetryBC: Activating zero DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",activated_bcs)
+        return must_reapply
+    
+           
     def _before_eigen_solve(self, eqtree:"EquationTree", eigensolver:"GenericEigenSolver",angular_m:Optional[float]=None,normal_k:Optional[float]=None) -> bool:
-        if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
-            return False # Nothing must be reassigned
-        if (angular_m is None or angular_m==0) and (normal_k is None or normal_k==0):
+        if angular_m is None or angular_m==0:
             return False
-        must_reapply = False
-        for_m0, _, _ = self._get_field_information_for_axial_breaking(eqtree.get_code_gen())
+        must_reapply = False        
         assert eqtree._mesh is not None 
-        for k in for_m0:
-            
-            if k=="mesh_x": # I guess it is reasonable to keep the mesh_x=0 condition
-                continue
-            
+        deactivated_bcs=set()
+        for k in self.get_azimuthal_r0_info()[0]:            
             if eqtree._mesh._get_dirichlet_active(k):
+                deactivated_bcs.add(k)
                 eqtree._mesh._set_dirichlet_active(k, False) 
-                must_reapply = True # Dirichlets have changed => reassign the equations
-        return must_reapply
-
-    def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool) -> bool:
-        if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
-            return False # Nothing must be reassigned
-        if self.get_mesh().get_problem().get_bifurcation_tracking_mode() in {"azimuthal","cartesian_normal_mode"}:
-            return False # Don't do anything in this case. It would mess up everything!
-        must_reapply = False
-        for_m0, _, _ = self._get_field_information_for_axial_breaking(eqtree.get_code_gen())
-        assert eqtree._mesh is not None 
-        for k in for_m0:
-            if k =="mesh_x":
-                continue
-            if eqtree._mesh._get_dirichlet_active(k) == False: 
-                eqtree._mesh._set_dirichlet_active(k, True) 
-                must_reapply = True # Dirichlets have changed => reassign the equations
-        return must_reapply
-
-    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree:"EquationTree",eigensolver:"GenericEigenSolver", angular_mode:Optional[float],normal_k:Optional[float])->Set[Union[str,int]]:
-        if not self.automatic_toggle_active_for_axisymmetry_breaking_eigenvalues:
-            #print("RET EMPY")
-            return set()
+                must_reapply = True 
+        if len(deactivated_bcs)>0:            
+            print("AxisymmetryBC: Deactivating strong zero DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",deactivated_bcs)
+        return must_reapply    
+                        
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree, eigensolver, angular_mode, normal_k):
+        if angular_mode is not None:
+            angular_mode=int(angular_mode)
+            
+        info=None
+        if angular_mode==0:
+            info=self.get_azimuthal_r0_info()[0]            
+        elif abs(angular_mode)==1:
+            info=self.get_azimuthal_r0_info()[1]
+        elif abs(angular_mode)>1 and self.for_higher_m:
+            info=self.get_azimuthal_r0_info()[2]
+        if info is None:
+            res=set() 
         else:
-            if not isinstance(self.get_coordinate_system(),AxisymmetryBreakingCoordinateSystem):
-                return set()
-            fullpath=eqtree.get_full_path().lstrip("/") # TODO: Scalar fields for angular_mode>=1
-            for_m0, for_m1, for_m_geq_2 = self._get_field_information_for_axial_breaking(eqtree.get_code_gen())
-            if angular_mode==0:
-                for_my_m=for_m0
-            elif angular_mode==1 or angular_mode==-1:
-                for_my_m=for_m1
-            else:
-                for_my_m=for_m_geq_2
-            #print("ADDING", fullpath,for_my_m)
-            res=set([ fullpath+"/"+k for k in for_my_m])
-            #print("RET m",angular_mode, res)
-            #print("RET",res)
-            return res
+            res=set([eqtree.get_full_path().lstrip("/")+"/"+m for m in info])
+        if len(info)>0:            
+            print("AxisymmetryBC (mode m="+str(angular_mode)+"): Imposed zero by matrix manipulation at",self.get_current_code_generator().get_full_name(),"for",info)
+        return res
+            
+
 
 
 # Scalar fields on DG space => set the corresponding eigenfunctions

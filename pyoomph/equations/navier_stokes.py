@@ -721,6 +721,17 @@ class ConnectVelocityAtInterface(InterfaceEquations):
             space=get_interface_field_connection_space(inside_space,outside_space,self.use_highest_space)
             assert space!=""
             self.define_scalar_field(self.lagr_mult_prefix + f, space)
+            
+        # However, we must remove the m=1 connection for the radial component
+        aziinfo=self.get_azimuthal_r0_info()
+        csys=self.get_coordinate_system()
+        for f in fields:
+            for i in [0,1,2]:
+                if f in aziinfo[i]:
+                    aziinfo[i].add(self.lagr_mult_prefix + f)
+                else:
+                    if self.lagr_mult_prefix + f in aziinfo[i]:
+                        aziinfo[i].remove(self.lagr_mult_prefix + f)
 
     def define_scaling(self):
         fields=self.get_required_fields()
