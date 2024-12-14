@@ -132,7 +132,7 @@ class GenericStabilizationMethod(Equations):
     def get_momentum_residual(self):
         ns=self.get_flow_equations()
         u,p=var(["velocity","pressure"])
-        res=ns.mass_density*material_derivative(u,u,ALE="auto")+grad(p)
+        res=ns.mass_density*material_derivative(u,u)+grad(p)
         if ns.bulkforce is not None:
             res-=ns.bulkforce
         if ns.gravity is not None:

@@ -8150,7 +8150,7 @@ namespace GiNaC
 			if (sp.field->get_space()->is_basis_derivative_zero(sp.basis, dir))
 			{
 				{
-					std::cout << "WARNING: Spatial derivative of basis of field " << sp.field->get_name() << " is zero. Please consider this!" << std::endl;
+					//std::cout << "WARNING: Spatial derivative of basis of field " << sp.field->get_name() << " is zero. Please consider this!" << std::endl;
 					// throw_runtime_error("Basis derivative is zero, TODO: make this an optional warning");
 				}
 				return 0;

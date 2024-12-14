@@ -42,7 +42,7 @@ class ThermalConductionEquation(Equations):
 
     def define_residuals(self):
         T,T_test=var_and_test("T")
-        self.add_residual(weak(self.rho*self.c_p*partial_t(T,ALE="auto"),T_test)+weak(self.k*grad(T),grad(T_test)))
+        self.add_residual(weak(self.rho*self.c_p*partial_t(T),T_test)+weak(self.k*grad(T),grad(T_test)))
 
 
 class IceFrontSpeed(InterfaceEquations):
@@ -66,7 +66,7 @@ class IceFrontSpeed(InterfaceEquations):
         T_bulk_in=var("T",domain=self.get_parent_domain())	# temperature in the inside bulk
         T_bulk_out = var("T", domain=self.get_opposite_parent_domain()) # temperature in the outside bulk
         speed=dot(k_in*grad(T_bulk_in)-k_out*grad(T_bulk_out),n)/(rho_in*self.latent_heat)
-        self.add_residual(weak(dot(partial_t(x),n)-speed,ltest))
+        self.add_residual(weak(dot(mesh_velocity(),n)-speed,ltest))
         self.add_residual(weak(l,dot(xtest,n)))
 
 

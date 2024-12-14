@@ -37,9 +37,9 @@ where the phase superscript :math:`\phi` can be either ice or liquid, depending 
 
        def define_residuals(self):
            T,T_test=var_and_test("T")
-           self.add_residual(weak(self.rho*self.c_p*partial_t(T,ALE="auto"),T_test)+weak(self.k*grad(T),grad(T_test)))
+           self.add_residual(weak(self.rho*self.c_p*partial_t(T),T_test)+weak(self.k*grad(T),grad(T_test)))
 
-Most important is on the one hand, that we use :py:func:`~pyoomph.expressions.generic.partial_t` with the keyword argument ``ALE="auto"`` to activate the ALE correction (cf. :numref:`secALEtimediff`) if this equation is solved on a moving mesh like in this problem here. On the other hand, note that we bind the test scale of the temperature field ``"T"`` to ``1/scale_factor("thermal_equation")``. This means essentially, that :math:numref:`eqmultidomtempconduct` is multiplier by a factor :math:`1/S` during non-dimensionalization, i.e. that we actually solve
+Note that we bind the test scale of the temperature field ``"T"`` to ``1/scale_factor("thermal_equation")``. This means essentially, that :math:numref:`eqmultidomtempconduct` is multiplier by a factor :math:`1/S` during non-dimensionalization, i.e. that we actually solve
 
 .. math:: :label: eqmultidomtempconductnd
 
@@ -100,7 +100,7 @@ The implementation is rather straight-forward:
            T_bulk_in=var("T",domain=self.get_parent_domain())	# temperature in the inside bulk
            T_bulk_out = var("T", domain=self.get_opposite_parent_domain()) # temperature in the outside bulk
            speed=dot(k_in*grad(T_bulk_in)-k_out*grad(T_bulk_out),n)/(rho_in*self.latent_heat)
-           self.add_residual(weak(dot(partial_t(x),n)-speed,ltest))
+           self.add_residual(weak(dot(mesh_velocity(),n)-speed,ltest))
            self.add_residual(weak(l,dot(xtest,n)))
 
 with the :py:attr:`~pyoomph.generic.codegen.InterfaceEquations.required_parent_type` and :py:attr:`~pyoomph.generic.codegen.InterfaceEquations.required_opposite_parent_type`, we inform pyoomph that it is only allowed to attach this constraint to an interface that has as ``TemperatureConductionEquation`` on both the inside bulk and the outside bulk of this interface. Otherwise, an error will be thrown. Due to these statements, we also get automatically the inside and outside ``TemperatureConductionEquation`` of the bulk phases when calling :py:meth:`~pyoomph.generic.codegen.InterfaceEquations.get_parent_equations` and :py:meth:`~pyoomph.generic.codegen.InterfaceEquations.get_opposite_parent_equations`. This is used to obtain the required properties :math:`k^\phi` and :math:`\rho` in the :py:meth:`~pyoomph.generic.codegen.BaseEquations.define_residuals` method here. The interface property ``latent_heat``, however, has to be passed to the constructor and is stored internally.

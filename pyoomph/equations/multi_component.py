@@ -266,7 +266,7 @@ class CompositionAdvectionDiffusionEquations(Equations):
             raise RuntimeError("SUPG only works if combined with a ElementSizeForSUPG Equation")
         assert isinstance(elsize_eqs,ElementSizeForSUPG)
         elemsize = var(elsize_eqs.varname)
-        urel = self.wind - eval_flag("moving_mesh") * partial_t(var("mesh"), ALE=False)
+        urel = self.wind - eval_flag("moving_mesh") * mesh_velocity()
         usqr = subexpression(dot(urel, urel))
         dt = subexpression(var("time") - evaluate_in_past(var("time")) + 1e-20 * scale_factor("temporal"))
         ht = subexpression(square_root(elemsize, self.get_element_dimension()) + 1e-20 * scale_factor("spatial"))
@@ -298,10 +298,10 @@ class CompositionAdvectionDiffusionEquations(Equations):
             if self.integrate_advection_by_parts:
                 if self.useSUPG:
                     raise RuntimeError("TODO")
-                res = rho_factor * (self.dt_factor * partial_t(f, ALE="auto"))
+                res = rho_factor * (self.dt_factor * partial_t(f))
                 self.add_residual(-weak(rho_factor *self.wind*f,grad(f_test)))
             else:
-                res = rho_factor * (self.dt_factor * partial_t(f, ALE="auto") + dot(self.wind, grad(f)))
+                res = rho_factor * (self.dt_factor * partial_t(f) + dot(self.wind, grad(f)))
             if self.useSUPG:
                 res = subexpression(res)  # XXX Does not work here!
                 self.add_residual(weak(self.get_supg_tau(self.component_names[fn]) * self.wind * res, grad(f_test)))
@@ -547,7 +547,7 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
             partial_mass_transfer_rates:Dict[str,Expression] = {}
 
         # Kinematic boundary condition
-        actual_total_transfer_by_rho_inner = dot(partial_t(R)+self.static_normal_interface_motion*n - u, n)
+        actual_total_transfer_by_rho_inner = dot(mesh_velocity()+self.static_normal_interface_motion*n - u, n)
         kin_bc =  actual_total_transfer_by_rho_inner + self.total_mass_loss_factor_inside *total_mass_transfer_rate / rho_inner
         if self.project_interface_flux:
             iflux,ifluxtest=var_and_test("interface_flux")
@@ -678,7 +678,7 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
         if self.interface_props.surfactants is not None and len(self.interface_props.surfactants) > 0:
             nn = dyadic(n, n)
             ut_proj = u - nn @ u
-            un_proj = dot(partial_t(var("mesh")), n) * n
+            un_proj = dot(mesh_velocity(), n) * n
             ui, ui_test = var_and_test(self.surfactant_advect_velo_name)
             self.add_residual(weak(ui - (ut_proj + un_proj), ui_test))
 
@@ -688,7 +688,7 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
                 D = self.interface_props.get_surface_diffusivity(sprops.name)
                 assert D is not None
                 G, G_test = var_and_test("surfconc_" + sprops.name)
-                self.add_residual(weak(partial_t(G, ALE="auto"), G_test))
+                self.add_residual(weak(partial_t(G), G_test))
                 self.add_residual(D * weak(grad(G), grad(G_test)))
                 self.add_residual(weak(div(G * ui), G_test))
                 if self.interface_props.surfactant_adsorption_rate.get(sprops.name) is not None:
@@ -808,7 +808,7 @@ class TemperatureConductionEquation(Equations):
             raise RuntimeError("No thermal_conductivity defined in "+str(self.material))
         if cp is None:
             raise RuntimeError("No specific_heat_capacity defined in "+str(self.material))
-        self.add_residual(weak(self.dt_factor*rho*cp*partial_t(T,ALE="auto"),T_test))
+        self.add_residual(weak(self.dt_factor*rho*cp*partial_t(T),T_test))
         self.add_residual(weak(k*grad(T),grad(T_test)))
 
 
@@ -904,11 +904,11 @@ class ThinLayerThermalConductionEquation(InterfaceEquations):
     Args:
         material(AnyMaterialProperties): The material properties.
         thickness(ExpressionOrNum): The thickness of the layer.
-        ALE(Union[Literal["auto"],bool]): Whether to use the Arbitrary Lagrangian-Eulerian (ALE) formulation. Default is False.
+        ALE(Union[Literal["auto"],bool]): Whether to use the Arbitrary Lagrangian-Eulerian (ALE) formulation. Default is "auto".
         outside_temperature(ExpressionNumOrNone): The temperature at the outside of the layer. Default is None.
     """
         
-    def __init__(self,material:AnyMaterialProperties,thickness:ExpressionOrNum,*,ALE:Union[Literal["auto"],bool]=False,outside_temperature:ExpressionNumOrNone=None):
+    def __init__(self,material:AnyMaterialProperties,thickness:ExpressionOrNum,*,ALE:Union[Literal["auto"],bool]="auto",outside_temperature:ExpressionNumOrNone=None):
         super().__init__()
         self.material=material
         self.thickness=thickness
@@ -927,7 +927,7 @@ class ThinLayerThermalConductionEquation(InterfaceEquations):
         cp=self.material.specific_heat_capacity
         k=self.material.thermal_conductivity
         # The normal thermal conduction equations of a resolved domain would add 
-        #   self.add_weak(rho*cp*partial_t(T,ALE="auto"),T_test)
+        #   self.add_weak(rho*cp*partial_t(T),T_test)
         #   self.add_weak(k*grad(T),grad(T_test))
         # In the thickness direction, we span T and T_test as follows:
         #   T = Tin*PsiI(s)+Tout*PsiO(s)
@@ -1038,7 +1038,7 @@ class SurfactantsAtSolidInterface(InterfaceEquations):
             G,Gtest=var_and_test(fieldname)
             transfer=self.ls_properties.surfactant_adsorption_rate.get(s,0)
             transfer=subexpression(transfer)
-            self.add_residual(weak(partial_t(G,ALE="auto")-transfer,Gtest))            
+            self.add_residual(weak(partial_t(G)-transfer,Gtest))            
             DS=self.ls_properties.get_surface_diffusivity(s)
             if DS is not None:
                 self.add_residual(weak(DS*grad(G),grad(Gtest)))

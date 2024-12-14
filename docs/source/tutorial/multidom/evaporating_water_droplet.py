@@ -119,8 +119,8 @@ class EvaporatingDroplet(Problem):
         # Different contact line dynamics
         if self.pinned_contact_line: # if pinned
             # Pinned contact line means mesh_x is fixed.
-            # We enforce partial_t(mesh_x)=0 by adjusting the radial velocity at the contact line
-            cl_constraint=partial_t(var("mesh_x"))-0
+            # We enforce partial_t(mesh_x,ALE=False)=0 by adjusting the radial velocity at the contact line
+            cl_constraint=mesh_velocity()[0]-0
             d_eqs+=EnforcedBC(velocity_x=cl_constraint)@"droplet_gas/droplet_substrate"
         else:
             d_eqs += NavierStokesContactAngle(contact_angle=self.contact_angle) @ "droplet_gas/droplet_substrate"  # and constant contact angle

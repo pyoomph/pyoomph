@@ -462,7 +462,7 @@ class AxisymmetryBC(InterfaceEquations):
             info=self.get_azimuthal_r0_info()[0]            
         elif abs(angular_mode)==1:
             info=self.get_azimuthal_r0_info()[1]
-        elif abs(angular_mode)>1 and self.for_higher_m:
+        elif abs(angular_mode)>1:
             info=self.get_azimuthal_r0_info()[2]
         if info is None:
             res=set() 

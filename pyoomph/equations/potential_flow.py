@@ -73,7 +73,7 @@ class PotentialFlow(Equations):
         elif self.velo_projection:            
             self.add_local_function(self.velocity_name,grad(phi))
         if self.rho is not None and self.pressure_projection:
-            pdef=-self.rho*(partial_t(phi,ALE="auto")+dot(grad(phi),grad(phi)))+self.bulk_force_potential
+            pdef=-self.rho*(partial_t(phi)+dot(grad(phi),grad(phi)))+self.bulk_force_potential
             if not isinstance(self.pressure_projection,bool):
                 p,ptest=var_and_test(self.pressure_name)
                 self.add_weak(p-pdef,ptest)
@@ -215,9 +215,9 @@ class _PotentialFlowFreeInterfaceBase(_PotentialFlowInterfaceEquations):
         u=grad(var(potflow.potential_name,domain=".."))
         j=self.total_mass_transfer_rate if self.total_mass_transfer_rate is not None else 0
         if vectorial:
-            return partial_t(x)-u+j/potflow.rho*n # (xdot-u)=0
+            return mesh_velocity()-u+j/potflow.rho*n # (xdot-u)=0
         else:
-            return dot(n,partial_t(x)-u)+j/potflow.rho # n*(xdot-u)=0
+            return dot(n,mesh_velocity()-u)+j/potflow.rho # n*(xdot-u)=0
     
     def get_dynamic_boundary_condition(self):
         potflow=self.get_potential_flow()
@@ -267,7 +267,7 @@ class PotentialFlowFreeInterface1(_PotentialFlowFreeInterfaceBase):
         self.add_weak(dyn_bc,ldyn_test)
         self.add_weak(ldyn*n,xtest)
 
-        self.add_weak(-dot(partial_t(x,ALE=False),n),phitest)
+        self.add_weak(-dot(mesh_velocity(),n),phitest)
         return super().define_residuals()           
 
     def before_assigning_equations_postorder(self, mesh: AnyMesh):        
@@ -417,7 +417,7 @@ class PotentialFlowFreeInterface(_PotentialFlowInterfaceEquations):
             self.add_weak(ldyn,phi_test,coordinate_system=crdsys_lagr)
             
             lkin,lkintest=var_and_test("_lagr_kinbc")
-            kinbc=dot(n,partial_t(x,ALE=True)-grad(phiB))
+            kinbc=dot(n,partial_t(x,ALE=True)-grad(phiB)) # The partial_t(x,ALE=True) does not make sense. Will be 0
             if self.total_mass_transfer_rate:
                 kinbc-=self.total_mass_transfer_rate/potflow.rho
             self.add_weak(kinbc,lkintest,coordinate_system=crdsys_lagr)
@@ -426,8 +426,7 @@ class PotentialFlowFreeInterface(_PotentialFlowInterfaceEquations):
         else:
 
             # Don't ask me why we have to take a minus here at the grad(phi)^2 term... But otherwise, it does not agree with the Rayleigh-Plesset
-            #dyn_bc=partial_t(phi,ALE="auto")-dot(grad(phiB),grad(phiB))/2+self.additional_pressure/potflow.rho
-            dyn_bc=-partial_t(phi,ALE="auto")-dot(grad(phiB),grad(phiB))/2+self.additional_pressure/potflow.rho
+            dyn_bc=-partial_t(phi)-dot(grad(phiB),grad(phiB))/2+self.additional_pressure/potflow.rho
 
             if self.sigma is not None:
                 pn,pn_test=var_and_test("_proj_normal")
@@ -445,7 +444,7 @@ class PotentialFlowFreeInterface(_PotentialFlowInterfaceEquations):
             self.add_weak(dyn_bc,ldyntest)
             self.add_weak(ldyn,dot(n,xtest))
 
-            self.add_weak(partial_t(x),n*phi_test)
+            self.add_weak(mesh_velocity(),n*phi_test)
         
 
     def before_assigning_equations_postorder(self, mesh: AnyMesh):

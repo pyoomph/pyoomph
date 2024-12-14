@@ -152,7 +152,7 @@ class PorousFront(InterfaceEquations):
         eta=peqs.porosity
         porous_velo = -permeability /(mu*eta) * grad(pp)
         #porous_velo=evaluate_in_past(porous_velo)
-        self.add_residual(weak(dot(partial_t(R)-porous_velo,n), ltest))
+        self.add_residual(weak(dot(mesh_velocity()-porous_velo,n), ltest))
 
     def before_assigning_equations_postorder(self, mesh:AnyMesh):
         assert isinstance(mesh,InterfaceMesh)

@@ -492,17 +492,30 @@ def contract(a:ExpressionOrNum,b:ExpressionOrNum)->Expression:
 def eval_flag(which:str)->Expression:
 	return _pyoomph.GiNaC_EvalFlag(which)
 
-def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"],bool]=False,scheme:OptionalTimeSteppingScheme=None,nondim:bool=False)->Expression:
+
+def mesh_velocity(scheme:OptionalTimeSteppingScheme=None,nondim:bool=False)->Expression:
+	"""
+	Get the mesh velocity, i.e. the time derivative of the mesh coordinates without ALE correction.
+ 
+	Returns:
+		Expression: Just a shorthand for `partial_t(var("mesh"),ALE=False)`.
+	"""
+	return partial_t(nondim("mesh") if nondim else var("mesh"),ALE=False,scheme=scheme,nondim=nondim)
+
+
+def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"],bool]="auto",scheme:OptionalTimeSteppingScheme=None,nondim:bool=False)->Expression:
 	"""
 	Compute the partial derivative of a function with respect to time, i.e. .. :math:`\\partial_t^n f`. 
-	This is evaluated at the nodal values directly, i.e. co-moving with a moving mesh. To correct for it by the mesh velocity :math:`\\dot{\\vec{X}}`, use the `ALE=True` or `ALE="auto"`. 
+	With `ALE=False`, this is evaluated at the nodal values directly, i.e. co-moving with a moving mesh. To correct for it by the mesh velocity :math:`\\dot{\\vec{X}}`, use the `ALE=True` or `ALE="auto"`. 
  	In the latter case, the correction will only be considered if equations for the moving mesh are present, i.e. if :py:meth:`~pyoomph.generic.codegen.Equations.activate_coordinates_as_dofs` has been called by any :py:class:`~pyoomph.generic.codegen.Equations` added to this or any parent domain.
+  
+	If you want to obtain the mesh velocity, please use it with `ALE=False`.
   
  	
 	Args:
 		f : The function to differentiate. It can be an expression or a string representing a variable.
 		order: The order of the derivative. Defaults to 1, maximum is 2.
-		ALE : Flag indicating whether to use Arbitrary Lagrangian-Eulerian (ALE) formulation. Defaults to False, "auto" will activate the ALE correction if you combine it with a moving mesh only.
+		ALE : Flag indicating whether to use Arbitrary Lagrangian-Eulerian (ALE) formulation. Defaults to "auto". "auto" will activate the ALE correction if you combine it with a moving mesh only.
 		scheme : The time stepping scheme to use. Defaults to None, meaning the default time stepping scheme set at problem level.
 		nondim : Flag indicating whether to use non-dimensional time. Defaults to False.
 
@@ -533,11 +546,11 @@ def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"]
 			if order!=1:
 				raise ValueError("Currently, I can only take the first order time derivative with ALE")
 			#return diff(f,t)-contract(partial_t(var("mesh"),ALE=False),grad(f))
-			return diff(f,t)-directional_derivative(f,partial_t(var("mesh"),ALE=False))
+			return diff(f,t)-directional_derivative(f,mesh_velocity(scheme=scheme))
 		elif ALE=="auto":
 			if order==1:
 				#return diff(f, t) - eval_flag("moving_mesh")*contract(partial_t(var("mesh"),ALE=False),grad(f))
-				return diff(f, t) - eval_flag("moving_mesh")*directional_derivative(f,partial_t(var("mesh"),ALE=False))
+				return diff(f, t) - eval_flag("moving_mesh")*directional_derivative(f,mesh_velocity(scheme=scheme))
 			else:
 				v = [t] * order
 				return diff(f, *v)
@@ -547,7 +560,7 @@ def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"]
 		v=[t]*order
 		return diff(f,*v)
 
-def material_derivative(f:Union[ExpressionOrNum,str],velocity:Union[ExpressionOrNum,str],ALE:Union[Literal["auto"],bool]=False,dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
+def material_derivative(f:Union[ExpressionOrNum,str],velocity:Union[ExpressionOrNum,str],ALE:Union[Literal["auto"],bool]="auto",dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
 	"""
 	Compute the material derivative of a function with respect to time, i.e. :math:`\\partial_t f + \\nabla f \\cdot \\vec{u}`. Note that for tensorial quantities, one usually uses the :py:func:`upper_convected_derivative` instead.
 
@@ -583,7 +596,7 @@ def convected_derivative(A:ExpressionOrNum,velocity:ExpressionOrNum,alpha:Expres
 	res-=advection_factor*(matproduct(A,transpose(g_alpha))+matproduct(g_alpha,A))
 	return res
 
-def upper_convected_derivative(A:ExpressionOrNum,velocity:ExpressionOrNum,ALE:Union[Literal["auto"],bool]=False,dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
+def upper_convected_derivative(A:ExpressionOrNum,velocity:ExpressionOrNum,ALE:Union[Literal["auto"],bool]="auto",dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
 	"""
  	Returns the upper-convected derivative of a tensor field :math:`\\mathbf{A}`, i.e. :math:`\\partial_t \\mathbf{A} + \\vec{u}\\cdot\\nabla\\mathbf{A}-(\\nabla \\vec{u})^\\mathrm{T}\\cdot \\mathbf{A} - \\mathbf{A}\\cdot\\nabla\\vec{u}`.
 

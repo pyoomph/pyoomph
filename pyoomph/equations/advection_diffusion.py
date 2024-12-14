@@ -141,7 +141,7 @@ class AdvectionDiffusionEquations(Equations):
       if self.fluid_props is not None:
          for fn in self.fieldnames:
             f, f_test = var_and_test(fn)
-            self.add_residual(weak(ts(self.dt_factor*partial_t(f,ALE="auto")-self.source.get(fn,0)),f_test))
+            self.add_residual(weak(ts(self.dt_factor*partial_t(f)-self.source.get(fn,0)),f_test))
             if self.advection_by_parts=="skew":
                self.add_residual(-weak( ts(self.wind* f),grad(f_test))/2)
                self.add_residual(weak(ts(dot(self.wind, grad(f))), f_test)/2)
@@ -157,7 +157,7 @@ class AdvectionDiffusionEquations(Equations):
       else:
          for fn in self.fieldnames:
             f, f_test = var_and_test(fn)
-            self.add_residual(weak(ts(self.dt_factor * partial_t(f, ALE="auto")),f_test)-weak(ts(self.source.get(fn, 0)),f_test))
+            self.add_residual(weak(ts(self.dt_factor * partial_t(f)),f_test)-weak(ts(self.source.get(fn, 0)),f_test))
             if self.advection_by_parts=="skew":
                self.add_residual(-weak( ts(self.wind* f),grad(f_test))/2)
                self.add_residual(weak(ts(dot(self.wind, grad(f))), f_test)/2)
