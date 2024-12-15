@@ -425,8 +425,7 @@ class AxisymmetryBC(InterfaceEquations):
         if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
             return False  # Don't do anything in this case. It would mess up everything!
         mesh=eqtree._mesh
-        assert mesh is not None
-        print("AxisymmetryBC: DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",self.get_azimuthal_r0_info()[0])
+        assert mesh is not None        
         activated_bcs=set()
         for k in self.get_azimuthal_r0_info()[0]:
             if mesh._get_dirichlet_active(k) == False: 
@@ -454,8 +453,10 @@ class AxisymmetryBC(InterfaceEquations):
         return must_reapply    
                         
     def _get_forced_zero_dofs_for_eigenproblem(self, eqtree, eigensolver, angular_mode, normal_k):
-        if angular_mode is not None:
-            angular_mode=int(angular_mode)
+        if angular_mode is None:
+            return set()
+        
+        angular_mode=int(angular_mode)
             
         info=None
         if angular_mode==0:

@@ -24,6 +24,7 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/functional.h>
+#include <pybind11/complex.h>
 
 namespace py = pybind11;
 
@@ -359,6 +360,37 @@ void PyReg_Expressions(py::module &m)
 		.def(py::self /= int())
 		.def(py::self /= double())
 
+		.def("__add__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh + (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__sub__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh - (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__mul__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh * (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__truediv__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh / (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__iadd__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh + (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__isub__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh - (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__imul__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh * (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__itruediv__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh / (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+
+		.def("__radd__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())+lh; }, py::is_operator())
+		.def("__rsub__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())-lh; }, py::is_operator())
+		.def("__rmul__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())*lh; }, py::is_operator())
+		.def("__rtruediv__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())/lh; }, py::is_operator())
+		
+
+		
+
+
+
 		.def("__add__", [](const GiNaC::ex &lh, const GiNaC::GiNaCGlobalParameterWrapper &rh)
 			 { return lh + rh; }, py::is_operator())
 		.def("__sub__", [](const GiNaC::ex &lh, const GiNaC::GiNaCGlobalParameterWrapper &rh)
@@ -470,6 +502,17 @@ void PyReg_Expressions(py::module &m)
 			   catch (const std::exception &e) 
 			   {
 			     std::ostringstream oss; oss<<"Cannot convert " << self << " to double";
+			     throw_runtime_error(oss.str());
+			   } })
+		.def("__complex__", [](const GiNaC::ex &self)
+			 { try 
+			   {
+			     std::complex<double> res=pyoomph::expressions::eval_to_complex(self);
+			     return res; 
+			   }
+			   catch (const std::exception &e) 
+			   {
+			     std::ostringstream oss; oss<<"Cannot convert " << self << " to complex";
 			     throw_runtime_error(oss.str());
 			   } })
 		.def("__int__", [](const GiNaC::ex &self)

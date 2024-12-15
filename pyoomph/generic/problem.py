@@ -3631,7 +3631,8 @@ class Problem(_pyoomph.Problem):
             if self._last_eigenvalues is None:
                 return None
             else:
-                return [x/self.get_scaling("temporal") for x in self._last_eigenvalues]
+                imaginary_i=_pyoomph.GiNaC_imaginary_i()
+                return [numpy.real(x)/self.get_scaling("temporal")+imaginary_i*numpy.imag(x)/self.get_scaling("temporal") for x in self._last_eigenvalues]                
         return self._last_eigenvalues
 
     def get_last_eigenvectors(self)->NPComplexArray:

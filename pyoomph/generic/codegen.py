@@ -373,6 +373,15 @@ class BaseEquations(_pyoomph.Equations):
             raise exception
 
 
+    def get_azimuthal_r0_info(self):
+        """Returns a dict [0,1,2]-> Set[str] with the names of the fields that are pinned at r=0 for azimuthal symmetry.
+        Entry 0 contains the names of the fields that are pinned to zero at r=0 for normal (axisymmetric solves). This pinning is strongly enforced.
+        Entry 1 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|=1. This pinning is implemented by modifying the eigenproblem matrices.
+        Entry 2 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|>=2. This pinning is implemented by modifying the eigenproblem matrices.        
+        """
+        master=self._get_combined_element()
+        return master._azimuthal_r0_info
+
     def before_precice_initialise(self,eqtree:"EquationTree"):
         pass
 
@@ -407,13 +416,13 @@ class BaseEquations(_pyoomph.Equations):
         self._additional_residuals:Dict[str,Expression]={}
         self._fields_defined_on_my_domain:Dict[str,FiniteElementSpaceEnum]={}
         #: Set this to true if you require internal facet contributions for DG methods, at best in the constructor
-        self.requires_interior_facet_terms:bool=False 
+        self.requires_interior_facet_terms:bool=False   
         
         # Stores the data to pin for azimuthal stuff
         self._azimuthal_r0_info:dict[int,set(str)]={} # Which fields will be pinned at the azimuthal symmetry axis for a given azimuthal mode
         self._azimuthal_r0_info[0]=set()
         self._azimuthal_r0_info[1]=set()
-        self._azimuthal_r0_info[2]=set()
+        self._azimuthal_r0_info[2]=set()              
         
     
 
@@ -2066,14 +2075,7 @@ class Equations(BaseEquations):
                     mst._azimuthal_r0_info[1].remove(name+"_phi")      
                 mst._azimuthal_r0_info[2].add(name+"_phi")
                 
-    def get_azimuthal_r0_info(self):
-        """Returns a dict [0,1,2]-> Set[str] with the names of the fields that are pinned at r=0 for azimuthal symmetry.
-        Entry 0 contains the names of the fields that are pinned to zero at r=0 for normal (axisymmetric solves). This pinning is strongly enforced.
-        Entry 1 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|=1. This pinning is implemented by modifying the eigenproblem matrices.
-        Entry 2 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|>=2. This pinning is implemented by modifying the eigenproblem matrices.        
-        """
-        master=self._get_combined_element()
-        return master._azimuthal_r0_info
+    
 
     def define_tensor_field(self, name:str, space:"FiniteElementSpaceEnum", dim:Optional[int]=None,scale:"ExpressionNumOrNone"=None,testscale:"ExpressionNumOrNone"=None, symmetric:bool=False):
         dim = dim if dim is not None else self.get_nodal_dimension()  # TODO: Here, it should be nodal_dimension!

@@ -27,6 +27,7 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 #include <vector>
 #include <map>
 #include "exception.hpp"
+#include <complex>
 
 namespace pyoomph
 {
@@ -307,6 +308,7 @@ namespace pyoomph
     GiNaC::ex replace_global_params_by_current_values(const GiNaC::ex &in);
 
     double eval_to_double(const GiNaC::ex &inp);
+    std::complex<double> eval_to_complex(const GiNaC::ex &inp);    
 
     DECLARE_FUNCTION_5P(grad) // 1: what to grad, 2: nodal dimension or -1, 3: element dimension or -1, 4: Coordinate System object, 5: withdim(0,1)
     DECLARE_FUNCTION_6P(directional_derivative)

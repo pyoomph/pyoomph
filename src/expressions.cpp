@@ -3206,6 +3206,25 @@ namespace pyoomph
 			}
 		}
 
+		std::complex<double> eval_to_complex(const GiNaC::ex &inp)
+		{
+			GlobalParamsToDouble expand_params;
+			DrawUnitsOutOfSubexpressions uos(NULL);
+			GiNaC::ex gpsubst = uos(expand_params(inp));
+			GiNaC::ex v = GiNaC::evalf(gpsubst);
+			if (GiNaC::is_a<GiNaC::numeric>(v))
+			{
+				GiNaC::numeric n = GiNaC::ex_to<GiNaC::numeric>(v);
+				return std::complex<double>(n.real().to_double(), n.imag().to_double());
+			}
+			else
+			{
+				std::ostringstream oss;
+				oss << "Cannot cast the following into a complex: " << v;
+				throw_runtime_error(oss.str());
+			}
+		}
+
 		/////////////////
 
 		static ex minimize_functional_derivative_eval(const ex &F, const ex &only_wrto, const ex &flags, const ex &coordsys)
