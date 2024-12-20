@@ -144,15 +144,20 @@ class SlepcEigenSolver(GenericEigenSolver):
 
     def __init__(self, problem:"Problem"):
         super().__init__(problem)
+        self.spectral_transformation:Optional[str]="sinvert"
 
     def further_setup(self,E): #type:ignore
         pass
+    
+    def set_default_option(self,name:str,val:Any=None,force:bool=False)->None:
+        _SetDefaultPetscOption(name,val, force)
     
     def use_mumps(self):
         _SetDefaultPetscOption("mat_mumps_icntl_6",5)
         _SetDefaultPetscOption("st_ksp_type","preonly")
         _SetDefaultPetscOption("st_pc_type","lu")
         _SetDefaultPetscOption("st_pc_factor_mat_solver_type","mumps")
+        return self
 
     def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
         if which!="LM":
@@ -187,17 +192,27 @@ class SlepcEigenSolver(GenericEigenSolver):
         ##--petsc -st_pc_type lu -st_pc_factor_mat_solver_type umfpack
         # print(dir(PETSc.Options.hasName))
         # exit()
-        _SetDefaultPetscOption("st_ksp_type", "preonly")
-        _SetDefaultPetscOption("st_type", "sinvert")
-        _SetDefaultPetscOption("eps_type", "arnoldi")
+        
+        _SetDefaultPetscOption("eps_type", "krylovschur") # krylovschur
+        if target is None:
+            if shift is not None:
+                target=shift
 
         #_SetDefaultPetscOption("eps_target_magnitude", 1)
         if target:
             _SetDefaultPetscOption("eps_target_magnitude",0)
         else:
             _SetDefaultPetscOption("eps_target_real", 0)
-        if shift is not None:            
-            _SetDefaultPetscOption("st_shift", shift)
+            
+        if self.spectral_transformation:
+            _SetDefaultPetscOption("st_ksp_type", "preonly")
+            _SetDefaultPetscOption("st_type", self.spectral_transformation)
+            if shift is not None:          
+                if isinstance(shift,complex):
+                    _SetDefaultPetscOption("st_shift", str(shift.real)+("+" if shift.imag>=0 else "")+str(shift.imag)+"i")
+                else:  
+                    _SetDefaultPetscOption("st_shift", shift)
+                
         E = SLEPc.EPS()  #type:ignore
         E.create() #type:ignore
         if target is not None:
@@ -214,7 +229,7 @@ class SlepcEigenSolver(GenericEigenSolver):
                 if numpy.imag(target)>0:
                     trg=str(numpy.real(target))+"+"+str(numpy.imag(target))+"i"
                 else:
-                    trg=str(numpy.imag(target))+"-"+str(numpy.imag(target))+"i"
+                    trg=str(numpy.imag(target))+str(numpy.imag(target))+"i"
             print(trg)
             _SetDefaultPetscOption("eps_target",trg)
             
@@ -227,6 +242,7 @@ class SlepcEigenSolver(GenericEigenSolver):
             _v0=PETSc.Vec().createWithArray(v0)
             E.setInitialSpace(_v0)
         #E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
+        #ncv=max(2 * neval + 1, 5 + neval)
         ncv=max(2 * neval + 1, 5 + neval)
         mdp=ncv #TODO: Can be smaller for higher
         E.setDimensions(neval,ncv,mdp) #type:ignore
