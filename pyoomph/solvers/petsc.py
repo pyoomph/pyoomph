@@ -203,26 +203,27 @@ class SlepcEigenSolver(GenericEigenSolver):
         # exit()
         
         _SetDefaultPetscOption("eps_type", "krylovschur") # krylovschur
+        target_set=target is not None
         if target is None:
             if shift is not None:
                 target=shift
 
-        #_SetDefaultPetscOption("eps_target_magnitude", 1)
-        if target:
-            _SetDefaultPetscOption("eps_target_magnitude",0)
-        else:
-            _SetDefaultPetscOption("eps_target_real", 0)
-            
+        
         if self.spectral_transformation:
             _SetDefaultPetscOption("st_ksp_type", "preonly")
             _SetDefaultPetscOption("st_type", self.spectral_transformation)
-            if shift is not None:          
-                _SetDefaultPetscOption("st_shift", shift)
-                
+                            
         E = SLEPc.EPS()  #type:ignore
         E.create() #type:ignore
         if target is not None:
-            _SetDefaultPetscOption("eps_target",target)
+            E.setTarget(target)
+            E.setWhichEigenpairs(SLEPc.EPS.Which.TARGET_MAGNITUDE) #type:ignore
+        else:
+            E.setTarget(0)
+            E.setWhichEigenpairs(SLEPc.EPS.Which.TARGET_REAL) #type:ignore
+            
+            
+        
             
             #trgt=PETSc.toScalar(target)
             #print(trgt)
@@ -254,6 +255,8 @@ class SlepcEigenSolver(GenericEigenSolver):
         # E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
         E.setFromOptions() #type:ignore
 
+        if self.spectral_transformation and shift:
+            E.getST().setShift(shift)
         self.further_setup(E) #type:ignore
         E.solve() #type:ignore
 
@@ -318,7 +321,10 @@ class SlepcEigenSolver(GenericEigenSolver):
         evals = numpy.array(evals) #type:ignore
         if sort:
             if sort==True:
-                srt = numpy.argsort(-evals)[0:min(neval, len(evals))] #type:ignore
+                if target_set:
+                    srt = numpy.argsort(numpy.abs(evals-target))[0:min(neval, len(evals))]
+                else:
+                    srt = numpy.argsort(-evals)[0:min(neval, len(evals))] #type:ignore
             else:
                 srt = numpy.argsort(numpy.array([sort(x) for x in evals]))[0:min(neval, len(evals))] #type:ignore
             #print("SORTING",evals,srt)

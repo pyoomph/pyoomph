@@ -1086,10 +1086,19 @@ namespace pyoomph
 			this->deactivate_bifurcation_tracking();
 			return;
 		}
-		if (!global_params_by_name.count(param))
-			throw_runtime_error("Cannot track a bifuraciton in the global parameter " + param + ", since it is not present in the problem");
-		auto *p = global_params_by_name[param];
-		double *valptr = &(p->value());
+		double *valptr;
+		if (param!="<LAMBDA_TRACKING>")
+		{
+			if (!global_params_by_name.count(param))
+				throw_runtime_error("Cannot track a bifuraciton in the global parameter " + param + ", since it is not present in the problem");
+			auto *p = global_params_by_name[param];
+			valptr = &(p->value());
+		}
+		else
+		{
+			valptr=&this->lambda_tracking_real;
+		}
+		
 		//		this->set_analytic_dparameter(valptr);
 		oomph::DoubleVector ev1(this->dof_distribution_pt());
 		for (unsigned i = 0; i < std::min((size_t)eigenv1.size(), (size_t)this->ndof()); i++)

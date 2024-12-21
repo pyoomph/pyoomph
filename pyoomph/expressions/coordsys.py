@@ -231,7 +231,8 @@ class ODECoordinateSystem(BaseCoordinateSystem):
         return Expression(1)
 
     def expand_coordinate_or_mesh_vector(self,cg:"FiniteElementCodeGenerator", name:str,dimensional:bool,no_jacobian:bool,no_hessian:bool):        
-        raise RuntimeError("ODEs don't have coordinates")
+        return Expression(0)
+        #raise RuntimeError("ODEs don't have coordinates")
 
 # Cartesian
 class CartesianCoordinateSystem(BaseCoordinateSystem):

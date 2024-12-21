@@ -2855,13 +2855,13 @@ class Problem(_pyoomph.Problem):
                 raise ValueError("Cannot specify both azimuthal_m and normal_mode_k")
             if normal_mode_L is not None:
                 raise ValueError("Cannot specify both azimuthal_m and normal_mode_L")
-            return self._solve_normal_mode_eigenproblem(n, azimuthal_m=azimuthal_m, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy,v0=v0,target=target)
+            return self._solve_normal_mode_eigenproblem(n, azimuthal_m=azimuthal_m, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy,v0=v0,target=target,sort=sort)
         elif normal_mode_k is not None:
             if isinstance(normal_mode_k,(list,tuple)):
                 normal_mode_k=[float(k*self.get_scaling("spatial")) for k in normal_mode_k]
             else:
                 normal_mode_k=float(normal_mode_k*self.get_scaling("spatial"))
-            return self._solve_normal_mode_eigenproblem(n, cartesian_k=normal_mode_k, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy,v0=v0,target=target)
+            return self._solve_normal_mode_eigenproblem(n, cartesian_k=normal_mode_k, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy,v0=v0,target=target,sort=sort)
         if self._dof_selector_used is not self._dof_selector:
             self.reapply_boundary_conditions()
         if self.get_bifurcation_tracking_mode()!="":
@@ -3042,7 +3042,10 @@ class Problem(_pyoomph.Problem):
         self._solve_in_arclength_conti = None
 
         if self.get_bifurcation_tracking_mode() != "":
-            self._last_eigenvalues = numpy.array([0 + self._get_bifurcation_omega() * 1j], dtype=numpy.complex128)  # type:ignore
+            if  self._bifurcation_tracking_parameter_name== "<LAMBDA_TRACKING>":
+                self._last_eigenvalues = numpy.array([self._get_lambda_tracking_real() + self._get_bifurcation_omega() * 1j], dtype=numpy.complex128)  # type:ignore
+            else:
+                self._last_eigenvalues = numpy.array([0 + self._get_bifurcation_omega() * 1j], dtype=numpy.complex128)  # type:ignore
             self._last_eigenvectors = numpy.array([self._get_bifurcation_eigenvector()], dtype=numpy.complex128)  # type:ignore
             self._last_eigenvectors = self.process_eigenvectors(self._last_eigenvectors)
             if self.get_bifurcation_tracking_mode() == "azimuthal":
@@ -3388,12 +3391,15 @@ class Problem(_pyoomph.Problem):
         return zeromap
             
 
-    def activate_bifurcation_tracking(self,parameter:Union[str,_pyoomph.GiNaC_GlobalParam],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal","cartesian_normal_mode"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None,cartesian_wavenumber_k:Optional[ExpressionOrNum]=None):
+    def activate_eigenbranch_tracking(self,branch_type:Optional[Literal["real","complex"]]=None,eigenvector:Optional[int]=None):
+        self.activate_bifurcation_tracking(None,bifurcation_type=branch_type,eigenvector=eigenvector)
+
+    def activate_bifurcation_tracking(self,parameter:Optional[Union[str,_pyoomph.GiNaC_GlobalParam]],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal","cartesian_normal_mode"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None,cartesian_wavenumber_k:Optional[ExpressionOrNum]=None):
         """
         Activates bifurcation tracking for the specified parameter and bifurcation type. Subsequent calls of solve(...) and arclength_continuation(...) will then track the bifurcation.
 
         Args:
-            parameter (Union[str, _pyoomph.GiNaC_GlobalParam]): The parameter to change in order to find the bifurcation.
+            parameter: The parameter to change in order to find the bifurcation. If None, we track the current eigenbranch, i.e. Re(lambda) will be found and is not necessarily 0.
             bifurcation_type (Optional[Literal["hopf", "fold", "pitchfork", "azimuthal"]]): The type of bifurcation to track. Defaults to None, i.e. auto-detect.
             blocksolve (bool): Flag indicating whether to use block solve. Defaults to False. Should be kept False.
             eigenvector (Optional[Union[NPFloatArray, NPComplexArray, int]]): The eigenvector to use for tracking. Defaults to None, which means the eigenvector corresponding to the eigenvalue with largest real part. Can be either an index or a custom vector.
@@ -3402,57 +3408,69 @@ class Problem(_pyoomph.Problem):
         """        
         
         
-
-        #def prerotate_eigenvector(ev):
-        #    Gr = numpy.real(ev)
-        #    Gi = numpy.imag(ev)
-        #    GrGr = numpy.dot(Gr, Gr)
-        #    GiGi = numpy.dot(Gi, Gi)
-        #    GrGi = numpy.dot(Gr, Gi)
-        #    print("DOTS ARE",GrGr,GiGi,GrGi)
-        #    # Phase to rotate it that gr*gi=0
-        #    phi = numpy.arctan2(( GrGr-GiGi  + numpy.sqrt((GrGr - GiGi) ** 2 + 4 * GrGi ** 2)), (2 * GrGi))
-        #    print("phi is ",phi)
-        #    # Apply rotation
-        #    gr = Gr * numpy.cos(phi) - Gi * numpy.sin(phi)
-        #    gi = Gr * numpy.sin(phi) + Gi * numpy.cos(phi)
-        #    # vector normalized to fulfill gr*gr=1 back to guess
-        #    return  (gr + (0 + 1j) * gi) / numpy.sqrt(numpy.dot(gr, gr))
-
-        if isinstance(eigenvector,int):
-            if eigenvector>=len(self.get_last_eigenvectors()):
-                raise RuntimeError("Eigenvector "+str(eigenvector)+" not calculated")
+        if parameter is None:
+            # We track the current eigenbranch, i.e. Re(lambda) will be found and is not necessarily 0
+            parameter="<LAMBDA_TRACKING>"
+            eigenvector_v=None
+            if eigenvector is None:
+                eigenvector=0
+            if isinstance(eigenvector,int):
+                if eigenvector>=len(self.get_last_eigenvectors()):
+                    raise RuntimeError("Eigenvector "+str(eigenvector)+" not calculated")
+                self._set_lambda_tracking_real(numpy.real(self.get_last_eigenvalues()[eigenvector]))    
+                eigenvector_v=self.get_last_eigenvectors()[eigenvector]
+            else:
+                raise RuntimeError("Can only track eigenbranches, not custom vectors. Please set eigenvector to and integer (for the index of the calculate eigenvector or None, meaning index 0) ")
             if bifurcation_type is None:
                 bifurcation_type=self.guess_nearest_bifurcation_type(eigenvector)
+            
+            if bifurcation_type=="fold" or bifurcation_type=="real":
+                bifurcation_type="fold" # Use the modified fold tracker for this
+                print("Activating eigenbranch tracking for a real branch with starting eigenvalue",self._get_lambda_tracking_real())
+            elif bifurcation_type=="hopf" or bifurcation_type=="complex":
+                bifurcation_type="hopf"
+                if omega is None:
+                    omega=numpy.imag(self.get_last_eigenvalues()[eigenvector])
+                print("Activating eigenbranch tracking for a complex branch with with starting eigenvalue",str(complex(self._get_lambda_tracking_real(),omega)))
+            else:                
+                raise RuntimeError("Cannot track eigenbranch for bifurcation type "+bifurcation_type)
+            if eigenvector_v is not None:
+                eigenvector=eigenvector_v
+        else:
+            if isinstance(eigenvector,int):
+                if eigenvector>=len(self.get_last_eigenvectors()):
+                    raise RuntimeError("Eigenvector "+str(eigenvector)+" not calculated")
+                if bifurcation_type is None:
+                    bifurcation_type=self.guess_nearest_bifurcation_type(eigenvector)
+                    print("Assuming nearest bifurcation is of type: "+bifurcation_type)
+                if omega is None and bifurcation_type in {"hopf","azimuthal","cartesian_normal_mode"}:
+                    omega=numpy.imag(self.get_last_eigenvalues()[eigenvector])
+                if bifurcation_type=="azimuthal" and azimuthal_mode is None:
+                    azimuthal_mode=self.get_last_eigenmodes_m()[eigenvector]
+                elif bifurcation_type=="cartesian_normal_mode" and cartesian_wavenumber_k is None:
+                    cartesian_wavenumber_k=self.get_last_eigenmodes_k()[eigenvector]
+                eigenvector=self.get_last_eigenvectors()[eigenvector]
+                
+            if bifurcation_type is None:
+                bifurcation_type=self.guess_nearest_bifurcation_type()
                 print("Assuming nearest bifurcation is of type: "+bifurcation_type)
-            if omega is None and bifurcation_type in {"hopf","azimuthal","cartesian_normal_mode"}:
-                omega=numpy.imag(self.get_last_eigenvalues()[eigenvector])
-            if bifurcation_type=="azimuthal" and azimuthal_mode is None:
-                azimuthal_mode=self.get_last_eigenmodes_m()[eigenvector]
-            elif bifurcation_type=="cartesian_normal_mode" and cartesian_wavenumber_k is None:
-                cartesian_wavenumber_k=self.get_last_eigenmodes_k()[eigenvector]
-            eigenvector=self.get_last_eigenvectors()[eigenvector]
-            
-        if bifurcation_type is None:
-            bifurcation_type=self.guess_nearest_bifurcation_type()
-            print("Assuming nearest bifurcation is of type: "+bifurcation_type)
 
-        if self._dof_selector_used is not self._dof_selector:
-            self.reapply_boundary_conditions()
-        if isinstance(parameter,_pyoomph.GiNaC_GlobalParam):
-            parameter=parameter.get_name()
-        
-        if not parameter in self.get_global_parameter_names():
-            raise RuntimeError("Cannot perform bifurcation tracking in parameter '"+parameter+"' since it is not part of the problem")
+            if self._dof_selector_used is not self._dof_selector:
+                self.reapply_boundary_conditions()
+            if isinstance(parameter,_pyoomph.GiNaC_GlobalParam):
+                parameter=parameter.get_name()
             
-        if self.warn_about_unused_global_parameters and not self.is_global_parameter_used(parameter):
-            if self.warn_about_unused_global_parameters=="error":
-                raise RuntimeError("Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this error.")
-            else:
-                print("WARNING: Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this warning.")
+            if not parameter in self.get_global_parameter_names():
+                raise RuntimeError("Cannot perform bifurcation tracking in parameter '"+parameter+"' since it is not part of the problem")
+            
+            if self.warn_about_unused_global_parameters and not self.is_global_parameter_used(parameter):
+                if self.warn_about_unused_global_parameters=="error":
+                    raise RuntimeError("Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this error.")
+                else:
+                    print("WARNING: Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this warning.")
         
-        if not self.is_quiet():
-            print("Bifurcation tracking activated for "+parameter)
+            if not self.is_quiet():
+                print("Bifurcation tracking activated for "+parameter)
         self._bifurcation_tracking_parameter_name=parameter
         if bifurcation_type=="fold":
 #            must_reapply_bcs=self._equation_system._before_eigen_solve(self.get_eigen_solver(), 0)
@@ -3730,10 +3748,8 @@ class Problem(_pyoomph.Problem):
             # And add a Matrix manipulator that sets the constrained degrees of freedom to zero
             esolve.add_matrix_manipulator(EigenMatrixSetDofsToZero(self, *to_zero_dofs))
 
-    def solve_axial_symmetry_breaking_eigenproblem(self,*args,**kwargs):
-        raise RuntimeError("solve_axial_symmetry_breaking_eigenproblem is deprecated. Use solve_eigenproblem with corresponding kwargs, e.g. azimuthal_m=...")
 
-    def _solve_normal_mode_eigenproblem(self, n:int, azimuthal_m:Optional[Union[List[int],Tuple[int],int]]=None, cartesian_k:Optional[Union[List[float],Tuple[float],float]]=None, shift:Optional[Union[float,complex]]=0,quiet:bool=False,filter:Optional[Callable[[complex],bool]]=None,report_accuracy:bool=False,target:Optional[complex]=None,v0:Optional[Union[NPFloatArray,NPComplexArray]]=None)->Tuple[NPComplexArray,NPComplexArray]:
+    def _solve_normal_mode_eigenproblem(self, n:int, azimuthal_m:Optional[Union[List[int],Tuple[int],int]]=None, cartesian_k:Optional[Union[List[float],Tuple[float],float]]=None, shift:Optional[Union[float,complex]]=0,quiet:bool=False,filter:Optional[Callable[[complex],bool]]=None,report_accuracy:bool=False,target:Optional[complex]=None,v0:Optional[Union[NPFloatArray,NPComplexArray]]=None,sort:bool=True)->Tuple[NPComplexArray,NPComplexArray]:
         
         if azimuthal_m and (self._azimuthal_mode_param_m is None):
             raise RuntimeError("Must use setup_for_stability_analysis(azimuthal_stability=True) before initialialising the problem")
@@ -3759,7 +3775,7 @@ class Problem(_pyoomph.Problem):
             for ms in vlist:
                 param.value = ms
                 self.actions_before_eigen_solve()
-                self.solve_eigenproblem(n, shift,quiet=True,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0)
+                self.solve_eigenproblem(n, shift,quiet=True,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0,sort=sort)
                 if len(alleigenvals)==0:
                     alleigenvals=self.get_last_eigenvalues().copy()
                 else:
@@ -3770,11 +3786,16 @@ class Problem(_pyoomph.Problem):
                 else:
                     alleigenvects:NPComplexArray=numpy.vstack([alleigenvects,numpy.array(self.get_last_eigenvectors()).copy()]) #type:ignore
 
-            srt = numpy.argsort(-alleigenvals) #type:ignore
-            alleigenvals:NPComplexArray=alleigenvals[srt] #type:ignore
-
-            alleigenvects:NPComplexArray = alleigenvects[srt,:] #type:ignore
-            minfo:NPIntArray=numpy.array(minfoL)[srt] #type:ignore
+            if sort:
+                if target:
+                    srt=numpy.argsort(numpy.abs(alleigenvals-target)) #type:ignore
+                else:
+                    srt = numpy.argsort(-alleigenvals) #type:ignore
+                alleigenvals:NPComplexArray=alleigenvals[srt] #type:ignore
+                alleigenvects:NPComplexArray = alleigenvects[srt,:] #type:ignore
+                minfo:NPIntArray=numpy.array(minfoL)[srt] #type:ignore
+            else:
+                minfo:NPIntArray=numpy.array(minfoL)
 
             self._last_eigenvalues, self._last_eigenvectors = alleigenvals,alleigenvects
             if self.azimuthal_m is not None:
@@ -3790,7 +3811,7 @@ class Problem(_pyoomph.Problem):
         else:
             param.value = vlist
             self.actions_before_eigen_solve()
-            self.solve_eigenproblem(n, shift,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0)
+            self.solve_eigenproblem(n, shift,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0,sort=sort)
             param.value = 0
             if azimuthal_m is not None:
                 self._last_eigenvalues_m=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore
@@ -3949,7 +3970,10 @@ class Problem(_pyoomph.Problem):
                 # Since both comes from the same residual, it can only be consistent if either M or J is negated
                 # In the eigensolver, we negate J (since eigensolvers may demand M to be positive (semi-)definite.
                 # In the bifurcation tracking, we just negate omega, for the very same result
-                self._last_eigenvalues=numpy.array([0-self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore
+                if self._bifurcation_tracking_parameter_name=="<LAMBDA_TRACKING>":
+                    self._last_eigenvalues=numpy.array([self._get_lambda_tracking_real() -self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore    
+                else:
+                    self._last_eigenvalues=numpy.array([0-self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore
                 self._last_eigenvectors=numpy.array([self._get_bifurcation_eigenvector()],dtype=numpy.complex128) #type:ignore
                 if self.get_bifurcation_tracking_mode()=="azimuthal":
                     self._last_eigenvalues_m=numpy.array([int(self._azimuthal_mode_param_m.value)],dtype=numpy.int32) #type:ignore

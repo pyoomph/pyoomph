@@ -213,9 +213,13 @@ namespace pyoomph
     
     void actions_after_change_in_global_parameter(double *const &parameter_pt) override;
     void actions_after_parameter_increase(double *const &parameter_pt) override;    
+
+    double lambda_tracking_real = 0.0; // Real(lambda) for tracking of eigenbranches
   public:
     bool use_custom_residual_jacobian=false;
     bool improved_pitchfork_tracking_on_unstructured_meshes=false;
+
+    double * get_lambda_tracking_real() {return &lambda_tracking_real;}
     
     std::vector<DynamicBulkElementCode *> &get_bulk_element_codes() { return bulk_element_codes; }
     std::string get_bifurcation_tracking_mode() const { return bifurcation_tracking_mode; }

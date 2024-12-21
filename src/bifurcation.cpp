@@ -442,6 +442,8 @@ namespace pyoomph
       // Get the basic residuals, jacobian and mass matrix
       elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);
 
+      bool lambda_tracking=(Parameter_pt==Problem_pt->get_lambda_tracking_real());
+
       // Initialise the pen-ultimate residual
       residuals[3 * raw_ndof] = -1.0 /
                                 (double)(Problem_pt->mesh_pt()->nelement()) * eigenweight;
@@ -471,6 +473,19 @@ namespace pyoomph
         // Imaginary part
         residuals[3 * raw_ndof + 1] += (Psi[global_eqn] * C[global_eqn]) /
                                        Count[global_eqn];
+      }
+
+      if (lambda_tracking)
+      {
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          for (unsigned j = 0; j < raw_ndof; j++)
+          {
+            unsigned global_unknown = elem_pt->eqn_number(j);
+            residuals[raw_ndof + i] += (*Parameter_pt) * M(i, j) * Phi[global_unknown];          
+            residuals[2 * raw_ndof + i] +=  (*Parameter_pt) * M(i, j) * Psi[global_unknown];              
+          }
+        }
       }
     }
     else
@@ -534,7 +549,8 @@ namespace pyoomph
                                    DenseMatrix<double> &jacobian)
   {
 
-    bool ana_dparam = Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[3 * Ndof]);
+    bool lambda_tracking=(Parameter_pt==Problem_pt->get_lambda_tracking_real());
+    bool ana_dparam = lambda_tracking || Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[3 * Ndof]);
     bool ana_hessian = ana_dparam && Problem_pt->are_hessian_products_calculated_analytically() && dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
 
     // The standard case
@@ -545,7 +561,10 @@ namespace pyoomph
 
       if (!ana_hessian)
       {
-
+        if (lambda_tracking)
+        {
+          throw_runtime_error("Cannot track a complex eigenbranch without having analytical Hessian");
+        }
         // Get the basic residuals and jacobian
         DenseMatrix<double> M(raw_ndof);
         elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);
@@ -688,7 +707,7 @@ namespace pyoomph
         multi_assm.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian, &M));
 
         multi_assm.back().add_hessian(Eig_local, &dJdU_Eig, &dMdU_Eig);
-        multi_assm.back().add_param_deriv(Parameter_pt, &dRdParam, &dJdParam, &dMdParam);
+        if (!lambda_tracking) multi_assm.back().add_param_deriv(Parameter_pt, &dRdParam, &dJdParam, &dMdParam);
         pyoomph_elem_pt->get_multi_assembly(multi_assm);
 
         // Residuals
@@ -709,7 +728,7 @@ namespace pyoomph
           residuals[3 * raw_ndof] += (Phi[global_eqn] * C[global_eqn]) / Count[global_eqn];
           residuals[3 * raw_ndof + 1] += (Psi[global_eqn] * C[global_eqn]) / Count[global_eqn];
         }
-
+        
         // Jacobian
         for (unsigned n = 0; n < raw_ndof; ++n)
         {
@@ -737,6 +756,30 @@ namespace pyoomph
           unsigned local_eqn = elem_pt->eqn_number(n);
           jacobian(3 * raw_ndof, raw_ndof + n) = C[local_eqn] / Count[local_eqn];         // dR[Param]/dPhi
           jacobian(3 * raw_ndof + 1, 2 * raw_ndof + n) = C[local_eqn] / Count[local_eqn]; // dR[Omega]/dPsi
+        }
+
+        if (lambda_tracking)
+        {
+          for (unsigned i = 0; i < raw_ndof; i++)
+          {
+            for (unsigned j = 0; j < raw_ndof; j++)
+            {              
+              residuals[raw_ndof + i] += (*Parameter_pt)  * M(i, j) * Eig_local[ j];
+              residuals[2 * raw_ndof + i] += (*Parameter_pt)  * M(i, j) * Eig_local[raw_ndof +j];
+
+              jacobian(raw_ndof + i,j) += (*Parameter_pt)  * dMdU_Eig(i, j)* Eig_local[ j];
+              jacobian(2 * raw_ndof + i,j) += (*Parameter_pt)  * dMdU_Eig(i, j)* Eig_local[raw_ndof +j];
+
+              jacobian(raw_ndof + i,raw_ndof + j) += (*Parameter_pt)  * M(i, j);
+              jacobian(2 * raw_ndof + i,2*raw_ndof+j) += (*Parameter_pt)  * M(i, j);
+
+              jacobian(raw_ndof + i,3 * raw_ndof) +=M(i, j) * Eig_local[ j];
+              jacobian(2*raw_ndof + i,3 * raw_ndof) +=M(i, j) * Eig_local[raw_ndof+j];
+
+
+
+            }
+          }
         }
       }
     } // End of standard case
@@ -1209,7 +1252,15 @@ namespace pyoomph
     case Full_augmented:
     {
       DenseMatrix<double> jacobian(raw_ndof);
-      elem_pt->get_jacobian(residuals, jacobian);
+      DenseMatrix<double> mass_matrix(raw_ndof);
+      if (Parameter_pt==Problem_pt->get_lambda_tracking_real())
+      {      
+        elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, mass_matrix);
+      }
+      else
+      {
+        elem_pt->get_jacobian(residuals, jacobian);
+      }
       residuals[raw_ndof] = -1.0 / Problem_pt->mesh_pt()->nelement() * eigenweight;
       for (unsigned i = 0; i < raw_ndof; i++)
       {
@@ -1221,6 +1272,21 @@ namespace pyoomph
         unsigned global_eqn = elem_pt->eqn_number(i);
         residuals[raw_ndof] += (Phi[global_eqn] * Y[global_eqn]) / Count[global_eqn];
       }
+
+      if (Parameter_pt==Problem_pt->get_lambda_tracking_real())
+      {      
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          for (unsigned j = 0; j < raw_ndof; j++)
+          {
+            residuals[raw_ndof + 1 + i] += (*Parameter_pt)*mass_matrix(i, j) * Y[elem_pt->eqn_number(j)];
+          }
+        }
+      }
+
+
+
+            
     }
     break;
 
@@ -1238,7 +1304,9 @@ namespace pyoomph
                                    Vector<double> &residuals,
                                    DenseMatrix<double> &jacobian)
   {
-    bool ana_dparam = Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[Ndof]);
+    // If true, we do not track a fold by adjusting the parameter, but track an eigenvalue branch
+    bool lambda_continuation=  (Parameter_pt==Problem_pt->get_lambda_tracking_real());      
+    bool ana_dparam = lambda_continuation || Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[Ndof]);    
     bool ana_hessian = ana_dparam && Problem_pt->are_hessian_products_calculated_analytically() && dynamic_cast<BulkElementBase *>(elem_pt);
 
     unsigned augmented_ndof = ndof(elem_pt);
@@ -1283,14 +1351,20 @@ namespace pyoomph
 
     case Full_augmented:
     {
+
+
       if (ana_hessian)
       {
+
+        
 
         jacobian.initialise(0.0);
         residuals.initialise(0.0);
         DenseMatrix<double> djac_dparam(raw_ndof, raw_ndof, 0.0);
         Vector<double> dres_dparam(raw_ndof, 0.0);
+        DenseMatrix<double> M(raw_ndof, raw_ndof, 0.0);
         DenseMatrix<double> dJduPhiH(raw_ndof, raw_ndof, 0.0);
+        DenseMatrix<double> dMduPhiH(raw_ndof, raw_ndof, 0.0);
         Vector<double> Y_local(raw_ndof);
         for (unsigned _e = 0; _e < raw_ndof; _e++)
         {
@@ -1299,9 +1373,19 @@ namespace pyoomph
 
         pyoomph::BulkElementBase *pyoomph_elem_pt = dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
         std::vector<SinglePassMultiAssembleInfo> assemble_info;
-        assemble_info.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian));
-        assemble_info.back().add_param_deriv(Parameter_pt, &dres_dparam, &djac_dparam);
-        assemble_info.back().add_hessian(Y_local, &dJduPhiH);
+        
+        if (!lambda_continuation)
+        {
+          assemble_info.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian));
+          assemble_info.back().add_param_deriv(Parameter_pt, &dres_dparam, &djac_dparam);
+          assemble_info.back().add_hessian(Y_local, &dJduPhiH);
+        }
+        else
+        {
+          assemble_info.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian,&M));
+          assemble_info.back().add_hessian(Y_local, &dJduPhiH,&dMduPhiH);
+        }
+        
         pyoomph_elem_pt->get_multi_assembly(assemble_info);
 
         // Fill augmented residuals
@@ -1330,9 +1414,24 @@ namespace pyoomph
           unsigned global_eqn = elem_pt->eqn_number(n);
           jacobian(raw_ndof, raw_ndof + 1 + n) = Phi[global_eqn] / Count[global_eqn];
         }
+
+         if (lambda_continuation)
+         {      
+          for (unsigned n = 0; n < raw_ndof; n++)
+          {
+            for (unsigned m = 0; m < raw_ndof; m++)
+            {
+              residuals[raw_ndof + 1 + n] += (*Parameter_pt)*M(n, m) * Y[elem_pt->eqn_number(m)];
+              jacobian(raw_ndof + 1 + n, raw_ndof + 1 + m) += (*Parameter_pt)*M(n, m);
+              jacobian(raw_ndof + 1 + n, raw_ndof) += M(n, m) * Y_local[m];
+              jacobian(raw_ndof + 1 + m, n) += (*Parameter_pt)*dMduPhiH(m, n);
+            }
+          }
+         }
       }
       else
       {
+        if (lambda_continuation) throw_runtime_error("Hessian must be calculated analytically for eigenbranch continuation, i.e. finite differences is not implemented yet");
         get_residuals(elem_pt, residuals);
         Vector<double> newres(raw_ndof);
         DenseMatrix<double> newjac(raw_ndof);

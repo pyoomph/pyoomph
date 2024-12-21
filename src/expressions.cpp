@@ -1081,6 +1081,7 @@ namespace pyoomph
 			}
 			// Check if we have a vectorial direction
 			GiNaC::ex evd = d.evalm();
+			if (GiNaC::is_zero(evd)) return 0;
 			if (!GiNaC::is_a<GiNaC::matrix>(evd))
 			{
 				std::ostringstream oss;
