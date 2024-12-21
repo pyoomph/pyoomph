@@ -2855,13 +2855,13 @@ class Problem(_pyoomph.Problem):
                 raise ValueError("Cannot specify both azimuthal_m and normal_mode_k")
             if normal_mode_L is not None:
                 raise ValueError("Cannot specify both azimuthal_m and normal_mode_L")
-            return self._solve_normal_mode_eigenproblem(n, azimuthal_m=azimuthal_m, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy)
+            return self._solve_normal_mode_eigenproblem(n, azimuthal_m=azimuthal_m, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy,v0=v0,target=target)
         elif normal_mode_k is not None:
             if isinstance(normal_mode_k,(list,tuple)):
                 normal_mode_k=[float(k*self.get_scaling("spatial")) for k in normal_mode_k]
             else:
                 normal_mode_k=float(normal_mode_k*self.get_scaling("spatial"))
-            return self._solve_normal_mode_eigenproblem(n, cartesian_k=normal_mode_k, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy)
+            return self._solve_normal_mode_eigenproblem(n, cartesian_k=normal_mode_k, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy,v0=v0,target=target)
         if self._dof_selector_used is not self._dof_selector:
             self.reapply_boundary_conditions()
         if self.get_bifurcation_tracking_mode()!="":
@@ -3678,6 +3678,10 @@ class Problem(_pyoomph.Problem):
         from ..expressions.coordsys import AxisymmetryBreakingCoordinateSystem
         self._azimuthal_mode_param_m = self.get_global_parameter(self._azimuthal_stability.azimuthal_param_m_name)
         coordsys = AxisymmetryBreakingCoordinateSystem(self._azimuthal_mode_param_m.get_symbol())
+        oldcoordsys=self.get_coordinate_system()
+        if oldcoordsys is not None:
+            if isinstance(oldcoordsys,AxisymmetryBreakingCoordinateSystem):
+                coordsys.cartesian_error_estimation=oldcoordsys.cartesian_error_estimation
         self.set_coordinate_system(coordsys)
 
         if len(self._residual_mapping_functions) != 0:
@@ -3729,7 +3733,7 @@ class Problem(_pyoomph.Problem):
     def solve_axial_symmetry_breaking_eigenproblem(self,*args,**kwargs):
         raise RuntimeError("solve_axial_symmetry_breaking_eigenproblem is deprecated. Use solve_eigenproblem with corresponding kwargs, e.g. azimuthal_m=...")
 
-    def _solve_normal_mode_eigenproblem(self, n:int, azimuthal_m:Optional[Union[List[int],Tuple[int],int]]=None, cartesian_k:Optional[Union[List[float],Tuple[float],float]]=None, shift:Optional[Union[float,complex]]=0,quiet:bool=False,filter:Optional[Callable[[complex],bool]]=None,report_accuracy:bool=False)->Tuple[NPComplexArray,NPComplexArray]:
+    def _solve_normal_mode_eigenproblem(self, n:int, azimuthal_m:Optional[Union[List[int],Tuple[int],int]]=None, cartesian_k:Optional[Union[List[float],Tuple[float],float]]=None, shift:Optional[Union[float,complex]]=0,quiet:bool=False,filter:Optional[Callable[[complex],bool]]=None,report_accuracy:bool=False,target:Optional[complex]=None,v0:Optional[Union[NPFloatArray,NPComplexArray]]=None)->Tuple[NPComplexArray,NPComplexArray]:
         
         if azimuthal_m and (self._azimuthal_mode_param_m is None):
             raise RuntimeError("Must use setup_for_stability_analysis(azimuthal_stability=True) before initialialising the problem")
@@ -3755,7 +3759,7 @@ class Problem(_pyoomph.Problem):
             for ms in vlist:
                 param.value = ms
                 self.actions_before_eigen_solve()
-                self.solve_eigenproblem(n, shift,quiet=True,filter=filter,report_accuracy=report_accuracy)
+                self.solve_eigenproblem(n, shift,quiet=True,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0)
                 if len(alleigenvals)==0:
                     alleigenvals=self.get_last_eigenvalues().copy()
                 else:
@@ -3786,7 +3790,7 @@ class Problem(_pyoomph.Problem):
         else:
             param.value = vlist
             self.actions_before_eigen_solve()
-            self.solve_eigenproblem(n, shift,filter=filter,report_accuracy=report_accuracy)
+            self.solve_eigenproblem(n, shift,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0)
             param.value = 0
             if azimuthal_m is not None:
                 self._last_eigenvalues_m=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore

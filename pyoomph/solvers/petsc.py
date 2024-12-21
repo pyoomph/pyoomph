@@ -135,6 +135,10 @@ class PETSCSolver(GenericLinearSystemSolver):
 
 def _SetDefaultPetscOption(key:str, val:Any,force:bool=False):
     if force or (not PETSc.Options().hasName(key)): #type:ignore
+        if isinstance(val, complex):
+            print("GOT COMPLEX",val)
+            val=str(val.real)+("+" if val.imag>=0 else "")+str(val.imag)+"i"
+            print("CASTED TO",val)
         PETSc.Options().setValue(key, val) #type:ignore
 
 
@@ -145,6 +149,11 @@ class SlepcEigenSolver(GenericEigenSolver):
     def __init__(self, problem:"Problem"):
         super().__init__(problem)
         self.spectral_transformation:Optional[str]="sinvert"
+        self.store_basis:bool=False
+        self._last_basis:Optional[Union[NPComplexArray,NPFloatArray]]=None
+        
+    def get_last_basis(self)->Optional[Union[NPComplexArray,NPFloatArray]]:
+        return self._last_basis
 
     def further_setup(self,E): #type:ignore
         pass
@@ -208,44 +217,38 @@ class SlepcEigenSolver(GenericEigenSolver):
             _SetDefaultPetscOption("st_ksp_type", "preonly")
             _SetDefaultPetscOption("st_type", self.spectral_transformation)
             if shift is not None:          
-                if isinstance(shift,complex):
-                    _SetDefaultPetscOption("st_shift", str(shift.real)+("+" if shift.imag>=0 else "")+str(shift.imag)+"i")
-                else:  
-                    _SetDefaultPetscOption("st_shift", shift)
+                _SetDefaultPetscOption("st_shift", shift)
                 
         E = SLEPc.EPS()  #type:ignore
         E.create() #type:ignore
         if target is not None:
-            if abs(numpy.real(target))<1e-20:
-                if abs(numpy.imag(target))<1e-20:
-                    trg="0.0"
-                elif numpy.imag(target)>0:
-                    trg="0.0+"+str(numpy.imag(target))+"i"
-                else:
-                    trg="0.0-"+str(numpy.imag(target))+"i"
-            elif abs(numpy.imag(target))<1e-20:
-                trg=str(numpy.real(target))
-            else:
-                if numpy.imag(target)>0:
-                    trg=str(numpy.real(target))+"+"+str(numpy.imag(target))+"i"
-                else:
-                    trg=str(numpy.imag(target))+str(numpy.imag(target))+"i"
-            print(trg)
-            _SetDefaultPetscOption("eps_target",trg)
+            _SetDefaultPetscOption("eps_target",target)
             
             #trgt=PETSc.toScalar(target)
             #print(trgt)
             #E.setTarget(trgt)
         E.setOperators(J, M) #type:ignore
         E.setProblemType(SLEPc.EPS.ProblemType.GNHEP) #type:ignore
-        if v0 is not None:
-            _v0=PETSc.Vec().createWithArray(v0)
-            E.setInitialSpace(_v0)
+        
         #E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
         #ncv=max(2 * neval + 1, 5 + neval)
         ncv=max(2 * neval + 1, 5 + neval)
         mdp=ncv #TODO: Can be smaller for higher
         E.setDimensions(neval,ncv,mdp) #type:ignore
+        
+        if v0 is not None:
+            if len(v0.shape)==1:
+                _v0=PETSc.Vec().createWithArray(v0)
+                E.setInitialSpace(_v0)
+                _v0.destroy()
+            else:
+                ispace=[]
+                for i in range(min(v0.shape[0],ncv)):
+                    ispace.append(PETSc.Vec().createWithArray(v0[i,:]))
+                E.setInitialSpace(ispace)
+                for _v0 in ispace:
+                    _v0.destroy()
+        
         #print(dir(E))
         #exit()
         # E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
@@ -323,6 +326,20 @@ class SlepcEigenSolver(GenericEigenSolver):
             evects = numpy.array(evects)[srt] #type:ignore
         else:
             evects = numpy.array(evects) #type:ignore
+            
+        if self.store_basis:
+            self._last_basis=[]
+            basis=E.getBV()
+            nbasis=basis.getSizes()[1]        
+            for i in range(nbasis):
+                bv=basis.createVec()
+                basis.copyVec(i,bv)
+                self._last_basis.append(bv.getArray())
+                bv.destroy()
+            self._last_basis=numpy.array(self._last_basis)
+        else:
+            self._last_basis=None
+            
         E.destroy() #type:ignore
         return numpy.array(evals), numpy.array(evects) #type:ignore
 
