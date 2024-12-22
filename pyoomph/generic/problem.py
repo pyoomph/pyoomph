@@ -3391,7 +3391,15 @@ class Problem(_pyoomph.Problem):
         return zeromap
             
 
-    def activate_eigenbranch_tracking(self,branch_type:Optional[Literal["real","complex"]]=None,eigenvector:Optional[int]=None):
+    def activate_eigenbranch_tracking(self,branch_type:Optional[Literal["real","complex","normal_mode"]]=None,eigenvector:Optional[int]=None):
+        """Activates eigenbranch tracking for the specified eigenbranch type. Subsequent calls of solve(...) and arclength_continuation(...) will then track the eigenbranch.
+        This is similar to bifurcation tracking, but it does not adjust a parameter to find a bifurcation, i.e. where Re(lambda)=0. Instead, it starts with a eigenvalue/eigenvector pair. Once activated, you can follow the eigenbranch by calling arclength_continuation(...).        
+        At each step, the eigenvalue/eigenvector pair will be updated and is available via get_last_eigenvalues()[0] and get_last_eigenvectors()[0].
+        
+        Args:
+            branch_type (Optional[Literal["real", "complex", "normal_mode"]]): The type of eigenbranch to track. Defaults to None, i.e. auto-detect.
+            eigenvector (Optional[int]): The previously calculated eigenvector index to use for tracking. Defaults to None, i.e. the eigenvector at index zero.
+        """
         self.activate_bifurcation_tracking(None,bifurcation_type=branch_type,eigenvector=eigenvector)
 
     def activate_bifurcation_tracking(self,parameter:Optional[Union[str,_pyoomph.GiNaC_GlobalParam]],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal","cartesian_normal_mode"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None,cartesian_wavenumber_k:Optional[ExpressionOrNum]=None):
@@ -3425,13 +3433,43 @@ class Problem(_pyoomph.Problem):
                 bifurcation_type=self.guess_nearest_bifurcation_type(eigenvector)
             
             if bifurcation_type=="fold" or bifurcation_type=="real":
+                if omega is not None and omega!=0:
+                    raise RuntimeError("Cannot track eigenbranch for a real branch with a non-zero omega")
+                if azimuthal_mode is not None and azimuthal_mode!=0:
+                    raise RuntimeError("Cannot track eigenbranch for a real branch with a non-zero azimuthal mode")
+                if cartesian_wavenumber_k is not None and not is_zero(cartesian_wavenumber_k):
+                    raise RuntimeError("Cannot track eigenbranch for a real branch with a non-zero cartesian wavenumber")
                 bifurcation_type="fold" # Use the modified fold tracker for this
                 print("Activating eigenbranch tracking for a real branch with starting eigenvalue",self._get_lambda_tracking_real())
-            elif bifurcation_type=="hopf" or bifurcation_type=="complex":
+            elif bifurcation_type=="hopf" or bifurcation_type=="complex":                
+                if azimuthal_mode is not None and azimuthal_mode!=0:
+                    raise RuntimeError("Cannot track eigenbranch for a complex branch with a non-zero azimuthal mode. Use normal_mode instead")
+                if cartesian_wavenumber_k is not None and not is_zero(cartesian_wavenumber_k):
+                    raise RuntimeError("Cannot track eigenbranch for a complex branch with a non-zero additional cartesian wavenumber. Use normal_mode instead")
                 bifurcation_type="hopf"
                 if omega is None:
                     omega=numpy.imag(self.get_last_eigenvalues()[eigenvector])
                 print("Activating eigenbranch tracking for a complex branch with with starting eigenvalue",str(complex(self._get_lambda_tracking_real(),omega)))
+            elif bifurcation_type=="azimuthal" or bifurcation_type=="cartesian_normal_mode" or bifurcation_type=="normal_mode":
+                if azimuthal_mode is None and cartesian_wavenumber_k is None:
+                    if self.get_last_eigenmodes_k() is not None and len(self.get_last_eigenmodes_k())>eigenvector and not is_zero(self.get_last_eigenmodes_k()[eigenvector]):                        
+                        bifurcation_type="cartesian_normal_mode"                        
+                        cartesian_wavenumber_k=self.get_last_eigenmodes_k()[eigenvector]
+                    elif self.get_last_eigenmodes_m() is not None and len(self.get_last_eigenmodes_m()>eigenvector):
+                        bifurcation_type="azimuthal"
+                        azimuthal_mode=self.get_last_eigenmodes_m()[eigenvector]
+                elif azimuthal_mode is not None and cartesian_wavenumber_k is not None:
+                    raise RuntimeError("Cannot track eigenbranch for both azimuthal and cartesian normal mode")
+                elif azimuthal_mode is not None:
+                    bifurcation_type="azimuthal"
+                else:
+                    bifurcation_type="cartesian_normal_mode"
+                if omega is None:
+                    omega=numpy.imag(self.get_last_eigenvalues()[eigenvector])
+                if azimuthal_mode is not None:
+                    print("Activating eigenbranch tracking for a azimuthal branch with m="+str(azimuthal_mode)+" with with starting eigenvalue",str(complex(self._get_lambda_tracking_real(),omega)))
+                else:
+                    print("Activating eigenbranch tracking for an normal Cartesian mode branch with k="+str(cartesian_wavenumber_k)+" with with starting eigenvalue",str(complex(self._get_lambda_tracking_real(),omega)))
             else:                
                 raise RuntimeError("Cannot track eigenbranch for bifurcation type "+bifurcation_type)
             if eigenvector_v is not None:
@@ -3509,13 +3547,7 @@ class Problem(_pyoomph.Problem):
                 #eigenvector = prerotate_eigenvector(eigenvector)
                 #print(eigenvector)
 
-                # NOTE THAT WE NEGATE OMEGA HERE!
-                # In fact, pyoomph is solving the eigenproblem -lambda*M*v=J*v, which leads to this inversion
-                # Opposed to oomph-lib, pyoomph get's the mass matrix by deriving J with respect to occurences of first order time derivatives.
-                # Since both comes from the same residual, it can only be consistent if either M or J is negated
-                # In the eigensolver, we negate J (since eigensolvers may demand M to be positive (semi-)definite.
-                # In the bifurcation tracking, we just negate omega, for the very same result
-                self._start_bifurcation_tracking(parameter,bifurcation_type,blocksolve,numpy.real(eigenvector),numpy.imag(eigenvector),-omega,{}) #type:ignore
+                self._start_bifurcation_tracking(parameter,bifurcation_type,blocksolve,numpy.real(eigenvector),numpy.imag(eigenvector),omega,{}) #type:ignore
         elif bifurcation_type=="pitchfork":
             if azimuthal_mode is not None or cartesian_wavenumber_k is not None:
                 raise RuntimeError("Cannot use azimuthal_mode or cartesian_wavenumber_k for pitchfork solving")
@@ -3572,13 +3604,7 @@ class Problem(_pyoomph.Problem):
 
             contribs={"azimuthal_real_eigen":self._azimuthal_stability.real_contribution_name,"azimuthal_imag_eigen":self._azimuthal_stability.imag_contribution_name}
 
-            # NOTE THAT WE NEGATE OMEGA HERE!
-            # In fact, pyoomph is solving the eigenproblem -lambda*M*v=J*v, which leads to this inversion
-            # Opposed to oomph-lib, pyoomph get's the mass matrix by deriving J with respect to occurences of first order time derivatives.
-            # Since both comes from the same residual, it can only be consistent if either M or J is negated
-            # In the eigensolver, we negate J (since eigensolvers may demand M to be positive (semi-)definite.
-            # In the bifurcation tracking, we just negate omega, for the very same result
-            self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), -omega,contribs) #type:ignore
+            self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), omega,contribs) #type:ignore
             self.assembly_handler_pt().set_global_equations_forced_zero(base_zero_dofs,eigen_zero_dofs) #type:ignore
             
         elif bifurcation_type=="cartesian_normal_mode":            
@@ -3971,9 +3997,9 @@ class Problem(_pyoomph.Problem):
                 # In the eigensolver, we negate J (since eigensolvers may demand M to be positive (semi-)definite.
                 # In the bifurcation tracking, we just negate omega, for the very same result
                 if self._bifurcation_tracking_parameter_name=="<LAMBDA_TRACKING>":
-                    self._last_eigenvalues=numpy.array([self._get_lambda_tracking_real() -self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore    
+                    self._last_eigenvalues=numpy.array([self._get_lambda_tracking_real() +self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore    
                 else:
-                    self._last_eigenvalues=numpy.array([0-self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore
+                    self._last_eigenvalues=numpy.array([0+self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore
                 self._last_eigenvectors=numpy.array([self._get_bifurcation_eigenvector()],dtype=numpy.complex128) #type:ignore
                 if self.get_bifurcation_tracking_mode()=="azimuthal":
                     self._last_eigenvalues_m=numpy.array([int(self._azimuthal_mode_param_m.value)],dtype=numpy.int32) #type:ignore

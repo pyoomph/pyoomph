@@ -159,9 +159,13 @@ class ScipyEigenSolver(GenericEigenSolver):
 			neval=n
 
 		if neval>=n-1:
-			evals,evects=scipy.linalg.eig(J.toarray(),b=M.toarray(),left=False) #type:ignore
+			
+			evals,evects=scipy.linalg.eig(J.toarray(),b=M.toarray(),left=False) #type:ignore			
 			if sort:
-				srt=numpy.argsort(-evals)[0:min(neval,n)] #type:ignore
+				if target:
+					srt = numpy.argsort(numpy.abs(evals-target))
+				else:
+					srt=numpy.argsort(-evals)[0:min(neval,n)] #type:ignore
 				infcrop=numpy.argmax(numpy.isfinite((evals[srt[:]]))) #type:ignore
 				srt=srt[infcrop:] #type:ignore
 				#evals,evects=evals[srt],numpy.transpose(evects)[srt]
@@ -175,7 +179,11 @@ class ScipyEigenSolver(GenericEigenSolver):
 			OPInv=self.get_OPInv(M,J,shift)
 			evals,evects=scipy.sparse.linalg.eigs(J,M=M,sigma=shift,return_eigenvectors=True,k=neval,OPinv=OPInv,which=which,OPpart=OPpart,v0=v0,ncv=self.ncv,tol=self.tol) #type:ignore
 			if sort:
-				srt = numpy.argsort(-evals)[0:min(neval, n)] #type:ignore
+				if target:
+					srt = numpy.argsort(numpy.abs(evals-target))
+				else:
+					srt = numpy.argsort(-evals)[0:min(neval, n)] #type:ignore
+     
 				infcrop = numpy.argmax(numpy.isfinite((evals[srt[:]]))) #type:ignore
 				srt = srt[infcrop:] #type:ignore
 				evals = evals[srt] #type:ignore

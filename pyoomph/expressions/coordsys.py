@@ -822,6 +822,9 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def expand_coordinate_or_mesh_vector(self,cg:"FiniteElementCodeGenerator", name:str,dimensional:bool,no_jacobian:bool,no_hessian:bool):        
         if not cg._coordinates_as_dofs:
+            dim=cg.get_nodal_dimension()
+            if dim==0:
+                return Expression(0)
             return super().expand_coordinate_or_mesh_vector(cg,name,dimensional,no_jacobian,no_hessian)
         else:
             dim=cg.get_nodal_dimension()
@@ -830,6 +833,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             else:
                 vr=lambda n : nondim(n,no_jacobian=no_jacobian,no_hessian=no_hessian) # TODO: Apply at domain=cg?
             if self.with_normal_component_in_mesh_coordinates:
+                raise RuntimeError("Not implemented")
                 if dim == 1:
                     return vector([vr(name+"_normal")])
                 elif dim == 1:
@@ -840,7 +844,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                     raise RuntimeError("Cannot use normal mode expansion coordinate system in 3d")
             else:
                 if dim==0:
-                    return 0
+                    return Expression(0)
                 if dim == 1:
                     return vector([vr(name+"_x"),0])
                 elif dim == 2:
