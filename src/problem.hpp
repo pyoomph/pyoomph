@@ -163,13 +163,15 @@ namespace pyoomph
     unsigned int global_index;
     Problem *problem;
     double Value;
-
+    bool positive=false;
   public:
     GlobalParameterDescriptor(Problem *p, const std::string &n, const unsigned int &gi) : name(n), global_index(gi), problem(p), Value(0.0) {}
     const std::string &get_name() const { return name; }
     const unsigned int &get_global_index() const { return global_index; }
     double &value() { return Value; }
     const double &value() const { return Value; }
+    void restrict_to_positive_values() {positive=true;}
+    bool is_restricted_to_positive_values() const { return positive;}
     void set_analytic_derivative(bool active);
     bool get_analytic_derivative(); 
   };

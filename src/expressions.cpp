@@ -101,6 +101,17 @@ namespace GiNaC
 	}
 
 	template <>
+	bool GiNaCGlobalParameterWrapper::info(unsigned inf) const
+	{		
+		if (inf == info_flags::real)
+			return true;
+		if (inf==info_flags::positive || inf==info_flags::nonnegative)
+			return get_struct().cme->is_restricted_to_positive_values();
+		else
+			return inherited::info(inf);
+	}
+
+	template <>
 	void GiNaCDelayedPythonCallbackExpansion::print(const print_context &c, unsigned level) const
 	{
 		// const pyoomph::DelayedPythonCallbackExpansionWrapper &sp = get_struct();

@@ -242,6 +242,9 @@ namespace GiNaC
   PYGINACSTRUCT(pyoomph::GlobalParameterWrapper, GiNaCGlobalParameterWrapper);
   template <>
   void GiNaCGlobalParameterWrapper::print(const print_context &c, unsigned level) const;
+  template <>
+  bool GiNaCGlobalParameterWrapper::info(unsigned inf) const;
+
 
   PYGINACSTRUCT(pyoomph::PlaceHolderResolveInfo, GiNaCPlaceHolderResolveInfo);
   template <>

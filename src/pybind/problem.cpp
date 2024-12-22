@@ -192,7 +192,10 @@ void PyReg_Problem(py::module &m)
 						   "value", [](GiNaC::GiNaCGlobalParameterWrapper *self)
 						   { return self->get_struct().cme->value(); },
 						   [](GiNaC::GiNaCGlobalParameterWrapper *self, const double &v)
-						   { self->get_struct().cme->value() = v; })
+						   { 
+							if (v<0 && self->get_struct().cme->is_restricted_to_positive_values()) throw_runtime_error("Cannot set the parameter "+self->get_struct().cme->get_name()+" to a negative value of "+std::to_string(v)+" since it is restricted to positive values.");
+							self->get_struct().cme->value() = v; 
+						   })
 		.def_property(
 			"analytical_derivative", [](GiNaC::GiNaCGlobalParameterWrapper *self)
 			{ return self->get_struct().cme->get_analytic_derivative(); },
@@ -202,6 +205,7 @@ void PyReg_Problem(py::module &m)
 			 { return 0 + (*self); })
 		.def("get_name", [](GiNaC::GiNaCGlobalParameterWrapper *self)
 			 { return self->get_struct().cme->get_name(); })
+		.def("restrict_to_positive_values",[](GiNaC::GiNaCGlobalParameterWrapper *self){self->get_struct().cme->restrict_to_positive_values();})
 
 		.def(-py::self)
 
