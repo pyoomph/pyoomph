@@ -463,6 +463,29 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
         if self.project_interface_flux:
             self.define_scalar_field("interface_flux", "C2",scale=scale_factor("velocity"),testscale=1/scale_factor("velocity"))
 
+        
+        if self.get_opposite_side_of_interface(raise_error_if_none=False):
+            opp = self.get_opposite_side_of_interface()
+            oppblk = opp.get_parent_domain()
+            if oppblk is not None:
+                oppblkeq=oppblk.get_equations()            
+                if oppblkeq is not None:
+                    oppns=oppblkeq.get_equation_of_type(NavierStokesEquations)
+                    if oppns is not None and isinstance(oppns,NavierStokesEquations):        
+                        aziinfo=self.get_azimuthal_r0_info()
+                        csys=self.get_coordinate_system()
+                        myfields = ["velocity_x", "velocity_y", "velocity_z"]
+                        myfields = myfields[0:self.get_nodal_dimension()]
+                        if isinstance(self.get_coordinate_system(),AxisymmetryBreakingCoordinateSystem):
+                            myfields+=["velocity_phi"]
+                        for f in myfields:
+                            for i in [0,1,2]:
+                                if f in aziinfo[i]:
+                                    aziinfo[i].add(self.velo_connect_prefix + f)
+                                else:
+                                    if self.velo_connect_prefix + f in aziinfo[i]:
+                                        aziinfo[i].remove(self.velo_connect_prefix + f)
+
 
     def define_scaling(self):
         super(MultiComponentNavierStokesInterface, self).define_scaling()
