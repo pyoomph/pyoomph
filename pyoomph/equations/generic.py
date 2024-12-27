@@ -873,5 +873,5 @@ class AverageConstraint(_AverageOrIntegralConstraintBase):
         return 0 # No global contribution
     
     def get_integral_contribution(self,field:str)-> ExpressionOrNum:
-        return -self.constraints[field] # Consider the offset for the average
+        return self.constraints[field] # Consider the offset for the average
     
