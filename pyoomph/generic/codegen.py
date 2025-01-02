@@ -529,6 +529,10 @@ class BaseEquations(_pyoomph.Equations):
     def on_apply_boundary_conditions(self,mesh:"AnyMesh"):
         pass
     
+    
+    def _fill_interinter_connections(self,eqtree:"EquationTree",interinter:Set[str]):
+        pass
+    
     def before_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str):
         pass
 
@@ -1574,6 +1578,13 @@ class EquationTree:
             v._fill_dummy_equations(problem,False,pathname=(dn if is_bulk_root else pathname+"/"+dn))
         
 
+    def _fill_interinter_connections(self,iconns:Set[str]):
+        if self._equations:
+            myiconns=set([x for x in iconns if x.startswith(self.get_full_path().lstrip("/"))])
+            self._equations._fill_interinter_connections(self,myiconns)
+        for _,v in self._children.items():
+            v._fill_interinter_connections(iconns)
+
     def _set_parent_to_equations(self,problem:"Problem"):
         if self._codegen is not None:
             self._codegen._set_problem(problem)
@@ -2346,6 +2357,11 @@ class CombinedEquations(Equations):
             if isinstance(e, BaseEquations): #type:ignore
                 res=res+"\n"+indent+e._tree_string(indent)
         return res
+    
+    def _fill_interinter_connections(self,eqtree:"EquationTree",interinter:Set[str]):
+        for e in self._subelements:
+            if isinstance(e, BaseEquations):
+                e._fill_interinter_connections(eqtree,interinter)
 
     def _init_output(self,eqtree:"EquationTree",continue_info:Optional[Dict[str,Any]],rank:int):
         for e in self._subelements:

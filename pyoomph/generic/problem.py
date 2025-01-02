@@ -318,6 +318,7 @@ class Problem(_pyoomph.Problem):
         self.default_spatial_integration_order:Union[int,None] = None
 
         self._equation_system:EquationTree
+        self._interinter_connections:Set[str]=set() # Interface/interface intersections, i.e. codimension 2+ intersections
 
         self.timestepper = _pyoomph.MultiTimeStepper(True)
         self.add_time_stepper_pt(self.timestepper)
@@ -1840,8 +1841,18 @@ class Problem(_pyoomph.Problem):
             raise RuntimeError("Please add at least one equation to the problem via add_equations()")
 
         self._equation_system._fill_dummy_equations(self)
+        self._interinter_connections.clear()
         for m in self._meshtemplate_list:
             m._ensure_opposite_eq_tree_nodes(self._equation_system) 
+            inters=m._find_interface_intersections()
+            for m in inters:
+                dom=m.split("/")[0]
+                if dom in self._equation_system._children and self._equation_system._children[dom]._equations is not None:
+                    self._interinter_connections.add(m)
+        if len(self._interinter_connections)>0:
+            self._equation_system._fill_interinter_connections(self._interinter_connections)
+        
+        
 
 
         self._equation_system._finalize_equations(self) 

@@ -10289,7 +10289,27 @@ namespace pyoomph
    
    void BulkElementTri2dC1TB::local_coordinate_of_node(const unsigned &j, oomph::Vector<double> &s) const
    {
-     throw_runtime_error("TODO");
+    switch (j)
+	{
+		case 0:
+			s[0] = 1.0;
+			s[1] = 0.0;
+			break;
+		case 1:
+			s[0] = 0.0;
+			s[1] = 1.0;
+			break;
+		case 2:
+			s[0] = 0.0;
+			s[1] = 0.0;
+			break;
+		case 3:
+			s[0] = 1.0 / 3.0;
+			s[1] = 1.0 / 3.0;
+			break;
+		default:
+			throw std::out_of_range("Invalid node index");
+	}
    }
    
    void BulkElementTri2dC1TB::fill_element_nodal_indices_for_numpy(int *indices, unsigned isubelem, bool tesselate_tri, std::vector<std::vector<std::set<oomph::Node *>>> &add_nodes) const

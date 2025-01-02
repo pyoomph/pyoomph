@@ -1956,10 +1956,10 @@ namespace pyoomph
 				std::string nodal_index = f->get_nodal_index_str(for_code);
 				std::string hang_info = f->get_hanginfo_str(for_code);
 				os << indent << "  BEGIN_JACOBIAN_HANG(" << eqn_index << ", ";
-				if (for_code->get_derive_jacobian_by_expansion_mode())
-				{
-					os << indent << " /* SYMBOLIC FORM  " << std::endl << diffpart << std::endl << " */ ";
-				}
+				//if (for_code->get_derive_jacobian_by_expansion_mode())
+				//{
+				//	os << indent << " /* SYMBOLIC FORM  " << std::endl << diffpart << std::endl << " */ ";
+				//}
 				print_simplest_form(diffpart, os, csrc_opts);
 				os << "," << hang_info << "," << nodal_index << "," << l_shape << ")" << std::endl;
 			}
@@ -1967,10 +1967,10 @@ namespace pyoomph
 			{
 				//	    os << indent << "  //TODO Jacobian of ext data must be always hanging!!! " <<std::endl;
 				os << indent << "  BEGIN_JACOBIAN_NOHANG(" << eqn_index << ", ";
-				if (for_code->get_derive_jacobian_by_expansion_mode())
-				{
-					os << indent << " /* SYMBOLIC FORM  " << std::endl << diffpart << std::endl << " */ ";
-				}
+				//if (for_code->get_derive_jacobian_by_expansion_mode())
+				//{
+				//	os << indent << " /* SYMBOLIC FORM  " << std::endl << diffpart << std::endl << " */ ";
+				//}
 				print_simplest_form(diffpart, os, csrc_opts);
 				os << indent << ")" << std::endl;
 			}

@@ -409,13 +409,62 @@ class AxisymmetryBC(InterfaceEquations):
             bulk+=AxisymmetryBC()@"axis"
             bulk+=NavierStokesFreeSurface()@"interface"
             bulk+=AxisymmetryBC()@"interface/axis" # This is important, since the free surface introduces new fields at the interface
+            
+        This is, however, done automatically if the recurse flag is set to True.
     """
-    def __init__(self):
+    def __init__(self,verbose:bool=True,recurse:bool=True):
         super().__init__()
+        self.verbose=verbose
+        self.recurse=recurse
+        
+    def _fill_interinter_connections(self, eqtree:"EquationTree", interinter):
+        if self.recurse:
+            from ..generic.codegen import EquationTree
+            # Now find the reversed connections. We get e.g. domain/axis/interface, but we must add it to domain/interface/axis
+            revconns=list()
+            trunk=eqtree.get_parent().get_full_path().lstrip("/")
+            myname=eqtree.get_my_path_name()
+            for conn in interinter:
+                rest=conn[len(eqtree.get_full_path().lstrip("/")):].lstrip("/")
+                path=trunk+"/"+rest+"/"+myname
+                revconns.append(path)
+            revconns.sort(key=lambda x: x.count("/")) # Sort by number of slashes to get it in good order
+            root=eqtree
+            while root.get_parent() is not None:
+                root=root.get_parent()
+            for rc in revconns:
+                splt=rc.split("/")
+                dom=root
+                is_present=True
+                for s in splt[:-1]:
+                    if s in dom._children:
+                        dom=dom.get_child(s)
+                    else:
+                        is_present=False
+                        break
+                if not is_present:
+                    continue # Nothing to be done. There is no interface added            
+                if splt[-1] in dom._children:
+                    iface=dom.get_child(splt[-1])
+                    if iface.get_equations() is not None:                    
+                        axieq_list=iface.get_equations().get_equation_of_type(AxisymmetryBC,always_as_list=True)
+                        if len(axieq_list)>0:
+                            continue # Already added
+                        else:            
+                            oldeqs=dom._children[splt[-1]]._equations
+                            dom._children[splt[-1]]._equations+=AxisymmetryBC(verbose=self.verbose,recurse=self.recurse)
+                            dom._children[splt[-1]]._equations._problem=oldeqs._problem
+                else:
+                    dom._children[splt[-1]]=EquationTree(AxisymmetryBC(verbose=self.verbose,recurse=self.recurse),dom)
+                    dom._children[splt[-1]]._equations._problem=dom._equations._problem
+                    
+            
+        return super()._fill_interinter_connections(eqtree, interinter)
                                 
     
     def define_residuals(self):
-        print("AxisymmetryBC: Setting zero DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",self.get_azimuthal_r0_info()[0])
+        if self.verbose:
+            print("AxisymmetryBC: Setting zero DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",self.get_azimuthal_r0_info()[0])
         for k in self.get_azimuthal_r0_info()[0]:            
             self.set_Dirichlet_condition(k,0)
                 
@@ -432,7 +481,7 @@ class AxisymmetryBC(InterfaceEquations):
                 activated_bcs.add(k)                
                 mesh._set_dirichlet_active(k, True)
                 must_reapply = True 
-        if len(activated_bcs)>0:
+        if len(activated_bcs)>0 and self.verbose:
             print("AxisymmetryBC: Activating zero DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",activated_bcs)
         return must_reapply
     
@@ -448,7 +497,7 @@ class AxisymmetryBC(InterfaceEquations):
                 deactivated_bcs.add(k)
                 eqtree._mesh._set_dirichlet_active(k, False) 
                 must_reapply = True 
-        if len(deactivated_bcs)>0:            
+        if len(deactivated_bcs)>0 and self.verbose:            
             print("AxisymmetryBC: Deactivating strong zero DirichletBCs at",self.get_current_code_generator().get_full_name(),"for",deactivated_bcs)
         return must_reapply    
                         
@@ -469,7 +518,7 @@ class AxisymmetryBC(InterfaceEquations):
             res=set() 
         else:
             res=set([eqtree.get_full_path().lstrip("/")+"/"+m for m in info])
-        if len(info)>0:            
+        if len(info)>0 and self.verbose:            
             print("AxisymmetryBC (mode m="+str(angular_mode)+"): Imposed zero by matrix manipulation at",self.get_current_code_generator().get_full_name(),"for",info)
         return res
             
@@ -844,6 +893,10 @@ class PinMeshAtDistanceToInterface(PinWhere):
         super(PinMeshAtDistanceToInterface, self).apply()
 
 
+class UnpinDofs(PythonDirichletBC):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.unpin_instead=True
 
 class InteriorBoundaryOrientation(InterfaceEquations):
     """

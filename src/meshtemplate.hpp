@@ -746,6 +746,7 @@ namespace pyoomph
     const std::vector<std::string> &get_boundary_names() const { return boundary_names; }
     std::vector<double> get_node_position(nodeindex_t index) const { return std::vector<double>{nodes[index]->x, nodes[index]->y, nodes[index]->z}; }
     void _find_opposite_interface_connections();
+    std::set<std::string> _find_interface_intersections();
 
     unsigned int get_boundary_index(const std::string &boundname) const;
     void add_node_to_boundary(const std::string &boundname, const nodeindex_t &ni);

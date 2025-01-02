@@ -1009,7 +1009,12 @@ namespace pyoomph
 			if (pyoomph::pyoomph_verbose)
 				std::cout << "ENTERING DIRECTIONAL DERIVATIVE  " << f << "  " << d << "  " << nodal_dim << "  " << elem_dim << "  " << coordsys << "   " << flags << std::endl;
 			if (need_to_hold(f) || need_to_hold(d))
+			{
+				if (pyoomph::pyoomph_verbose)
+					std::cout << "		MUST BE HELD  " << f << "  " << d << "  " << nodal_dim << "  " << elem_dim << "  " << coordsys << "   " << flags << std::endl;
 				return directional_derivative(f, d, nodal_dim, elem_dim, coordsys, flags).hold();
+			}
+				
 			// Resolve coordinate system
 			GiNaCCustomCoordinateSystemWrapper w = ex_to<GiNaCCustomCoordinateSystemWrapper>(coordsys);
 			const pyoomph::CustomCoordinateSystemWrapper &sp = w.get_struct();
@@ -1110,7 +1115,7 @@ namespace pyoomph
 			return sys->directional_derivative(f, d, ndim, edim, _flags);
 		}
 
-		REGISTER_FUNCTION(directional_derivative, eval_func(directional_derivative_eval).set_return_type(GiNaC::return_types::noncommutative))
+		REGISTER_FUNCTION(directional_derivative, eval_func(directional_derivative_eval)) //.set_return_type(GiNaC::return_types::noncommutative))
 
 		// General weak contribution of the form WEAKCONTRIB("name",{f,g,h,..},testfunc)
 		// The specific coordinate system will take care of the evaluation
