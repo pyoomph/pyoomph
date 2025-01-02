@@ -146,7 +146,7 @@ class ScipyEigenSolver(GenericEigenSolver):
 		return None
 
 
-	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
+	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,DefaultMatrixType,DefaultMatrixType]:
 		if shift is None:
 			shift=self.shift
 		if target is not None:
@@ -192,6 +192,6 @@ class ScipyEigenSolver(GenericEigenSolver):
 			evals=cast(NPComplexArray,evals)
 			evects=cast(NPComplexArray,evects)
 
-			return evals, evects
+			return evals, evects,J,M
 			#return evals,numpy.transpose(evects)
 

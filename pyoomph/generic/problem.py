@@ -2886,7 +2886,7 @@ class Problem(_pyoomph.Problem):
         self.actions_before_eigen_solve()
         self.invalidate_cached_mesh_data(only_eigens=True)
         self.setup_forced_zero_dof_list_for_eigenproblems()
-        self._last_eigenvalues,self._last_eigenvectors=self.get_eigen_solver().solve(n,shift=shift,sort=sort,which=which,OPpart=OPpart,v0=v0,target=target)
+        self._last_eigenvalues,self._last_eigenvectors,J,M=self.get_eigen_solver().solve(n,shift=shift,sort=sort,which=which,OPpart=OPpart,v0=v0,target=target)
         self._last_eigenvalues, self._last_eigenvectors=self._last_eigenvalues.copy(),self._last_eigenvectors.copy()
         if filter is not None:
             filtered_indices=numpy.array([filter(ev) for ev in self._last_eigenvalues]).nonzero()
@@ -2898,9 +2898,6 @@ class Problem(_pyoomph.Problem):
         #self._last_eigenvectors=numpy.transpose(self._last_eigenvectors)
         if (not self.is_quiet()) and (not quiet) :
             if report_accuracy:                
-                self.actions_before_eigen_solve()                
-                self.setup_forced_zero_dof_list_for_eigenproblems()
-                J,M,n,is_complex=self.get_eigen_solver().get_J_M_n_and_type()
                 for i,l in enumerate(self._last_eigenvalues):
                     v=self._last_eigenvectors[i,:]
                     lhs =l*(M@v) #type:ignore

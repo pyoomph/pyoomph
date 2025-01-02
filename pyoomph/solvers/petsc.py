@@ -168,7 +168,7 @@ class SlepcEigenSolver(GenericEigenSolver):
         _SetDefaultPetscOption("st_pc_factor_mat_solver_type","mumps")
         return self
 
-    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
+    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
         if which!="LM":
             raise RuntimeError("Implement which="+str(which))
         if OPpart is not None:
@@ -347,7 +347,7 @@ class SlepcEigenSolver(GenericEigenSolver):
             self._last_basis=None
             
         E.destroy() #type:ignore
-        return numpy.array(evals), numpy.array(evects) #type:ignore
+        return numpy.array(evals), numpy.array(evects),Jin,Min #type:ignore
 
 
 
