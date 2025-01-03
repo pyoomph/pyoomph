@@ -334,6 +334,7 @@ namespace pyoomph
 
     DECLARE_FUNCTION_1P(get_real_part)
     DECLARE_FUNCTION_1P(get_imag_part)
+    DECLARE_FUNCTION_1P(split_subexpressions_in_real_and_imaginary_parts)
 
     DECLARE_FUNCTION_3P(symbol_subs)
     DECLARE_FUNCTION_3P(remove_mode_from_jacobian_or_hessian)

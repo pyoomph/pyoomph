@@ -1928,6 +1928,50 @@ namespace pyoomph
 
 		REGISTER_FUNCTION(get_imag_part, eval_func(get_imag_part_eval).evalf_func(get_imag_part_evalf).derivative_func(get_imag_part_deriv).expl_derivative_func(get_imag_part_expl_deriv))
 
+
+		////////////////
+
+		class SubExpressionsToRealAndImag : public GiNaC::map_function
+		{
+		public:
+			GiNaC::ex operator()(const GiNaC::ex & inp)
+			{
+				if (is_ex_the_function(inp, expressions::subexpression))
+				{
+					GiNaC::ex mapped_ex = inp.op(0).map(*this);
+					if (GiNaC::is_zero(GiNaC::imag_part(mapped_ex)))
+					{
+						return inp.map(*this);
+					}
+					else
+					{
+						return (pyoomph::expressions::subexpression(GiNaC::real_part(mapped_ex)) + GiNaC::I * pyoomph::expressions::subexpression(GiNaC::imag_part(mapped_ex))).map(*this);
+					}
+
+				}
+				else 
+				{
+					return inp.map(*this);
+				}
+			}
+		};
+
+
+		static ex split_subexpressions_in_real_and_imaginary_parts_eval(const ex &wrapped)
+		{
+			if (need_to_hold(wrapped))
+				return split_subexpressions_in_real_and_imaginary_parts(wrapped).hold();
+			else
+			{
+				SubExpressionsToRealAndImag repl;
+				return repl(wrapped);
+			}
+		}
+
+
+		REGISTER_FUNCTION(split_subexpressions_in_real_and_imaginary_parts, eval_func(split_subexpressions_in_real_and_imaginary_parts_eval))
+
+
 		////////////////
 
 		static ex Diff_eval(const ex &arg, const ex &wrto)

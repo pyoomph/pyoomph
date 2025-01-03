@@ -114,8 +114,7 @@ namespace pyoomph
 		return __in_pitchfork_symmetry_constraint && !pyoomph::__derive_shapes_by_second_index;
 	}
 
-
-
+	
 
 
 	class SubExpressionsToStructs : public GiNaC::map_function
@@ -3358,15 +3357,21 @@ namespace pyoomph
 
 			//  if (hessian) throw_runtime_error("Hessian subexpressions!");
 
-			os << "    double " << subexpressions[j].get_cvar() << " = ";
-			//  GiNaC::ex subexpr_w_shapeexp=shape_to_c(subexpressions[j].get_expression());
-			//	  subexpressions[j].expr_subst=subexpr_w_shapeexp;
-			//	  GiNaC::ex subexpr_c=rem_subexpr(subexpr_w_shapeexp);
-			//        subexpressions[j].get_expression().evalf().print(GiNaC::print_csrc_FEM(os,&csrc_opts));
-			// GiNaC::factor(GiNaC::normal(GiNaC::expand(GiNaC::expand(subexpressions[j].get_expression()).evalf()))).print(GiNaC::print_csrc_FEM(os,&csrc_opts));
-			print_simplest_form(subexpressions[j].get_expression(), os, csrc_opts);
-			//	  subexpr_c.evalf().print(GiNaC::print_csrc_double(os));
-			os << ";" << std::endl;
+			/*if (!GiNaC::is_zero(GiNaC::imag_part(subexpressions[j].get_expression())))
+			{
+				os << "    double RE_" << subexpressions[j].get_cvar() << " = ";
+				print_simplest_form(GiNaC::real_part(subexpressions[j].get_expression()), os, csrc_opts);
+				os << ";" << std::endl;
+				os << "    double IM_" << subexpressions[j].get_cvar() << " = ";
+				print_simplest_form(GiNaC::imag_part(subexpressions[j].get_expression()), os, csrc_opts);
+				os << ";" << std::endl;
+			}
+			else
+			{*/
+				os << "    double " << subexpressions[j].get_cvar() << " = ";
+				print_simplest_form(subexpressions[j].get_expression(), os, csrc_opts);
+				os << ";" << std::endl;
+			//}
 		}
 
 		// if (!hessian) //Derivatives of subexpressions are treated in another way in Hessian

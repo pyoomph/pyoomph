@@ -608,6 +608,8 @@ void PyReg_Expressions(py::module &m)
 		  { return 0 + pyoomph::expressions::get_real_part(arg); });
 	m.def("GiNaC_get_imag_part", [](const GiNaC::ex &arg) -> GiNaC::ex
 		  { return 0 + pyoomph::expressions::get_imag_part(arg); });
+	m.def("GiNaC_split_subexpressions_in_real_and_imaginary_parts",[](const GiNaC::ex &arg) -> GiNaC::ex
+		  { return 0 + pyoomph::expressions::split_subexpressions_in_real_and_imaginary_parts(arg); });
 	m.def(
 		"GiNaC_sin", [](const GiNaC::ex &arg)
 		{ return 0 + GiNaC::sin(arg); },
