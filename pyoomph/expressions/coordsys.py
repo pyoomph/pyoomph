@@ -613,7 +613,9 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         zero = _pyoomph.Expression(0)
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
         replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)        
-        return _pyoomph.GiNaC_collect_common_factors(re_im_mapping(_pyoomph.GiNaC_split_subexpressions_in_real_and_imaginary_parts(replaced_m)))
+        res=re_im_mapping(_pyoomph.GiNaC_split_subexpressions_in_real_and_imaginary_parts(replaced_m))
+        return 0+res
+        #return _pyoomph.GiNaC_collect_common_factors(res)
 
     def map_residual_on_normal_mode_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
@@ -1014,7 +1016,8 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
         replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.m_angular_symbol, self.angular_mode)        
         real_or_imag = re_im_mapping(_pyoomph.GiNaC_split_subexpressions_in_real_and_imaginary_parts(replaced_m))        
-        return _pyoomph.GiNaC_collect_common_factors(real_or_imag)
+        return 0+real_or_imag
+        #return _pyoomph.GiNaC_collect_common_factors(real_or_imag)
 
     def map_residual_on_angular_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
