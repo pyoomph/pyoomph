@@ -3421,7 +3421,10 @@ namespace pyoomph
 					{
 						std::cout << "DERIVING SUBSEXPRESSION " << subexpressions[j].get_expression() << " BY " << f.field->get_symbol() << ", more specifically by " << (0 + GiNaC::GiNaCShapeExpansion(f)) << std::endl;
 					}
+					if (hessian) throw_runtime_error("Hessian subexpressions!");
+					__derive_only_by_expansion_mode=this->get_derive_jacobian_by_expansion_mode();
 					GiNaC::ex dsdf = pyoomph::expressions::diff(subexpressions[j].get_expression(), f.field->get_symbol());
+					__derive_only_by_expansion_mode=NULL;
 					__deriv_subexpression_wrto = NULL;
 					DerivedShapeExpansionsToUnity deriv_se_to_1(f.basis,f.dt_order,f.dt_scheme); // Map all other expanded basis functions to zero to separate between e.g. d/dx or nonderived shapes
 					GiNaC::ex dsub = deriv_se_to_1(dsdf);
@@ -3429,6 +3432,7 @@ namespace pyoomph
 					{
 						std::cout << "DERIVING SUBSEXPRESSION RESULT " << dsdf << " OR " << dsub << std::endl;
 					}
+					
 					// if (!dsub.is_zero())
 					{
 						std::ostringstream derivname;
