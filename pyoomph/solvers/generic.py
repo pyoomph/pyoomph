@@ -321,7 +321,22 @@ class GenericEigenSolver:
 		if name in GenericEigenSolver._registered_solvers.keys():
 			return GenericEigenSolver._registered_solvers[name](problem)
 		else:
-			raise RuntimeError("Unknown Eigen solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys())))
+			libname=name
+			if libname=="slepc":
+				libname="petsc"
+			try:
+				import importlib
+				importlib.import_module("pyoomph.solvers."+libname)
+				if name in GenericEigenSolver._registered_solvers.keys():
+					return GenericEigenSolver._registered_solvers[name](problem)
+				else:
+					raise RuntimeError("Unknown Eigen solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys())))
+			except Exception as e:
+				add_msg_str="When trying to import pyoomph.solvers."+str(name)+", the following error was raised:\n"
+				add_msg_str+=''.join(traceback.format_exception(type(e), value=e, tb=e.__traceback__))
+				raise RuntimeError("Unknown Eigen solver solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys()))+"\n"+add_msg_str)
+
+			#raise RuntimeError("Unknown Eigen solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys())))
 
 	def add_matrix_manipulator(self,manip:EigenMatrixManipulatorBase):
 		self.matrix_manipulators.append(manip)

@@ -2031,7 +2031,7 @@ class Equations(BaseEquations):
             self.set_test_scaling(**{name:testscale})
             
         # Scalar fields are pinned by default for |m|=1 and |m|>=2
-        if space!="D0":
+        if space!="D0" and space!="DL":
             master._azimuthal_r0_info[1].add(name)
             master._azimuthal_r0_info[2].add(name)
 

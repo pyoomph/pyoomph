@@ -33,3 +33,4 @@ For more details on this, we refer to our article :cite:`Diddens2024`.
    :hidden:
    
    azimuthal/rbconvect.rst
+   azimuthal/rising_bubble.rst   

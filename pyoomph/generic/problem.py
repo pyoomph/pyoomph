@@ -1438,6 +1438,7 @@ class Problem(_pyoomph.Problem):
         self.cmdlineparser.add_argument('--mumps', help="use MUMPS solver", action='store_true')
         self.cmdlineparser.add_argument('--slepc',help="use SLEPc as eigensolver. Specify your own backend for the matrix inversion during eigensolve here",action="store_true")
         self.cmdlineparser.add_argument('--slepc_mumps',help="use SLEPc as eigensolver with MUMPS as backend",action="store_true")        
+        self.cmdlineparser.add_argument('--petsc_mumps',help="use PETSc as linear solver with MUMPS as backend",action="store_true")                
         self.cmdlineparser.add_argument('--arpack',action="store_true")
         self.cmdlineparser.add_argument('--tcc', help="use internal TCC compiler", action='store_true')
         self.cmdlineparser.add_argument('--distutils', help="use system C compiler detected by distutils", action='store_true')
@@ -1460,28 +1461,34 @@ class Problem(_pyoomph.Problem):
         else:
             self.cmdlineargs, self.further_cmdlineargs = self.cmdlineparser.parse_known_args()
         if self.cmdlineargs.superlu:
-            if self.cmdlineargs.petsc or self.cmdlineargs.pastix or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso or self.cmdlineargs.mumps:
+            if self.cmdlineargs.petsc or self.cmdlineargs.pastix or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso or self.cmdlineargs.mumps or self.cmdlineargs.petsc_mumps:
                 raise ValueError("Cannot set two solvers simultaneously")
             self.set_linear_solver("superlu")
         elif self.cmdlineargs.petsc:
-            if self.cmdlineargs.superlu or self.cmdlineargs.pastix or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso or self.cmdlineargs.mumps:
+            if self.cmdlineargs.superlu or self.cmdlineargs.pastix or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso or self.cmdlineargs.mumps or self.cmdlineargs.petsc_mumps:
                 raise ValueError("Cannot set two solvers simultaneously")
                 import pyoomph.solvers.petsc
             self.set_linear_solver("petsc")
         elif self.cmdlineargs.umfpack:
-            if self.cmdlineargs.petsc or self.cmdlineargs.pastix or self.cmdlineargs.superlu or self.cmdlineargs.pardiso or self.cmdlineargs.mumps:
+            if self.cmdlineargs.petsc or self.cmdlineargs.pastix or self.cmdlineargs.superlu or self.cmdlineargs.pardiso or self.cmdlineargs.mumps or self.cmdlineargs.petsc_mumps:
                 raise ValueError("Cannot set two solvers simultaneously")
             self.set_linear_solver("umfpack")
         elif self.cmdlineargs.pardiso:
-            if self.cmdlineargs.petsc  or self.cmdlineargs.pastix or self.cmdlineargs.superlu or self.cmdlineargs.umfpack or self.cmdlineargs.mumps:
+            if self.cmdlineargs.petsc  or self.cmdlineargs.pastix or self.cmdlineargs.superlu or self.cmdlineargs.umfpack or self.cmdlineargs.mumps or self.cmdlineargs.petsc_mumps:
                 raise ValueError("Cannot set two solvers simultaneously")
             self.set_linear_solver("pardiso")
         elif self.cmdlineargs.mumps:
-            if self.cmdlineargs.petsc  or self.cmdlineargs.pastix or self.cmdlineargs.superlu or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso:
+            if self.cmdlineargs.petsc or self.cmdlineargs.pastix or self.cmdlineargs.superlu or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso or self.cmdlineargs.petsc_mumps:
                 raise ValueError("Cannot set two solvers simultaneously")
             self.set_linear_solver("mumps")
         elif self.cmdlineargs.pastix:
+            if self.cmdlineargs.mumps or self.cmdlineargs.petsc or self.cmdlineargs.superlu or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso or self.cmdlineargs.petsc_mumps:
+                raise ValueError("Cannot set two solvers simultaneously")
             self.set_linear_solver("pastix")
+        elif self.cmdlineargs.petsc_mumps:
+            if self.cmdlineargs.mumps or self.cmdlineargs.petsc or self.cmdlineargs.superlu or self.cmdlineargs.umfpack or self.cmdlineargs.pardiso or self.cmdlineargs.pastix:
+                raise ValueError("Cannot set two solvers simultaneously")
+            self.set_linear_solver("petsc").use_mumps()
 
         if self.cmdlineargs.tcc:
             if self.cmdlineargs.distutils:

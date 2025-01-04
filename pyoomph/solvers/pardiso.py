@@ -209,7 +209,7 @@ def mkl_set_num_threads(num_threads:int):
 
 class pardisoSolver(object):
     
-    def __init__(self, matA:Any, mtype:int=11, verbose:bool=False):
+    def __init__(self, matA:Any, mtype:int=11, verbose:bool=False,iparm_override:Dict[int,int]={}):
             #mode  11 : real, nonsymmetric
             #mode  13 : complex,  nonsymmetric
 
@@ -274,7 +274,10 @@ class pardisoSolver(object):
         else:
             self.iparm[1] = 3  
         self.iparm[23] = 1  
-        self.iparm[34] = 1  
+        self.iparm[34] = 1
+          
+        for k,v in iparm_override.items():
+            self.iparm[k-1]=v
 
         self.last_mem_used_in_kb:Optional[int]=None
 
@@ -356,6 +359,9 @@ class pardisoSolver(object):
                 MKL_rhs,  # b
                 MKL_x,  # x
                 byref(c_int(ERR)))  # error
+        
+        if ERR!=0:
+            print("ERROR IN PARDISO",ERR)
 
         if self._MKL_iparm[14]!=0 or self._MKL_iparm[15]!=0 or self._MKL_iparm[16]!=0:
             self.last_mem_used_in_kb=max(self._MKL_iparm[14],self._MKL_iparm[15]+self._MKL_iparm[16])
@@ -372,10 +378,12 @@ from scipy.sparse import  csr_matrix #type:ignore
 class PardisoSolver(GenericLinearSystemSolver):
     idname = "pardiso"
 
-    def __init__(self, problem:"Problem"):
+    def __init__(self, problem:"Problem",verbose:bool=False):
         super().__init__(problem)
         self._current_pardiso = None
         self.try_to_reuse_solver=False
+        self.verbose=verbose
+        self.iparm_override:Dict[int,int]={}
 
     def set_num_threads(self,nthreads:Optional[int]):
         if nthreads is None or nthreads==0:
@@ -410,13 +418,13 @@ class PardisoSolver(GenericLinearSystemSolver):
             mode = 11
             if self.try_to_reuse_solver:
                 if self._current_pardiso is None:    
-                    self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                    self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                     print("CREATED NEW PARDISO AND FACTOR")
                     self._current_pardiso.factor()
                 else:
                     if not self._current_pardiso.update_matrix_values(A):
                         self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
-                        self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                        self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                         print("CREATED NEW PARDISO AND FACTOR")
                         self._current_pardiso.factor()
                     else:
@@ -427,12 +435,16 @@ class PardisoSolver(GenericLinearSystemSolver):
             else:
                 if self._current_pardiso:
                     self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
-                self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                 self._current_pardiso.factor()
+                if self.verbose:
+                    print("PARDISO FACTOR IPARM",self._current_pardiso.iparm)                
         elif op_flag == 2:
             self.setup_solver()
             assert self._current_pardiso is not None
             sol = self._current_pardiso.solve(self.get_b(n,b))
+            if self.verbose:
+                print("PARDISO SOLVE IPARM",self._current_pardiso.iparm)
             b[:] = sol[:]
         else:
             raise RuntimeError("Cannot handle Pardiso mode " + str(op_flag) + " yet")

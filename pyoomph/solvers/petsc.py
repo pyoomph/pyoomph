@@ -52,10 +52,20 @@ class PETSCSolver(GenericLinearSystemSolver):
     def __init__(self, problem:"Problem"):
         super().__init__(problem)
         self._do_not_set_any_args:bool=False
+        self.petsc_mat=None
+        self.ksp=None
+        self.x=None
 
     #		opts=PETSc.Options().getAll()
     #		if "add_zero_diagonal" in opts.keys():
     #			problem.set_diagonal_zero_entries(True)
+    
+    def use_mumps(self):
+        _SetDefaultPetscOption("mat_mumps_icntl_6",5)
+        _SetDefaultPetscOption("ksp_type","preonly")
+        _SetDefaultPetscOption("pc_type","lu")
+        _SetDefaultPetscOption("pc_factor_mat_solver_type","mumps")
+        return self    
 
     def set_default_petsc_option(self,name:str,val:Any=None,force:bool=False)->None:
         _SetDefaultPetscOption(name,val, force) #type:ignore
@@ -85,6 +95,17 @@ class PETSCSolver(GenericLinearSystemSolver):
 
     def solve_serial(self,op_flag:int,n:int,nnz:int,nrhs:int,values:NPFloatArray,rowind:NPIntArray,colptr:NPIntArray,b:NPFloatArray,ldb:int,transpose:int)->int:
         if op_flag == 1:
+            if self.petsc_mat is not None:
+                self.petsc_mat.destroy()
+                self.petsc_mat=None
+            if self.ksp is not None:
+                self.ksp.destroy() #type:ignore
+                self.ksp=None
+            if self.x is not None:
+                self.x.destroy() #type:ignore
+                self.x=None
+                
+            #self.petsc_mat.destroy() #type:ignore
             self.petsc_mat = PETSc.Mat().createAIJ(size=(n, n), csr=(colptr, rowind, values)) #type:ignore
             self.x = PETSc.Vec().createSeq(n) #type:ignore
         elif op_flag == 2:
@@ -94,11 +115,10 @@ class PETSCSolver(GenericLinearSystemSolver):
             xv = self.x.getArray() #type:ignore
             b[:] = xv[:] #type:ignore
 
-            print('Converged in', self.ksp.getIterationNumber(), 'iterations.') #type:ignore
+            #print('Converged in', self.ksp.getIterationNumber(), 'iterations.') #type:ignore
 
-            self.petsc_mat.destroy() #type:ignore
-            self.ksp.destroy() #type:ignore
-            self.x.destroy() #type:ignore
+            
+            
             bv.destroy() #type:ignore
         else:
             raise RuntimeError("Cannot handle Petsc mode " + str(op_flag) + " yet")
