@@ -684,11 +684,12 @@ class ConnectVelocityAtInterface(InterfaceEquations):
 
     required_parent_type = StokesEquations
 
-    def __init__(self, lagr_mult_prefix:str="_lagr_velo_conn", mass_transfer_rate:ExpressionOrNum=0,use_highest_space:bool=False):
+    def __init__(self, lagr_mult_prefix:str="_lagr_velo_conn", mass_transfer_rate:ExpressionOrNum=0,use_highest_space:bool=False,normal_velocity_jump:ExpressionOrNum=0):
         super(ConnectVelocityAtInterface, self).__init__()
         self.lagr_mult_prefix = lagr_mult_prefix
         self.mass_transfer_rate = mass_transfer_rate
         self.use_highest_space=use_highest_space
+        self.normal_velocity_jump=normal_velocity_jump
 
     def get_required_fields(self) -> List[str]:
         flow_eqs=self.get_parent_equations(StokesEquations)
@@ -766,7 +767,7 @@ class ConnectVelocityAtInterface(InterfaceEquations):
             l, l_test = var_and_test(self.lagr_mult_prefix + f)
             inside, inside_test = var_and_test(f)
             outside, outside_test = var_and_test(f, domain=self.get_opposite_side_of_interface())
-            self.add_residual(weak(inside - outside - masstrans * n[i],  l_test ))
+            self.add_residual(weak(inside - outside - masstrans * n[i]+self.normal_velocity_jump*n[i],  l_test ))
             self.add_residual(weak(l, inside_test) )
             self.add_residual(-weak(l , outside_test))
 

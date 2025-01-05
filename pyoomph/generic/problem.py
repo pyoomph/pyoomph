@@ -990,11 +990,84 @@ class Problem(_pyoomph.Problem):
             for p in self.plotter:
                 p._output_step = self._output_step
                 if p.active:
+                    if p._problem is None:
+                        p._problem=self
+                        p._named_problems[""]=self
                     p.plot()
         elif self.plotter is not None:
             self.plotter._output_step = self._output_step  
             if self.plotter.active:
+                if self.plotter._problem is None:
+                    self.plotter._problem=self
+                    self.plotter._named_problems[""]=self                    
                 self.plotter.plot()
+                
+                
+    def create_eigendynamics_animation(self,outdir:str,plotter:"MatplotlibPlotter",eigenvector:int=0,init_amplitude:Optional[float]=None,max_amplitude:Optional[float]=None,numperiods:float=1,numouts:int=25,phi0:float=0):
+        if len(self.get_last_eigenvalues())<eigenvector+1:
+            raise RuntimeError("Eigenvalue/vector at index "+str(eigenvector)+" not calculated")
+        eigenvalue=self.get_last_eigenvalues()[eigenvector]
+        eigenfunction=self.get_last_eigenvectors()[eigenvector]
+        olddofs,_=self.get_current_dofs()                
+        
+        phi0=float(phi0)
+        if numouts<1:
+            raise RuntimeError("Number of outputs must be at least 1")
+        
+        if plotter._problem is None:
+            plotter._problem=self
+            plotter._named_problems[""] = self
+            
+        # TODO: Backup here
+        old_odir=plotter._output_dir
+        old_outstep=plotter._output_step        
+        plotter._output_dir=outdir
+        plotter._output_step=0
+        additional_factor_right=1
+        additional_factor_left=1
+        plotter._eigenanimation_m=0
+        plotter._eigenanimation_lambda=eigenvalue
+        if abs(numpy.imag(eigenvalue))>1e-7:
+            inv_tperiod=abs(numpy.imag(eigenvalue))/(2*numpy.pi)
+        else:
+            inv_tperiod=abs(numpy.real(eigenvalue))/(2*numpy.pi)
+            
+        if init_amplitude is not None:
+            if max_amplitude is not None:
+                raise RuntimeError("Please specify either init_amplitude or max_amplitude, not both")
+            amplitude=init_amplitude
+        elif max_amplitude is not None:
+            if numpy.real(eigenvalue)>0:
+                amplitude=max_amplitude/numpy.exp(numpy.real(eigenvalue)/inv_tperiod*numperiods)
+            else:
+                amplitude=max_amplitude            
+        else:
+            amplitude=1        
+        if self.get_last_eigenmodes_m() is not None and self.get_last_eigenmodes_m()[eigenvector]!=0:
+            additional_factor_right=numpy.exp(1j*self.get_last_eigenmodes_m()[eigenvector]*phi0)
+            additional_factor_left=numpy.exp(1j*self.get_last_eigenmodes_m()[eigenvector]*(phi0+numpy.pi))
+            plotter._eigenanimation_m=self.get_last_eigenmodes_m()[eigenvector]
+            
+        plotter._eigenvector_for_animation=eigenfunction
+        from pathlib import Path
+        Path(os.path.join(self.get_output_directory(),outdir)).mkdir(parents=True, exist_ok=True)
+        for i in range(numouts):
+            t=numperiods/inv_tperiod*i/(numouts-1)
+            print("Doing Eigenanimation:",i/(numouts-1)*100,r"% done")            
+            #self.invalidate_cached_mesh_data()
+            plotter._eigenfactor_right=additional_factor_right*amplitude*numpy.exp(eigenvalue*t)
+            plotter._eigenfactor_left=additional_factor_left*amplitude*numpy.exp(eigenvalue*t)
+            #self.set_current_dofs(olddofs+numpy.real(amplitude*eigenfunction*numpy.exp(eigenvalue*t)*additional_factor_right))            
+            #self.invalidate_cached_mesh_data()
+            plotter.plot()
+            plotter._output_step+=1     
+        plotter._output_dir=old_odir
+        plotter._output_step=old_outstep           
+        plotter._eigenfactor_right=None
+        plotter._eigenfactor_left=None
+        plotter._eigenvector_for_animation=None
+        plotter._eigenanimation_m=None
+        plotter._eigenanimation_lambda=None
 
     def _update_output_scales(self):
         for _n,m in self._meshdict.items():
@@ -4522,10 +4595,14 @@ class Problem(_pyoomph.Problem):
             gp = self.get_global_parameter(gparname)
             gp.value = state.float_data(lambda: gp.value, lambda v: v)
 
+
+
+
         # Eigendata if desired
         write_eigen=1 if (self.eigen_data_in_states is not False) else 0
         has_eigendata=state.int_data(lambda : write_eigen,lambda n : n)
         if has_eigendata:
+            self._last_bc_setting=state.string_data(lambda : self._last_bc_setting,lambda s:s)            
             if state.save:
                 if self.eigen_data_in_states is True:
                     numeigen=len(self._last_eigenvalues)
@@ -4633,9 +4710,13 @@ class Problem(_pyoomph.Problem):
 
         self.actions_after_remeshing() # Must call this to inform e.g. the outputters, that the mesh has changed!
         
-        self.invalidate_cached_mesh_data()
-        if self._last_bc_setting=="eigen":
+        self.invalidate_cached_mesh_data()                
+        if self._last_bc_setting=="eigen":          
+            if self._azimuthal_mode_param_m is not None and len(self.get_last_eigenmodes_m()):
+                self._azimuthal_mode_param_m.value=self.get_last_eigenmodes_m()[0]                
             self.actions_before_eigen_solve()
+            if self._azimuthal_mode_param_m is not None:
+                self._azimuthal_mode_param_m.value=0
         elif self._last_bc_setting=="transient":
             self.actions_before_transient_solve()
         elif self._last_bc_setting=="stationary":
