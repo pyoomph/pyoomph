@@ -2194,9 +2194,10 @@ class MatplotlibPlotter(BasePlotter):
         eigenmode: If eigenvector is set, this is the mode to plot ( ``"abs"``, ``"real"``, ``"imag"`` )
         add_eigen_to_mesh_positions: If eigenvector is set and we have a moving mesh, we can select whether we add the base mesh positions to the eigenvector of the mesh positions
         position_eigen_scale: If eigenvector is set and we have a moving mesh, we can scale the eigenvector to be added to the actual mesh positions by this factor
+        eigenscale: If eigenvector is set, we can scale the eigenvector by this factor (this includes also the mesh positions)
         
     """
-    def __init__(self,problem:Optional["Problem"]=None,filetrunk:str="plot_{:05d}",fileext:Union[str,List[str]]="png",eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",add_eigen_to_mesh_positions:bool=True,position_eigen_scale:float=1):
+    def __init__(self,problem:Optional["Problem"]=None,filetrunk:str="plot_{:05d}",fileext:Union[str,List[str]]="png",eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",add_eigen_to_mesh_positions:bool=True,position_eigen_scale:float=1,eigenscale:float=1):
         super(MatplotlibPlotter, self).__init__(problem,eigenvector=eigenvector,eigenmode=eigenmode)
         self.xmin:Optional[float]=None
         self.xmax:Optional[float]=None
@@ -2224,6 +2225,7 @@ class MatplotlibPlotter(BasePlotter):
         self._has_invalid_triangulation:bool=False
         self.add_eigen_to_mesh_positions=add_eigen_to_mesh_positions
         self.position_eigen_scale=position_eigen_scale
+        self.eigenscale=eigenscale
         self._output_dir="_plots"
         self._eigenfactor_right=None # Optional complex values to scale the eigenvector for the eigendynamics animation
         self._eigenfactor_left=None 

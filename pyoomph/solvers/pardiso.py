@@ -313,12 +313,14 @@ class pardisoSolver(object):
         self.clear()
 
     def factor(self):
+        #print("PARDISO FACTOR")
         out = self.run_pardiso(phase=12) #type:ignore
     
     def refactor(self):
         out = self.run_pardiso(phase=23) #type:ignore
 
     def solve(self, rhs:Union[NPFloatArray,NPComplexArray])->Union[NPFloatArray,NPComplexArray]:
+        #print("PARDISO SOLVE")
         x = self.run_pardiso(phase=33, rhs=rhs)
         return x
 
@@ -326,6 +328,8 @@ class pardisoSolver(object):
         
         if rhs is None:
             nrhs = 0
+            if np is None and phase==-1:
+                return
             x = np.zeros(1) #type:ignore
             rhs = np.zeros(1) #type:ignore
         else:
@@ -417,6 +421,7 @@ class PardisoSolver(GenericLinearSystemSolver):
             A = self.get_jacobian_matrix(n,values, rowind, colptr)  # That is not optimal, of course
             mode = 11
             if self.try_to_reuse_solver:
+                self._lastA=A
                 if self._current_pardiso is None:    
                     self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                     print("CREATED NEW PARDISO AND FACTOR")
@@ -426,12 +431,9 @@ class PardisoSolver(GenericLinearSystemSolver):
                         self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
                         self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                         print("CREATED NEW PARDISO AND FACTOR")
-                        self._current_pardiso.factor()
-                    else:
-                        print("REUSE PARDISO AND REFACTOR")
-                        self._current_pardiso.iparm[3] = 63
-                        self._current_pardiso.refactor()
-                        self._current_pardiso.iparm[3] = 0
+                        self._current_pardiso.factor()                    
+                        
+                   
             else:
                 if self._current_pardiso:
                     self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
@@ -442,7 +444,29 @@ class PardisoSolver(GenericLinearSystemSolver):
         elif op_flag == 2:
             self.setup_solver()
             assert self._current_pardiso is not None
-            sol = self._current_pardiso.solve(self.get_b(n,b))
+            if self.try_to_reuse_solver:
+                maxiters=30
+                self._current_pardiso.iparm[7]=maxiters
+                #self._current_pardiso.iparm[8]=1
+                
+                self._current_pardiso.iparm[3] = 63
+                bv=self.get_b(n,b)
+                sol=self._current_pardiso.solve(bv)
+                #self._current_pardiso.iparm[3] = 0
+                err=numpy.amax(numpy.absolute(self._lastA*sol-bv))
+                if self._current_pardiso.iparm[6]==maxiters or err>1e-10:
+                    print("MUST RECOMPUTE FACTORIZATION","ITER",self._current_pardiso.iparm[6],"ERR",err)
+                    if self._current_pardiso:
+                        self._current_pardiso.clear() 
+                    mode=11
+                    self._current_pardiso = pardisoSolver(self._lastA, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
+                    self._current_pardiso.factor()
+                    sol=self._current_pardiso.solve(bv)
+                else:
+                    print("REUSE PARDISO AND REFACTOR DONE, ERROR",err,"IN ",self._current_pardiso.iparm[6],"ITERATIONS")
+                b[:]=sol[:]
+            else:
+                sol = self._current_pardiso.solve(self.get_b(n,b))
             if self.verbose:
                 print("PARDISO SOLVE IPARM",self._current_pardiso.iparm)
             b[:] = sol[:]
