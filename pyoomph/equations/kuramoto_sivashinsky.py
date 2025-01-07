@@ -49,7 +49,7 @@ class KuramotoSivashinskyEquations(Equations):
 			swap_test_functions: Swap the test functions of height and curvature.
 	"""
 		
-	def __init__(self,*,a1:ExpressionOrNum=-1,a2:ExpressionOrNum=-1,a3:ExpressionOrNum=1,b:ExpressionOrNum=0,c:ExpressionOrNum=0,space:FiniteElementSpaceEnum="C2",curvspace:Optional[FiniteElementSpaceEnum]=None,swap_test_functions:bool=False):
+	def __init__(self,*,a1:ExpressionOrNum=-1,a2:ExpressionOrNum=-1,a3:ExpressionOrNum=1,b:ExpressionOrNum=0,c:ExpressionOrNum=0,space:FiniteElementSpaceEnum="C2",curvspace:Optional[FiniteElementSpaceEnum]=None,swap_test_functions:bool=False,fieldname:str="height",curvfieldname:str="curvature"):
 		super().__init__() #Really important, otherwise it will crash
 		self.a1=a1
 		self.a2=a2
@@ -58,15 +58,17 @@ class KuramotoSivashinskyEquations(Equations):
 		self.c=c
 		self.space:FiniteElementSpaceEnum=space
 		self.curvspace:FiniteElementSpaceEnum=curvspace if curvspace is not None else self.space
-		self.swap_test_functions=swap_test_functions
+		self.fieldname=fieldname
+		self.curvfieldname=curvfieldname
+		self.swap_test_functions=swap_test_functions  
 
 	def define_fields(self):
-		self.define_scalar_field("height",space=self.space)
-		self.define_scalar_field("curvature",space=self.curvspace)
+		self.define_scalar_field(self.fieldname,space=self.space)
+		self.define_scalar_field(self.curvfieldname,space=self.curvspace)
 
 	def define_residuals(self):
-		h,h_test=var_and_test("height")
-		curv,curv_test=var_and_test("curvature")
+		h,h_test=var_and_test(self.fieldname)
+		curv,curv_test=var_and_test(self.curvfieldname)
 		if self.swap_test_functions:
 			h_test,curv_test=curv_test,h_test
 		self.add_residual( weak(partial_t(h) - self.b*h - self.c*h**2 - self.a1*curv - self.a3*dot(grad(h),grad(h)), h_test) + self.a2*weak(grad(curv),grad(h_test)) )
@@ -80,7 +82,11 @@ class KuramotoSivashinskyBoundary(Equations):
 			dot(grad(h),n) = 0
 	"""
 	def define_residuals(self):
-		hbulk, _ = var_and_test("height", domain=self.get_parent_domain())
-		_, curv_test = var_and_test("curvature")
+		peqs=self.get_parent_domain().get_equations().get_equation_of_type(KuramotoSivashinskyEquations,always_as_list=True)
+		if len(peqs)!=1:
+			raise ValueError("KuramotoSivashinskyBoundary requires exactly one KuramotoSivashinskyEquations in the parent domain")
+
+		hbulk, _ = var_and_test(peqs[0].fieldname, domain=self.get_parent_domain())
+		_, curv_test = var_and_test(peqs[0].curvfieldname)
 		n = self.get_normal()
 		self.add_residual(-weak(dot(n,grad(hbulk)),curv_test))

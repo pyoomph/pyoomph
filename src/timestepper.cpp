@@ -166,6 +166,58 @@ namespace pyoomph
     }
   }
 
+  void MultiTimeStepper::assign_initial_values_impulsive(oomph::Data *const &data_pt)
+  {
+      unsigned n_value = data_pt->nvalue();  
+      for (unsigned j = 0; j < n_value; j++)
+      {
+        if (data_pt->is_a_copy(j) == false)
+        {
+          for (unsigned t = 1; t <= NSTEPS; t++)
+          {
+            data_pt->set_value(t, j, data_pt->value(j));
+          }
+          // Newmark velo and accel
+          data_pt->set_value(NSTEPS + 1, j, 0.0);
+          data_pt->set_value(NSTEPS + 2, j, 0.0);
+          if (adaptive_flag())
+          {
+            // Adaptive velocity and prediction
+            data_pt->set_value(NSTEPS + 3, j, 0.0);
+            data_pt->set_value(NSTEPS + 4, j, data_pt->value(j));
+          }
+        }
+      }
+  }
+  void MultiTimeStepper::assign_initial_positions_impulsive(oomph::Node *const &node_pt)
+  {
+    unsigned n_dim = node_pt->ndim();
+    unsigned n_position_type = node_pt->nposition_type();    
+    for (unsigned i = 0; i < n_dim; i++)
+    {
+      if (node_pt->position_is_a_copy(i) == false)
+      {     
+        for (unsigned k = 0; k < n_position_type; k++)
+        {       
+          for (unsigned t = 1; t <= NSTEPS; t++)
+          {
+            node_pt->x_gen(t, k, i) = node_pt->x_gen(k, i);
+          }         
+          // Newmark velo and accel
+          node_pt->x_gen(NSTEPS + 1, k, i) = 0.0;
+          node_pt->x_gen(NSTEPS + 2, k, i) = 0.0;
+          
+          if (adaptive_flag())
+          {
+              // Predicted velocity and offset
+              node_pt->x_gen(NSTEPS + 3, k, i) = 0.0;
+              node_pt->x_gen(NSTEPS + 4, k, i) = node_pt->x_gen(k, i);
+          }
+        }
+      }
+    }
+  }
+
   void MultiTimeStepper::shift_time_values(oomph::Data *const &data_pt)
   {
     // BDF2 part
