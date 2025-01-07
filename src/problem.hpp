@@ -228,6 +228,8 @@ namespace pyoomph
     std::vector<std::complex<double>> get_bifurcation_eigenvector();
     double get_bifurcation_omega();
     std::vector<double> get_arclength_dof_derivative_vector();
+    std::vector<double> get_arclength_dof_current_vector();
+    void update_dof_vectors_for_continuation(const std::vector<double> & ddof, const std::vector<double> & curr);
     void set_dof_direction_arclength(std::vector<double> ddir);
     void adapt(unsigned &n_refined, unsigned &n_unrefined) override
     {
@@ -277,9 +279,10 @@ namespace pyoomph
     virtual std::tuple<std::vector<double>, std::vector<bool>> get_current_dofs();
     virtual std::vector<double> get_history_dofs(unsigned t);
     virtual std::vector<double> get_current_pinned_values(bool with_pos);
+    
     virtual void set_current_dofs(const std::vector<double> &inp);
     virtual void set_history_dofs(unsigned t, const std::vector<double> &inp);
-    virtual void set_current_pinned_values(const std::vector<double> &inp,bool with_pos);
+    virtual void set_current_pinned_values(const std::vector<double> &inp,bool with_pos,unsigned t=0);
     virtual bool &always_take_one_newton_step() { return Always_take_one_newton_step; }
     virtual bool get_Keep_temporal_error_below_tolerance() { return Keep_temporal_error_below_tolerance; }
     virtual void set_Keep_temporal_error_below_tolerance(bool s) { Keep_temporal_error_below_tolerance = s; }

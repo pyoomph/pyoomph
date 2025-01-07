@@ -923,7 +923,38 @@ namespace pyoomph
 		return res;
 	}
 
-	void Problem::activate_my_fold_tracking(double *const &parameter_pt, const oomph::DoubleVector &eigenvector, const bool &block_solve)
+	std::vector<double> Problem::get_arclength_dof_current_vector()
+	{
+		std::vector<double> res(Dof_current.size());
+		for (unsigned i = 0; i < res.size(); i++)
+			res[i] = dof_current(i);
+		return res;
+	}
+
+    void Problem::update_dof_vectors_for_continuation(const std::vector<double> &ddof, const std::vector<double> &curr)
+    {
+		if (ddof.size() != curr.size()) throw_runtime_error("Mismatch in size of ddof and curr");
+		unsigned ndof_local = Dof_distribution_pt->nrow_local();
+		if (ddof.size() != ndof_local)
+		{
+			throw_runtime_error("Mismatch in size of ddof and current dof vectors");
+		}
+		if (Dof_derivative.size() != ndof_local)
+		{
+			Dof_derivative.resize(ndof_local, 0.0);
+		}
+		if (Dof_current.size() != ndof_local)
+		{
+			Dof_current.resize(ndof_local, 0.0);
+		}
+		for (unsigned i = 0; i < ndof_local; i++)
+		{
+			Dof_derivative[i] = ddof[i];
+			Dof_current[i] = curr[i];
+		}
+    }
+
+    void Problem::activate_my_fold_tracking(double *const &parameter_pt, const oomph::DoubleVector &eigenvector, const bool &block_solve)
 	{
 		reset_assembly_handler_to_default();
 		this->assembly_handler_pt() = new MyFoldHandler(this, parameter_pt, eigenvector);
@@ -1144,7 +1175,7 @@ namespace pyoomph
 			throw_runtime_error("Cannot track unknown bifurcation type: " + typus);
 	}
 
-	void Problem::set_current_pinned_values(const std::vector<double> &inp, bool with_pos)
+	void Problem::set_current_pinned_values(const std::vector<double> &inp, bool with_pos,unsigned t)
 	{
 		unsigned int pos = 0;
 		unsigned mpos = inp.size();
@@ -1158,7 +1189,7 @@ namespace pyoomph
 				{
 					if (n->is_pinned(iv))
 					{
-						n->set_value(iv, inp[pos++]);
+						n->set_value(t,iv, inp[pos++]);
 						if (pos > mpos)
 							throw_runtime_error("Mismatch in value vector size: " + std::to_string(mpos) + " given, but reached index " + std::to_string(pos));
 					}
@@ -1168,7 +1199,7 @@ namespace pyoomph
 					for (unsigned int iv = 0; iv < n->ndim(); iv++)
 					{
 						if (dynamic_cast<pyoomph::Node *>(n)->variable_position_pt()->is_pinned(iv))
-							dynamic_cast<pyoomph::Node *>(n)->variable_position_pt()->set_value(iv, inp[pos++]);
+							dynamic_cast<pyoomph::Node *>(n)->variable_position_pt()->set_value(t,iv, inp[pos++]);
 					}
 				}
 			}
@@ -1182,7 +1213,7 @@ namespace pyoomph
 					{
 						if (id->is_pinned(iv))
 						{
-							id->set_value(iv, inp[pos++]);
+							id->set_value(t,iv, inp[pos++]);
 							if (pos > mpos)
 								throw_runtime_error("Mismatch in value vector size: " + std::to_string(mpos) + " given, but reached index " + std::to_string(pos));
 						}

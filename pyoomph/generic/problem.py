@@ -1277,6 +1277,16 @@ class Problem(_pyoomph.Problem):
 
 
         # TODO: Ensure same refinement at connected interfaces
+        if self._last_arclength_parameter is not None:
+            _actual_dofs,_positional_dofs,pinned_values=self.get_all_values_at_current_time(True)
+            dof_deriv=self.get_arclength_dof_derivative_vector()
+            dof_current=self.get_arclength_dof_current_vector()
+            self.set_current_pinned_values(0*pinned_values,True,5)
+            self.set_current_pinned_values(0*pinned_values,True,6)
+            self.set_history_dofs(5,dof_deriv)
+            self.set_history_dofs(6,dof_current)
+#            raise RuntimeError("TODO: Adaptation with arclength parameter")
+        
 
         nref=0
         nuref=0
@@ -1289,6 +1299,13 @@ class Problem(_pyoomph.Problem):
                         print("IN MESH "+name+" ref=",mesh.nrefined(),"unref=",mesh.nunrefined())
                     nref += mesh.nrefined()
                     nuref += mesh.nunrefined()
+                    
+        if self._last_arclength_parameter is not None:
+            dof_deriv=self.get_history_dofs(5)
+            dof_current=self.get_history_dofs(6)
+            self._update_dof_vectors_for_continuation(dof_deriv,dof_current)
+            self.assign_initial_values_impulsive() # We messed around. So me must reassign the initial values
+            
         return nref,nuref
 
     def _adapt(self) -> Tuple[int, int]:
