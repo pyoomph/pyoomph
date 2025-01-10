@@ -164,13 +164,26 @@ class SpatialErrorEstimator(Equations):
 
     so that the jump in "u" is used, after weighting by the factor 5, as error estimator.
     Error estimators expressions must be nondimensional.
+    
+    for_which controls whether these error estimators are used for the base solution, potential eigenfunctions or both.
     """
 
-    def __init__(self,*fluxes:Union[str,Expression],**kwargs:ExpressionOrNum):
+    def __init__(self,for_which:Literal["both","base","eigen"]="both",*fluxes:Union[str,Expression],**kwargs:ExpressionOrNum):
         super(SpatialErrorEstimator, self).__init__()
         self.fluxes:Dict[Union[str,Expression],ExpressionOrNum]={x:1.0 for x in fluxes}
         for lhs,rhs in kwargs.items():
             self.fluxes[lhs]=rhs
+        if for_which=="both":
+            self.for_base_solution=True
+            self.for_eigenfunction=True
+        elif for_which=="base":
+            self.for_base_solution=True
+            self.for_eigenfunction=False
+        elif for_which=="eigen":
+            self.for_base_solution=False
+            self.for_eigenfunction=True
+        else:
+            raise ValueError("Unsupported value for for_which: "+str(for_which))
 
     def define_error_estimators(self):
         for flux,factor in self.fluxes.items():
@@ -183,7 +196,7 @@ class SpatialErrorEstimator(Equations):
                     jflux=grad(nondim(flux),nondim=True)
             else:
                 jflux=flux
-            self.add_spatial_error_estimator(factor*jflux)
+            self.add_spatial_error_estimator(factor*jflux,for_base=self.for_base_solution,for_eigen=self.for_eigenfunction)
 
     def get_information_string(self) -> str:
         return ", ".join(map(str,self.fluxes))

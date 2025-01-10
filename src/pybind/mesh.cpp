@@ -1241,7 +1241,8 @@ void PyReg_Mesh(py::module &m)
 		  { oomph::FiniteElement::Tolerance_for_singular_jacobian = tol; });
 	m.def("set_interpolate_new_interface_dofs", [](bool on)
 		  { pyoomph::InterfaceElementBase::interpolate_new_interface_dofs = on; });
-
+	m.def("set_use_eigen_Z2_error_estimators", [](bool on)
+		  { pyoomph::BulkElementBase::use_eigen_error_estimators = on; });
 
 	py::class_<pyoomph::TracerCollection>(m, "TracerCollection")
 		.def(py::init<std::string>())

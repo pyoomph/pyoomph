@@ -300,7 +300,8 @@ class Problem(_pyoomph.Problem):
         self._setup_azimuthal_stability_code=False
         self._setup_additional_cartesian_stability_code=False
         self._solve_in_arclength_conti=None
-
+        self._adapt_eigenindex:Optional[int]=None # Which eigenvector to use during adaptation
+        self._adapted_eigeninfo:Optional[List[Any]]=None # Store the eigenfunction, eigenvalue and m and k after adaptation
         self._last_arclength_parameter=None
         self._taken_already_an_unsteady_step=False
         self._last_step_was_stationary=None
@@ -1204,6 +1205,35 @@ class Problem(_pyoomph.Problem):
             errs = mesh.get_elemental_errors()
             for i,b in enumerate(mesh.elements()):
                 b._elemental_error_max_override=errs[i]
+                
+        if self._adapt_eigenindex is not None and self._last_eigenvectors is not None and len(self._last_eigenvectors)>self._adapt_eigenindex:
+            _pyoomph.set_use_eigen_Z2_error_estimators(True)
+            evect=self._last_eigenvectors[self._adapt_eigenindex]
+            has_imag=numpy.amax(numpy.absolute(numpy.imag(evect)))>0.00001*numpy.amax(numpy.absolute(numpy.real(evect)))
+            #print("EIG AS DOF")
+            backup,backup_pinned=self.set_eigenfunction_as_dofs(self._adapt_eigenindex,mode="real")
+            for name,mesh in self._meshdict.items():
+                if isinstance(mesh,ODEStorageMesh): continue            
+                #print("EVEM ",name)
+                errs = mesh.get_elemental_errors()
+                for i,b in enumerate(mesh.elements()):
+                    b._elemental_error_max_override=max(errs[i],b._elemental_error_max_override)
+            #print("DONE")
+            if has_imag:
+                #print("HAS IMAG",numpy.amax(numpy.absolute(numpy.imag(evect))),numpy.amax(numpy.absolute(numpy.real(evect))))
+                self.set_eigenfunction_as_dofs(self._adapt_eigenindex,mode="imag")
+                for name,mesh in self._meshdict.items():
+                    if isinstance(mesh,ODEStorageMesh): continue            
+                    errs = mesh.get_elemental_errors()
+                    for i,b in enumerate(mesh.elements()):
+                        b._elemental_error_max_override=max(errs[i],b._elemental_error_max_override)
+            #print("DONE IMAG")
+            #print(backup)
+            #print(backup_pinned)
+            self.set_all_values_at_current_time(backup,backup_pinned,False)
+            _pyoomph.set_use_eigen_Z2_error_estimators(False)
+            #print("RESET")
+            
 
         if True:
             #Now, we first have to go through all meshes at the deepest level in the tree
@@ -1276,17 +1306,28 @@ class Problem(_pyoomph.Problem):
                             errs[obm._name][i]=max(errs[obm._name][i],e._elemental_error_max_override) 
 
 
+        messed_around_in_history=False
+        has_arclength_data=False
         # TODO: Ensure same refinement at connected interfaces
         if self._last_arclength_parameter is not None:
-            _actual_dofs,_positional_dofs,pinned_values=self.get_all_values_at_current_time(True)
             dof_deriv=self.get_arclength_dof_derivative_vector()
-            dof_current=self.get_arclength_dof_current_vector()
-            self.set_current_pinned_values(0*pinned_values,True,5)
-            self.set_current_pinned_values(0*pinned_values,True,6)
-            self.set_history_dofs(5,dof_deriv)
-            self.set_history_dofs(6,dof_current)
-#            raise RuntimeError("TODO: Adaptation with arclength parameter")
-        
+            if len(dof_deriv)>0:
+                has_arclength_data=True
+                _actual_dofs,_positional_dofs,pinned_values=self.get_all_values_at_current_time(True)            
+                dof_current=self.get_arclength_dof_current_vector()
+                self.set_current_pinned_values(0*pinned_values,True,5)
+                self.set_current_pinned_values(0*pinned_values,True,6)
+                self.set_history_dofs(5,dof_deriv)
+                self.set_history_dofs(6,dof_current)
+                messed_around_in_history=True
+            
+        if self._adapt_eigenindex is not None:
+            _actual_dofs,_positional_dofs,pinned_values=self.get_all_values_at_current_time(True)
+            self.set_current_pinned_values(0*pinned_values,True,3)
+            self.set_current_pinned_values(0*pinned_values,True,4)
+            self.set_history_dofs(3,numpy.real(self._last_eigenvectors[self._adapt_eigenindex]))
+            self.set_history_dofs(4,numpy.imag(self._last_eigenvectors[self._adapt_eigenindex]))
+            messed_around_in_history=True        
 
         nref=0
         nuref=0
@@ -1300,10 +1341,25 @@ class Problem(_pyoomph.Problem):
                     nref += mesh.nrefined()
                     nuref += mesh.nunrefined()
                     
-        if self._last_arclength_parameter is not None:
+        if has_arclength_data:
             dof_deriv=self.get_history_dofs(5)
             dof_current=self.get_history_dofs(6)
             self._update_dof_vectors_for_continuation(dof_deriv,dof_current)
+            
+        if self._adapt_eigenindex is not None:
+            eigfunc=self.get_history_dofs(3)+1j*self.get_history_dofs(4)
+            self._last_eigenvectors=[eigfunc]
+            self._last_eigenvalues=[self._last_eigenvalues[self._adapt_eigenindex]]
+            lastm,lastk=None,None
+            if self._last_eigenvalues_m is not None:
+                self._last_eigenvalues_m=[self._last_eigenvalues_m[self._adapt_eigenindex]]
+                lastm=self._last_eigenvalues_m[0]
+            if self._last_eigenvalues_k is not None:
+                self._last_eigenvalues_k=[self._last_eigenvalues_k[self._adapt_eigenindex]]
+                lastk=self._last_eigenvalues_k[0]
+            self._adapted_eigeninfo=[eigfunc,self._last_eigenvalues[0],lastm,lastk]
+            
+        if messed_around_in_history:
             self.assign_initial_values_impulsive() # We messed around. So me must reassign the initial values
             
         return nref,nuref
@@ -1536,6 +1592,7 @@ class Problem(_pyoomph.Problem):
         self.cmdlineparser.add_argument('--distribute',help="Distribute mesh in parallel",action='store_true')
         self.cmdlineparser.add_argument('--outdir', help="output directory",type=str)
         self.cmdlineparser.add_argument('--suppress_code_writing',help="do not write FEM codes. Useful for debugging",action='store_true')
+        self.cmdlineparser.add_argument('--suppress_compilation',help="do not compile FEM codes. Useful for debugging",action='store_true')
         self.cmdlineparser.add_argument('-P','--parameter', help="Override some problem parameters",nargs='+', type=str)
         self.cmdlineparser.add_argument("--runmode",help="Selects the runmode ([d]elete and run, [o]verride and run, [c]ontinue, [p]lot again",type=str)
         self.cmdlineparser.add_argument("--recompile_on_continue",help="When using --runmode c, compilation and code writing is usually suppressed. You can recompile the code anyhow with this flag",action="store_true")
@@ -1612,6 +1669,9 @@ class Problem(_pyoomph.Problem):
 
         if self.cmdlineargs.suppress_code_writing:
             self._suppress_code_writing=True
+            
+        if self.cmdlineargs.suppress_compilation:
+            self._suppress_compilation=True
 
         if self.cmdlineargs.verbose:
             _pyoomph.set_verbosity_flag(1)
@@ -1875,7 +1935,7 @@ class Problem(_pyoomph.Problem):
     
 
     # Can be used for go_to_param or 
-    def remesh_handler_during_continuation(self, force: bool = False, resolve: bool = True, resolve_before_eigen: bool = False, reactivate_biftrack_neigen: int = 4, reactivate_biftrack_shift:float=0,resolve_max_newton_steps : Optional[int]=None):
+    def remesh_handler_during_continuation(self, force: bool = False, resolve: bool = True, resolve_before_eigen: bool = False, reactivate_biftrack_neigen: int = 4, reactivate_biftrack_shift:float=0,resolve_max_newton_steps : Optional[int]=None,num_adapt:Optional[int]=None):
         """
         Handle remeshing during continuation. We might have to calculate e.g. a new eigenvector when doing bifurcation tracking.
         In that case, set Problem.do_remeshing_when_necessary to False to prevent any automatic remeshing.
@@ -1891,7 +1951,8 @@ class Problem(_pyoomph.Problem):
 
         Returns:
             bool: True if remeshing was performed, False otherwise.
-        """
+        """        
+        #print("ENTER",len(self.get_arclength_dof_derivative_vector()))
         if not force and not self.remeshing_necessary():
             return False
         biftrack = self.get_bifurcation_tracking_mode()
@@ -1905,11 +1966,24 @@ class Problem(_pyoomph.Problem):
         else:
             m=None
             k=None
+        #print("BIFTRACK",biftrack)
         if biftrack != "":
+            # TODO: Keep the continuation data here!
             self.reset_arc_length_parameters()
             self.deactivate_bifurcation_tracking()
             self.reset_arc_length_parameters()
-        self.force_remesh()
+            
+
+            
+            
+        self.force_remesh(num_adapt=num_adapt)
+        
+        # Reobtain the arclength vectors
+        if self._last_arclength_parameter is not None:
+            dof_deriv=self.get_history_dofs(5)
+            dof_current=self.get_history_dofs(6)
+            self._update_dof_vectors_for_continuation(dof_deriv,dof_current)
+        
         if biftrack != "":
             if resolve_before_eigen:
                 self.actions_before_stationary_solve(force_reassign_eqs=True)
@@ -1980,8 +2054,11 @@ class Problem(_pyoomph.Problem):
                 self._meshdict[meshname]=mesh
             else:
                 if mesh is None:
-                    print(str(self._equation_system))
-                    raise RuntimeError("No mesh template with a domain named '"+meshname+'" was added, but there are equations defined on this domain')
+                    #print(str(self._equation_system))
+                    avdoms=set()
+                    for m in self._meshtemplate_list:
+                        avdoms.update(set(m._domains.keys()))
+                    raise RuntimeError("No mesh template with a domain named '"+meshname+'" was added, but there are equations defined on this domain. Available domains are '+str(avdoms))
 
         self._equation_system._create_dummy_domains_for_DG(self) 
         self._equation_system._finalize_equations(self,second_loop=True) 
@@ -2179,7 +2256,7 @@ class Problem(_pyoomph.Problem):
                                 #print("REM",f)
                         #if not os.listdir(top):
                         #	os.rmdir(top)
-                    if not self._suppress_code_writing:
+                    if not self._suppress_code_writing and not self._suppress_compilation:
                         rem_subdir("_ccode",["*.c","*.dll","*.o",".dylib","*.so"])
                     rem_subdir("_states", ["*.dump"])
                     rem_subdir("_plots", ["*.*"])
@@ -2589,8 +2666,38 @@ class Problem(_pyoomph.Problem):
             process(bm)
 
         if numpy.any(doflist<0): #type:ignore
-            print("UNASSIGNED DOF IN DOFLIST")
-            print("NUM:",len(numpy.argwhere(doflist<0)),"of",len(doflist)) #type:ignore
+            if self.get_bifurcation_tracking_mode()=="azimuthal":
+                print("DOING AZIMUTHAL PATCHING",self.ndof())
+                num_unassigned=len(numpy.argwhere(doflist<0))
+                num_assigned=len(doflist)-num_unassigned
+                
+                if num_unassigned==2*num_assigned+2:
+                    has_imag=True
+                    N_base=(len(doflist)-2)//3
+                elif num_unassigned==num_assigned+1:
+                    has_imag=False
+                    N_base=(len(doflist)-1)//2
+                else:
+                    raise RuntimeError("Strange here",num_assigned,num_unassigned)
+                
+                dof_base=len(dofnames)                
+                dofnames+=[d+"__(ReEigen)" for d in dofnames]
+                if has_imag:
+                    dofnames+=[d+"__(ImEigen)" for d in dofnames[:dof_base]]
+                dofnames+=["Bifurcation_Parameter_or_LambdaRe"]
+                if has_imag:
+                    dofnames+=["LambdaIm"]
+                    doflist[-1]=len(dofnames)-1
+                    doflist[-2]=len(dofnames)-2
+                else:
+                    doflist[-1]=len(dofnames)-1
+                doflist[N_base:2*N_base]=doflist[:N_base]+dof_base
+                if has_imag:
+                    doflist[2*N_base:3*N_base]=doflist[:N_base]+2*dof_base
+            # TODO: Other handlers
+            else:                
+                print("UNASSIGNED DOF IN DOFLIST")
+                print("NUM:",len(numpy.argwhere(doflist<0)),"of",len(doflist)) #type:ignore
 
         return doflist, dofnames
 
@@ -2666,6 +2773,20 @@ class Problem(_pyoomph.Problem):
                 #dofname = splt[-1]
                 mesh = self.get_mesh(meshname, return_None_if_not_found=True)
                 if mesh is not None:
+                    if self.get_bifurcation_tracking_mode()=="azimuthal":
+                        has_imag=False
+                        for ddd in names:
+                            if ddd.endswith("__(ImEigen)"):
+                                has_imag=True
+                                break
+                        if has_imag:
+                            ndof_base=(self.ndof()-2)//3
+                        else:
+                            ndof_base=(self.ndof()-1)//2
+                        if splt[-1].endswith("__(ReEigen)"):
+                            dofindex-=ndof_base
+                        elif splt[-1].endswith("__(ImEigen)"):
+                            dofindex-=2*ndof_base
                     location,typ=self.search_dof_in_mesh(mesh,dofindex)
                     if location is None or typ is None:
                         print("   ... cannot find any node or element containing this dof...")
@@ -2723,9 +2844,11 @@ class Problem(_pyoomph.Problem):
         if self._debug_largest_residual>0:
             self.debug_largest_residual(self._debug_largest_residual)
         if self.get_bifurcation_tracking_mode()!="" and not self.is_quiet():
-            paramnames=[pn for pn in self.get_global_parameter_names() if not pn.startswith("_")]            
+            paramnames=[pn for pn in self.get_global_parameter_names() if not pn.startswith("_")]                        
             if len(paramnames)>0:
-                paramstr="Currently at parameters: "+", ".join([n+"="+str(self.get_global_parameter(n).value) for n in paramnames])
+                paramstr="Currently at parameters: "+", ".join([n+"="+str(self.get_global_parameter(n).value) for n in paramnames])                
+                if self._bifurcation_tracking_parameter_name=="<LAMBDA_TRACKING>":
+                    paramstr+=". Lambda tracking at: "+str(complex(self._get_lambda_tracking_real(),self._get_bifurcation_omega()))                                
                 print(paramstr)
 
     def actions_after_adapt(self):
@@ -2946,6 +3069,14 @@ class Problem(_pyoomph.Problem):
         Returns:
             Tuple[NPComplexArray, NPComplexArray]: A tuple containing the computed eigenvalues and eigenvectors.
         """
+        self._solve_eigenproblem_helper(n,shift,quiet,azimuthal_m,normal_mode_k,normal_mode_L,report_accuracy,sort,which,OPpart,v0,filter,target)
+        self._last_eigenvectors=self.process_eigenvectors(self._last_eigenvectors)
+        return self._last_eigenvalues,self._last_eigenvectors
+        
+    def _solve_eigenproblem_helper(self, n:int, shift:Union[float,complex,None]=0, quiet:bool=False, azimuthal_m:Optional[Union[int,List[int]]]=None,normal_mode_k:Optional[Union[ExpressionOrNum,List[ExpressionOrNum]]]=None,normal_mode_L:Optional[Union[ExpressionOrNum,List[ExpressionOrNum]]]=None,report_accuracy:bool=False,sort:bool=True,which:"EigenSolverWhich"="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPFloatArray,NPComplexArray]]=None,filter:Optional[Callable[[complex],bool]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
+        """
+        Real eigensolving: Called from solve_eigenproblem()
+        """
         if not self.is_initialised():
             self.initialise()
             
@@ -2988,9 +3119,7 @@ class Problem(_pyoomph.Problem):
         if filter is not None:
             filtered_indices=numpy.array([filter(ev) for ev in self._last_eigenvalues]).nonzero()
             self._last_eigenvalues=self._last_eigenvalues[filtered_indices]
-            self._last_eigenvectors=self._last_eigenvectors[filtered_indices]
-
-        self._last_eigenvectors=self.process_eigenvectors(self._last_eigenvectors)
+            self._last_eigenvectors=self._last_eigenvectors[filtered_indices]        
 
         #self._last_eigenvectors=numpy.transpose(self._last_eigenvectors)
         if (not self.is_quiet()) and (not quiet) :
@@ -3011,6 +3140,53 @@ class Problem(_pyoomph.Problem):
             if not was_steady[i]:
                 self.time_stepper_pt(i).undo_make_steady()
         return self._last_eigenvalues,self._last_eigenvectors
+
+
+
+
+    def refine_eigenfunction(self, numadapt:int=1,eigenindex:int=0,resolve_base_state:bool=True,resolve_neigen:int=1,use_startvector:bool=False):
+        """
+        After calculating an eigenproblem, you can adapt the mesh according ot the eigenfunction of a specific eigenvalue.
+        This can be useful to refine the mesh in regions where the eigenfunction has a high gradient. It requires SpatialErrorEsitmators to be added to the problem and an adaptive mesh.
+        
+        Args:
+            numadapt: The number of adaptations to perform. Defaults to 1.
+            eigenindex: The index of the eigenvalue to refine the mesh for. Defaults to 0.
+            resolve_base_state: If True, the base state is resolved after each adaptation. Defaults to True.
+            resolve_neigen: The number of eigenvalues to resolve after each adaptation. Defaults to 1.
+            
+        Returns:
+            Tuple[float, NPFloatArray]: The eigenvalue and eigenvector of the adapted eigenproblem.
+            
+        """
+        if eigenindex<0:
+            raise ValueError("Eigenindex must be non-negative")
+        elif eigenindex>=len(self.get_last_eigenvalues()):
+            raise ValueError("Eigenindex must be smaller than the number of calculated eigenvalues")
+        self._adapt_eigenindex=eigenindex
+        
+        for i in range(numadapt):
+            with self.custom_adapt(True):
+                nref,nunref=self.adapt()
+                if nref==0 and nunref==0:                    
+                    return self.get_last_eigenvalues()[0],self.get_last_eigenvectors()[0]
+            if resolve_base_state:
+                self.solve()
+            self._adapt_eigenindex=0
+            #print("V0",self._adapted_eigeninfo[0])
+            #print("V0AMPL",numpy.linalg.norm(self._adapted_eigeninfo[0]))
+            if use_startvector:
+                startvector=self._adapted_eigeninfo[0].copy()
+            else:
+                startvector=None
+            if self.get_eigen_solver().supports_target():                
+                self.solve_eigenproblem(resolve_neigen,v0=startvector,target=self._adapted_eigeninfo[1],shift=self._adapted_eigeninfo[1],azimuthal_m=self._adapted_eigeninfo[2],normal_mode_k=self._adapted_eigeninfo[3])
+            else:
+                self.solve_eigenproblem(resolve_neigen,v0=startvector,azimuthal_m=self._adapted_eigeninfo[2],normal_mode_k=self._adapted_eigeninfo[3])
+        self._adapted_eigeninfo=None
+        self._adapt_eigenindex=None
+        return self.get_last_eigenvalues()[0],self.get_last_eigenvectors()[0]
+            
 
 
     def _override_for_this_solve(self,*,max_newton_iterations:Optional[int]=None,newton_relaxation_factor:Optional[float]=None,newton_solver_tolerance:Optional[float]=None,globally_convergent_newton:Optional[bool]=None):
@@ -3151,8 +3327,7 @@ class Problem(_pyoomph.Problem):
                 self._last_eigenvalues = numpy.array([self._get_lambda_tracking_real() + self._get_bifurcation_omega() * 1j], dtype=numpy.complex128)  # type:ignore
             else:
                 self._last_eigenvalues = numpy.array([0 + self._get_bifurcation_omega() * 1j], dtype=numpy.complex128)  # type:ignore
-            self._last_eigenvectors = numpy.array([self._get_bifurcation_eigenvector()], dtype=numpy.complex128)  # type:ignore
-            self._last_eigenvectors = self.process_eigenvectors(self._last_eigenvectors)
+            self._last_eigenvectors = numpy.array([self._get_bifurcation_eigenvector()], dtype=numpy.complex128)  # type:ignore            
             if self.get_bifurcation_tracking_mode() == "azimuthal":
                 assert self._azimuthal_mode_param_m is not None
                 self._last_eigenvalues_m = numpy.array([int(self._azimuthal_mode_param_m.value)], dtype=numpy.int32)  # type:ignore
@@ -3161,6 +3336,8 @@ class Problem(_pyoomph.Problem):
             else:
                 self._last_eigenvalues_m = None
                 self._last_eigenvalues_k = None
+                
+            self._last_eigenvectors = self.process_eigenvectors(self._last_eigenvectors)
 
         if not self.is_quiet():
             print("GETTING NEW DS ", newds, "PLANNED", step)
@@ -3520,7 +3697,7 @@ class Problem(_pyoomph.Problem):
             azimuthal_mode (Optional[int]): The azimuthal mode for azimuthal bifurcation tracking. Defaults to None.
         """        
         
-        
+
         if parameter is None:
             # We track the current eigenbranch, i.e. Re(lambda) will be found and is not necessarily 0
             parameter="<LAMBDA_TRACKING>"
@@ -3611,7 +3788,6 @@ class Problem(_pyoomph.Problem):
                     raise RuntimeError("Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this error.")
                 else:
                     print("WARNING: Bifurcation tracking in the global parameter '" + parameter + "', which is used in the problem. This may lead to unexpected behaviour. Set <Problem>.warn_about_unused_global_parameters to False to suppress this warning.")
-        
             if not self.is_quiet():
                 print("Bifurcation tracking activated for "+parameter)
         self._bifurcation_tracking_parameter_name=parameter
@@ -3671,6 +3847,8 @@ class Problem(_pyoomph.Problem):
                 azimuthal_mode=self._last_eigenvalues_m[0]
                 assert azimuthal_mode is not None
             self._azimuthal_mode_param_m.value=azimuthal_mode
+            
+        
             if eigenvector is None:
                 if self._last_eigenvalues_m is None or len(self._last_eigenvalues_m) == 0:
                     raise RuntimeError("Cannot find a good eigenvector guess since you have not calculated any one for mode "+str(azimuthal_mode))
@@ -3685,7 +3863,7 @@ class Problem(_pyoomph.Problem):
                 if omega is None:
                     omega = next(iter(self.get_last_eigenvalues()), None)
                 if omega is not None:
-                    omega = numpy.imag(omega) #type:ignore
+                    pass
                 else:
                     omega = 0
 
@@ -3709,6 +3887,7 @@ class Problem(_pyoomph.Problem):
 
             contribs={"azimuthal_real_eigen":self._azimuthal_stability.real_contribution_name,"azimuthal_imag_eigen":self._azimuthal_stability.imag_contribution_name}
 
+  
             self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), omega,contribs) #type:ignore
             self.assembly_handler_pt().set_global_equations_forced_zero(base_zero_dofs,eigen_zero_dofs) #type:ignore
             
@@ -3736,7 +3915,8 @@ class Problem(_pyoomph.Problem):
                 if omega is None:
                     omega = next(iter(self.get_last_eigenvalues()), None)                
                 if omega is not None:
-                    omega = numpy.imag(omega) #type:ignore
+                    pass
+                    #omega = numpy.imag(omega) #type:ignore
                 else:
                     omega = 0
 
@@ -3809,17 +3989,22 @@ class Problem(_pyoomph.Problem):
         return self._last_eigenvalues_k
 
 
-    def rotate_eigenvectors(self,eigenvectors,dofs_to_real:Union[str,List[str],Set[str]],normalize_dofs_to_unity:bool=False):
+    def rotate_eigenvectors(self,eigenvectors,dofs_to_real:Union[str,List[str],Set[str]],normalize_dofs:bool=False,normalize_amplitude:Union[float,complex]=1,normalize_max:bool=True):
         neweigen=[]
         dofs=self.dof_strings_to_global_equations(dofs_to_real)
         dofs=numpy.array(list(dofs),dtype=numpy.int64)
         for ev in eigenvectors:
-            avg_angle=numpy.average(numpy.angle(ev[dofs]))
-            if normalize_dofs_to_unity:
-                magnitude=numpy.average(numpy.absolute(ev[dofs]))
+            avg_angle=numpy.angle(numpy.average(ev[dofs]))
+            #print("AVERAGE ANGLE",avg_angle)
+            if normalize_dofs:
+                if normalize_max:
+                    magnitude=numpy.amax(numpy.absolute(ev[dofs]))
+                else:
+                    magnitude=numpy.average(numpy.absolute(ev[dofs]))
             else:
                 magnitude=1
-            neweigen.append(ev*numpy.exp(-1j*avg_angle)/magnitude)
+            #print("AMPLITUDE",normalize_amplitude/magnitude)
+            neweigen.append(ev*numpy.exp(-1j*avg_angle)/magnitude*normalize_amplitude)            
         return numpy.array(neweigen)
 
     
@@ -3906,7 +4091,7 @@ class Problem(_pyoomph.Problem):
             for ms in vlist:
                 param.value = ms
                 self.actions_before_eigen_solve()
-                self.solve_eigenproblem(n, shift,quiet=True,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0,sort=sort)
+                self._solve_eigenproblem_helper(n, shift,quiet=True,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0,sort=sort)
                 if len(alleigenvals)==0:
                     alleigenvals=self.get_last_eigenvalues().copy()
                 else:
@@ -3942,7 +4127,7 @@ class Problem(_pyoomph.Problem):
         else:
             param.value = vlist
             self.actions_before_eigen_solve()
-            self.solve_eigenproblem(n, shift,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0,sort=sort)
+            self._solve_eigenproblem_helper(n, shift,filter=filter,report_accuracy=report_accuracy,target=target,v0=v0,sort=sort)
             param.value = 0
             if azimuthal_m is not None:
                 self._last_eigenvalues_m=numpy.array([vlist]*len(self.get_last_eigenvalues()),dtype=numpy.int32) #type:ignore
@@ -4095,12 +4280,6 @@ class Problem(_pyoomph.Problem):
             self.steady_newton_solve(spatial_adapt)
             self._last_step_was_stationary = True
             if self.get_bifurcation_tracking_mode()!="":
-                # NOTE THAT WE NEGATE OMEGA HERE!
-                # In fact, pyoomph is solving the eigenproblem -lambda*M*v=J*v, which leads to this inversion
-                # Opposed to oomph-lib, pyoomph get's the mass matrix by deriving J with respect to occurences of first order time derivatives.
-                # Since both comes from the same residual, it can only be consistent if either M or J is negated
-                # In the eigensolver, we negate J (since eigensolvers may demand M to be positive (semi-)definite.
-                # In the bifurcation tracking, we just negate omega, for the very same result
                 if self._bifurcation_tracking_parameter_name=="<LAMBDA_TRACKING>":
                     self._last_eigenvalues=numpy.array([self._get_lambda_tracking_real() +self._get_bifurcation_omega()*1j],dtype=numpy.complex128) #type:ignore    
                 else:
@@ -4113,6 +4292,7 @@ class Problem(_pyoomph.Problem):
                 self._last_eigenvectors=self.process_eigenvectors(self._last_eigenvectors)
             else:
                 self._last_eigenvalues_m=None
+                self._last_eigenvalues_k=None
             self._override_for_this_solve(**oldsettings)
             return 0
         else:
@@ -4402,6 +4582,23 @@ class Problem(_pyoomph.Problem):
             return
         self.invalidate_cached_mesh_data()
         print("REMESHING")
+        
+        has_continuation_data=False
+        if self._last_arclength_parameter is not None:  
+            dof_deriv=self.get_arclength_dof_derivative_vector()
+            if len(dof_deriv)>0:
+                dof_current=self.get_arclength_dof_current_vector()
+                # Store the arclength in the history
+                _actual_dofs,_positional_dofs,pinned_values=self.get_all_values_at_current_time(True)            
+                self.set_current_pinned_values(0*pinned_values,True,5)
+                self.set_current_pinned_values(0*pinned_values,True,6)
+                self.set_history_dofs(5,dof_deriv)
+                self.set_history_dofs(6,dof_current)
+                has_continuation_data=True
+                print("STORING CONTINATION DATA BEFORE REMESHING")
+                
+        
+                
         self.actions_before_remeshing(remeshers)
         for r in remeshers:
             r.remesh()
@@ -4464,6 +4661,12 @@ class Problem(_pyoomph.Problem):
                 interp.interpolate() 
 
 
+        if has_continuation_data:
+            print("RESTORING CONTINUATION DATA")
+            dof_deriv=self.get_history_dofs(5)
+            dof_current=self.get_history_dofs(6)
+            self._update_dof_vectors_for_continuation(dof_deriv,dof_current)
+
         num_adapt = self.max_refinement_level if num_adapt is None else num_adapt
 
 
@@ -4498,6 +4701,8 @@ class Problem(_pyoomph.Problem):
         for r in remeshers:
             r.actions_after_remeshing()
         self.invalidate_cached_mesh_data()
+        
+        
 
 
 

@@ -172,6 +172,9 @@ class SlepcEigenSolver(GenericEigenSolver):
         self.store_basis:bool=False
         self._last_basis:Optional[Union[NPComplexArray,NPFloatArray]]=None
         
+    def supports_target(self):
+        return True
+        
     def get_last_basis(self)->Optional[Union[NPComplexArray,NPFloatArray]]:
         return self._last_basis
 

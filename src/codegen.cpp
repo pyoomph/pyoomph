@@ -2801,7 +2801,7 @@ namespace pyoomph
 		}
 	}
 
-	void FiniteElementCode::add_Z2_flux(GiNaC::ex flux)
+	void FiniteElementCode::add_Z2_flux(GiNaC::ex flux,bool for_eigen)
 	{
 		if (stage > 1)
 			throw_runtime_error("Cannot add error estimators any more");
@@ -2817,13 +2817,29 @@ namespace pyoomph
 				{
 					if (!GiNaC::is_a<GiNaC::numeric>(m(i, j)))
 					{
-						this->Z2_fluxes.push_back(m(i, j));
+						if (for_eigen)
+						{
+							this->Z2_fluxes_for_eigen.push_back(m(i, j));
+						}
+						else
+						{
+							this->Z2_fluxes.push_back(m(i, j));
+						}
 					}
 				}
 			}
 		}
 		else if (!GiNaC::is_a<GiNaC::numeric>(evm))
-			this->Z2_fluxes.push_back(evm);
+		{
+			if (for_eigen)
+			{
+				this->Z2_fluxes_for_eigen.push_back(evm);
+			}
+			else
+			{
+				this->Z2_fluxes.push_back(evm);
+			}
+		}
 	}
 
 	GiNaC::ex FiniteElementCode::expand_all_and_ensure_nondimensional(GiNaC::ex what, std::string where, GiNaC::ex *collected_units_and_factor)
@@ -4355,17 +4371,18 @@ namespace pyoomph
 			 */
 	}
 
-	void FiniteElementCode::write_code_get_z2_flux(std::ostream &os)
+	void FiniteElementCode::write_code_get_z2_flux(std::ostream &os,bool for_eigen)
 	{
-		os << "static void GetZ2Fluxes(const JITElementInfo_t * eleminfo, const JITShapeInfo_t * shapeinfo, double * Z2Flux)" << std::endl;
+		os << "static void GetZ2Fluxes"<<(for_eigen ? "ForEigen" : "")<<"(const JITElementInfo_t * eleminfo, const JITShapeInfo_t * shapeinfo, double * Z2Flux)" << std::endl;
 		os << "{" << std::endl;
 		os << std::endl;
 
 		GiNaC::ex gathered;
 		unsigned cnt = 0;
-		for (unsigned int i = 0; i < Z2_fluxes.size(); i++)
+		auto & fluxes=(for_eigen ? Z2_fluxes_for_eigen : Z2_fluxes);
+		for (unsigned int i = 0; i < fluxes.size(); i++)
 		{
-			gathered += Z2_fluxes[i] * GiNaC::wild(cnt++);
+			gathered += fluxes[i] * GiNaC::wild(cnt++);
 		}
 
 		std::set<ShapeExpansion> all_shapeexps = get_all_shape_expansions_in(gathered);
@@ -4412,10 +4429,10 @@ namespace pyoomph
 		GiNaC::print_FEM_options csrc_opts;
 		csrc_opts.for_code = this;
 
-		for (unsigned int i = 0; i < Z2_fluxes.size(); i++)
+		for (unsigned int i = 0; i < fluxes.size(); i++)
 		{
 			os << "  Z2Flux[" << i << "] = ";
-			GiNaC::ex flux = 0 + Z2_fluxes[i];
+			GiNaC::ex flux = 0 + fluxes[i];
 			RemoveSubexpressionsByIndentity sub_to_id(this);
 			flux = sub_to_id(flux);
 			flux = flux.subs(GiNaC::lst{expressions::x, expressions::y, expressions::z}, {_x, _y, _z});
@@ -4675,7 +4692,12 @@ namespace pyoomph
 		os << std::endl;
 		if (Z2_fluxes.size())
 		{
-			write_code_get_z2_flux(os);
+			write_code_get_z2_flux(os,false);
+			os << std::endl;
+		}
+		if (Z2_fluxes_for_eigen.size())
+		{
+			write_code_get_z2_flux(os,true);
 			os << std::endl;
 		}
 		os << std::endl;
@@ -6628,6 +6650,15 @@ namespace pyoomph
 		if (this->Z2_fluxes.size())
 		{
 			init << " functable->GetZ2Fluxes=&GetZ2Fluxes;" << std::endl;
+		}
+		init << " functable->num_Z2_flux_terms_for_eigen = " << this->Z2_fluxes_for_eigen.size() << ";" << std::endl;
+		if (this->Z2_fluxes_for_eigen.size())
+		{
+			init << " functable->GetZ2FluxesForEigen=&GetZ2FluxesForEigen;" << std::endl;
+		}
+
+		if (this->Z2_fluxes.size() || this->Z2_fluxes_for_eigen.size())
+		{
 			this->write_required_shapes(init, "  ", "Z2Fluxes");
 		}
 

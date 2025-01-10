@@ -262,6 +262,31 @@ class EigenMatrixSetDofsToZero(EigenMatrixManipulatorBase):
 		return A
 
 	def apply_on_J_and_M(self,solver:"GenericEigenSolver",J:DefaultMatrixType,M:DefaultMatrixType) -> Tuple[DefaultMatrixType, DefaultMatrixType]:
+		self.zeromap:Set[int]=set()
+		import _pyoomph
+		for d in self.doflist:
+			if isinstance(d,str):
+				eqs=self.resolve_equations_by_name(d)
+			else:
+				eqs=set([d])
+			if  _pyoomph.get_verbosity_flag() != 0:
+				print("INFO ",d,eqs)
+			self.zeromap=self.zeromap.union(eqs)
+		#print("GOING TO SET TO ZERO",self.zeromap)
+		N=J.shape[0]
+		Adiag=numpy.ones(N)
+		Adiag[numpy.array(sorted(list(self.zeromap)),dtype=numpy.int64)] = 0.0
+		Bdiag=1-Adiag
+		A=scipy.sparse.spdiags(Adiag, [0], N, N).tocsr()
+		B=scipy.sparse.spdiags(Bdiag, [0], N, N).tocsr()
+		J=A@J+B # Set removed rows to delta_ij
+		M=A@M # Set removed rows to zero
+		return J,M
+		
+
+
+	def apply_on_J_and_M___OLD(self,solver:"GenericEigenSolver",J:DefaultMatrixType,M:DefaultMatrixType) -> Tuple[DefaultMatrixType, DefaultMatrixType]:
+		# TODO OLD VERSION: Slow, remove
 		import _pyoomph
 		self.zeromap:Set[int]=set()
 		for d in self.doflist:
@@ -294,6 +319,8 @@ class GenericEigenSolver:
 		self.real_contribution:str=""
 		self.imag_contribution:Optional[str]=None
 
+	def supports_target(self)->bool:
+		return False
 
 	def setup_matrix_contributions(self,real_contribution:str,imag_contribution:Optional[str]=None):
 		self.real_contribution=real_contribution
@@ -369,7 +396,9 @@ class GenericEigenSolver:
 
 		self.problem._set_solved_residual("")
 
+		#print("Applying Matrix manipulators")
 		for manip in self.matrix_manipulators:
+			#print("APPLY MANIP",manip)
 			#if isinstance(manip,EigenMatrixSetDofsToZero):      
 				#print("APPLY MANIP",manip,manip.doflist)
 			matJ,matM=manip.apply_on_J_and_M(self,matJ,matM)
@@ -377,4 +406,5 @@ class GenericEigenSolver:
 		if matM.nnz==0: #type:ignore
 			raise RuntimeError("The mass matrix has no entries. This likely means that you do not have any time derivatives in your system")
 
+		print("Matrices assembled. Invoking eigensolver")
 		return matJ,matM,n,is_complex

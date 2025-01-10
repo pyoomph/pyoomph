@@ -673,7 +673,7 @@ namespace pyoomph
 
       std::map<std::string, std::map<FiniteElementSpace *, std::map<std::string, bool>>> required_shapes;
       unsigned max_dt_order = 0;
-      std::vector<GiNaC::ex> Z2_fluxes;
+      std::vector<GiNaC::ex> Z2_fluxes,Z2_fluxes_for_eigen;
       std::map<std::string, GiNaC::ex> integral_expressions;
       std::map<std::string, GiNaC::ex> integral_expression_units;
 
@@ -697,7 +697,7 @@ namespace pyoomph
       virtual void write_code_header(std::ostream &os);
       virtual void write_code_info(std::ostream &os);
       virtual void write_code_geometric_jacobian(std::ostream &os);
-      virtual void write_code_get_z2_flux(std::ostream &os);
+      virtual void write_code_get_z2_flux(std::ostream &os,bool for_eigen);
       virtual void check_for_external_ode_dependencies();
       virtual void write_code_multi_ret_call(std::ostream &os, std::string indent, GiNaC::ex for_what, unsigned i, std::set<int> *multi_return_calls_written = NULL, GiNaC::ex *invok = NULL);
       virtual GiNaC::ex write_code_subexpressions(std::ostream &os, std::string indent, GiNaC::ex for_what, const std::set<ShapeExpansion> &required_shapeexps, bool hessian);
@@ -768,7 +768,7 @@ namespace pyoomph
       virtual void mark_shapes_required(std::string func_type, FiniteElementSpace *space, BasisFunction *bf);
       virtual GiNaC::ex get_scaling(std::string name, bool testscale = false) { return 1; }
 
-      virtual void add_Z2_flux(GiNaC::ex flux);
+      virtual void add_Z2_flux(GiNaC::ex flux,bool for_eigen);
       virtual int get_dimension() const { return element_dim; }
       void set_nodal_dimension(unsigned d) { nodal_dim = d; }
       unsigned nodal_dimension() const { return nodal_dim; }

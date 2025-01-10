@@ -448,8 +448,8 @@ typedef struct JITFuncSpec_Table_FiniteElement
   JITFuncSpec_HessianVectorProduct_FiniteElement *HessianVectorProduct;
   bool hessian_generated;
 
-  unsigned num_Z2_flux_terms;
-  JITFuncSpec_GetZ2Fluxes_FiniteElement GetZ2Fluxes;
+  unsigned num_Z2_flux_terms,num_Z2_flux_terms_for_eigen;
+  JITFuncSpec_GetZ2Fluxes_FiniteElement GetZ2Fluxes,GetZ2FluxesForEigen;
   JITFuncSpec_RequiredShapes_FiniteElement_t shapes_required_Z2Fluxes;
 
   JITFuncSpec_InitialCondition_FiniteElement *InitialConditionFunc;

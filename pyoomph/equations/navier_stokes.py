@@ -558,7 +558,7 @@ class NavierStokesFreeSurface(InterfaceEquations):
     def define_fields(self):
         flow_eqs=self.get_parent_equations(StokesEquations)
         if flow_eqs == []:
-            raise RuntimeError(self.get_parent_domain().get_domain_name())
+            raise RuntimeError("No (Navier-)Stokes defined on domain "+self.get_parent_domain().get_domain_name())
         assert isinstance(flow_eqs,StokesEquations)
         if not flow_eqs.PFEM_options or not flow_eqs.PFEM_options.active or flow_eqs.PFEM_options.first_order_system:                    
             vspace=flow_eqs.get_velocity_space_from_mode(for_interface=True)

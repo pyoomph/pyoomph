@@ -2108,10 +2108,13 @@ class Equations(BaseEquations):
     def get_nodal_delta(self) -> Expression:
         return nondim("_nodal_delta")
 
-    def add_spatial_error_estimator(self, expr:"Expression"):
+    def add_spatial_error_estimator(self, expr:"Expression",for_base:bool=True,for_eigen:bool=True):
         master = self._get_combined_element()
         cg=master._assert_codegen()
-        cg._add_Z2_flux(expr)
+        if for_base:
+            cg._add_Z2_flux(expr,False)
+        if for_eigen:
+            cg._add_Z2_flux(expr,True)
 
 
 

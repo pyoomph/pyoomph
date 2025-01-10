@@ -252,6 +252,7 @@ namespace pyoomph
 	DynamicBulkElementInstance *BulkElementBase::__CurrentCodeInstance = NULL;
 	unsigned BulkElementBase::zeta_time_history = 0;
 	unsigned BulkElementBase::zeta_coordinate_type = 0; // 0 means Lagrangian, 1 Eulerian, on co-dimensional meshes it will be the boundary coordinate (if set)
+	bool BulkElementBase::use_eigen_error_estimators=false;
 
 	double BulkElementBase::get_quality_factor()
 	{
@@ -6250,8 +6251,18 @@ namespace pyoomph
 	{
 		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
 		if (functable->fd_jacobian)
-			throw_runtime_error("FD Mass matrix not implemented")
-				fill_in_generic_residual_contribution_jit(residuals, jacobian, mass_matrix, 2);
+		{
+			throw_runtime_error("FD Mass matrix not implemented");
+			//WARNING: This takes the analytic mass matrix
+			codeinst->get_func_table()->fd_jacobian=false;
+			fill_in_generic_residual_contribution_jit(residuals, jacobian, mass_matrix, 2);
+			codeinst->get_func_table()->fd_jacobian=true;
+			residuals.initialise(0.0);
+			jacobian.initialise(0.0);
+			fill_in_generic_residual_contribution_jit(residuals, jacobian, mass_matrix, 1);
+			
+		}
+		fill_in_generic_residual_contribution_jit(residuals, jacobian, mass_matrix, 2);
 	}
 
 	/*
@@ -7208,35 +7219,28 @@ namespace pyoomph
 
 	unsigned BulkElementBase::num_Z2_flux_terms()
 	{
-		return codeinst->get_func_table()->num_Z2_flux_terms;
+		if (BulkElementBase::use_eigen_error_estimators) return codeinst->get_func_table()->num_Z2_flux_terms_for_eigen;
+		else return codeinst->get_func_table()->num_Z2_flux_terms;
 	}
 
 	void BulkElementBase::get_Z2_flux(const oomph::Vector<double> &s, oomph::Vector<double> &flux)
 	{
-		if (codeinst->get_func_table()->GetZ2Fluxes)
+		bool has_fluxes=(BulkElementBase::use_eigen_error_estimators ? codeinst->get_func_table()->GetZ2FluxesForEigen : codeinst->get_func_table()->GetZ2Fluxes );
+		if (has_fluxes)
 		{
 			this->interpolate_hang_values(); // XXX This should be moved to somewhere else, after each update of any values
 			this->prepare_shape_buffer_for_integration(codeinst->get_func_table()->shapes_required_Z2Fluxes, 0);
 			double JLagr;
 			this->fill_shape_info_at_s(s, 0, codeinst->get_func_table()->shapes_required_Z2Fluxes, JLagr, 0);
 			this->set_remaining_shapes_appropriately(shape_info,codeinst->get_func_table()->shapes_required_Z2Fluxes);
-/*
-			if (this->eleminfo.nnode_C2)
+			if (BulkElementBase::use_eigen_error_estimators)
 			{
-				shape_info->shape_Pos = shape_info->shape_C2;
-				shape_info->dx_shape_Pos = shape_info->dx_shape_C2;
-				shape_info->dX_shape_Pos = shape_info->dX_shape_C2;
-				shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C2;
+				codeinst->get_func_table()->GetZ2FluxesForEigen(&eleminfo, shape_info, &(flux[0]));
 			}
 			else
 			{
-				shape_info->shape_Pos = shape_info->shape_C1;
-				shape_info->dx_shape_Pos = shape_info->dx_shape_C1;
-				shape_info->dX_shape_Pos = shape_info->dX_shape_C1;
-				shape_info->d_dx_shape_dcoord_Pos = shape_info->d_dx_shape_dcoord_C1;
+				codeinst->get_func_table()->GetZ2Fluxes(&eleminfo, shape_info, &(flux[0]));
 			}
-*/
-			codeinst->get_func_table()->GetZ2Fluxes(&eleminfo, shape_info, &(flux[0]));
 		}
 	}
 
