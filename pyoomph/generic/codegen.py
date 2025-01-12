@@ -376,8 +376,8 @@ class BaseEquations(_pyoomph.Equations):
     def get_azimuthal_r0_info(self):
         """Returns a dict [0,1,2]-> Set[str] with the names of the fields that are pinned at r=0 for azimuthal symmetry.
         Entry 0 contains the names of the fields that are pinned to zero at r=0 for normal (axisymmetric solves). This pinning is strongly enforced.
-        Entry 1 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|=1. This pinning is implemented by modifying the eigenproblem matrices.
-        Entry 2 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with |m|>=2. This pinning is implemented by modifying the eigenproblem matrices.        
+        Entry 1 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with m=1. This pinning is implemented by modifying the eigenproblem matrices.
+        Entry 2 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with m>=2. This pinning is implemented by modifying the eigenproblem matrices.        
         """
         master=self._get_combined_element()
         return master._azimuthal_r0_info

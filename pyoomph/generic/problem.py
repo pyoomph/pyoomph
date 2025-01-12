@@ -3990,6 +3990,20 @@ class Problem(_pyoomph.Problem):
 
 
     def rotate_eigenvectors(self,eigenvectors,dofs_to_real:Union[str,List[str],Set[str]],normalize_dofs:bool=False,normalize_amplitude:Union[float,complex]=1,normalize_max:bool=True):
+        """
+        Should be called within the method :py:meth:`process_eigenvectors` to rotate the eigenvectors to e.g. a common phase. 
+        This is optional, but avoids phase jumps in the eigenvectors when following an eigenbranch.
+
+        Args:
+            eigenvectors: Eigenvectors to rotate, usually the ones passed in the automatically method :py:meth:`process_eigenvectors`.
+            dofs_to_real: Which degrees of freedom to consider to find the phase. Can be a single string, a list of strings or a set of strings.
+            normalize_dofs: Normalizes the eigenvector with respect to the selected dofs as well. Defaults to False.
+            normalize_amplitude: If normalization is active, we can scale the overall magnitude of the eigenvector by this value. Defaults to 1.
+            normalize_max: If True, we normalize by the maximum magnitude of the listed dofs, otherwise by the average magnitude. Defaults to True.
+
+        Returns:
+            The processed eigenvectors, return it as result of the method :py:meth:`process_eigenvectors`.
+        """
         neweigen=[]
         dofs=self.dof_strings_to_global_equations(dofs_to_real)
         dofs=numpy.array(list(dofs),dtype=numpy.int64)
