@@ -12,3 +12,4 @@ To activate plotting, one has to set the ``plotter`` property of the :py:class:`
    plotting/droplet.rst
    plotting/replotting.rst
    plotting/eigenfuncs.rst
+   plotting/eigendynamics.rst

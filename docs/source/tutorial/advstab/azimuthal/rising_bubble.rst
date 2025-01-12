@@ -1,3 +1,5 @@
+.. _secadvstabrisingbubble:
+
 Path instability of a rising bubble
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -5,7 +7,7 @@ One particular powerful feature is the possibility to tackle azimuthal instabili
 
 First of all, we start by defining a rectangular mesh with circular hole in the center. This hole later represents the bubble. While we could just use the :py:class:`~pyoomph.meshes.gmsh.GmshTemplate` class to create such a mesh, we prefer to make a structured mesh by manually placing all elements of a coarse mesh, which will be refined during the solution procedure. Read :numref:`secspatialmesh1` to learn how to create meshes that way. The mesh class itself is skipped here for brevity, but is part of the example code you can dowload below.
 
-As in :cite:`Bonnefis2024`, we neglect the viscosity and the mass density inside the bubble and nondimensionalize the equations in terms of a Bond number :math:`Bo=\rho g D^2/\sigma` and a Galilei number :math:`Ga=\rho\sqrt{gD^3}/\mu` (:math:`D=2R` is the droplet diameter), where we express Galilei number by the Bond number via a Morton number :math:`Mo=g \mu^4/(\rho \sigma^3)`. The Morton number in independent of the bubble size and only depends on the liquid properties and the gravity. In particular, :math:`Mo=6.2\times 10^{-7}` holds for DMS-T05 :cite:`Bonnefis2024`, which we consider here. Keeping the Morton number fixed, we can calculate the corresponding Galilei number from the Bond number by :math:`Ga=(Bo^3/Mo)^{1/4}. However, the latter expression is problematic if the Bond number becomes negative. By default, pyoomph's global parameters may attain positive and negative values and therefore, the 4th root will be rather problematic. We therefore inform pyoomph that the Bond number is always a positive parameter. This information will be used in the code generation later on for a good code generation of the 4th root:
+As in :cite:`Bonnefis2024`, we neglect the viscosity and the mass density inside the bubble and nondimensionalize the equations in terms of a Bond number :math:`Bo=\rho g D^2/\sigma` and a Galilei number :math:`Ga=\rho\sqrt{gD^3}/\mu` (:math:`D=2R` is the droplet diameter), where we express Galilei number by the Bond number via a Morton number :math:`Mo=g \mu^4/(\rho \sigma^3)`. The Morton number in independent of the bubble size and only depends on the liquid properties and the gravity. In particular, :math:`Mo=6.2\times 10^{-7}` holds for DMS-T05 :cite:`Bonnefis2024`, which we consider here. Keeping the Morton number fixed, we can calculate the corresponding Galilei number from the Bond number by :math:`Ga=(Bo^3/Mo)^{1/4}`. However, the latter expression is problematic if the Bond number becomes negative. By default, pyoomph's global parameters may attain positive and negative values and therefore, the 4th root will be rather problematic. We therefore inform pyoomph that the Bond number is always a positive parameter. This information will be used in the code generation later on for a good code generation of the 4th root:
 
 .. code:: python
 
@@ -100,7 +102,7 @@ Optionally, we can process all calculated eigenvectors. Here, we make sure that 
         # Eigenvectors are arbitrary up to a scalar constant. 
         # We can multiply it by such a constant that the average x-displacement of the interface mesh has positive real part and zero imaginary part (on average)
         # This is optional, but makes the results more consistent, since the multiplicative constant is otherwise arbitrary
-        return self.rotate_eigenvectors(eigenvectors,"domain/interface/mesh_x")
+        return self.rotate_eigenvectors(eigenvectors,"domain/interface/mesh_x",normalize_amplitude=0.2,normalize_dofs=True)
 
 
 The driver code now mainly sets up the problem. In particular, we have to activate again the azimuthal stability analysis. We need a robust complex eigensolver. For that, you have to install a complex variant of the package SLEPc. On Linux, you can do so via e.g.
@@ -165,9 +167,19 @@ Eventually, we get the eigenvalues shown below, which agree decently with the da
 ..  figure:: rising_bubble.*
 	:name: figrisingbubble
 	:align: center
-	:alt: Eigenvalues of the first :math:`m=1` instability of a rising bubble with :math:`Mo=6.2\times 10^{-7}` (DMS-T05), agreeing well with the data of :cite:`Bonnefis2024`.
+	:alt: Eigenvalues of the first :math:`m=1` instability	
 	:class: with-shadow
 	:width: 60%
+	
+	Eigenvalues of the first :math:`m=1` instability of a rising bubble with :math:`Mo=6.2\times 10^{-7}` (DMS-T05), agreeing well with the data of :cite:`Bonnefis2024`.
+
+We can also generate a movie of the instability. Please refer to :numref:`secploteigendynamics` for a tutorial on this.
+
+.. only:: html
+
+	.. raw:: html 
+
+		<figure class="align-center" id="vidrisingbubble"><video autoplay="True" preload="auto" width="60%" loop=""><source src="../../../_static/rising_bubble.mp4" type="video/mp4"></video><figcaption><p><span class="caption-text">Eigendynamics at <span class="math notranslate nohighlight">\(Bo=4\)</span> </span></p></figcaption></figure>
 	
 	
 .. only:: html

@@ -1005,6 +1005,22 @@ class Problem(_pyoomph.Problem):
                 
                 
     def create_eigendynamics_animation(self,outdir:str,plotter:"MatplotlibPlotter",eigenvector:int=0,init_amplitude:Optional[float]=None,max_amplitude:Optional[float]=None,numperiods:float=1,numouts:int=25,phi0:float=0):
+        """
+        Creates an animation of the eigenfunction dynamics. The eigenfunction is animated by varying the time and the amplitude of the eigenfunction, which is added to the degrees of freedom at each time.
+        All images are saved in the specified output directory (relative to the output directory of the problem). The plotter is used to create the images. 
+        Azimuthal instabilities will automatically mirror the eigenfunction to the left in the appropriate way.
+
+        Args:
+            outdir: Output directory for the animation images relative to the output directory of the problem.
+            plotter: Plotter class to use for the animation.
+            eigenvector: Optional index of the eigenfunction to animate. Defaults to 0.
+            init_amplitude: Initial amplitude of the eigenperturbation. If this and ``max_amplitude`` is not provided, the amplitude is set to 1. Defaults to None.
+            max_amplitude: Maximum amplitude of the eigenperturbation. If this is provided, the amplitude is set to this value at the beginning and decreases over time (eigenvalue has negative real part) or will reach this amplitude at the end of the considered time (eigenvalue has positive real part). Defaults to None.
+            numperiods: Number of periods to animate. For purely real eigenvalues, the characteristic time is given by the real part. Defaults to 1.
+            numouts: Number of output steps. Defaults to 25.
+            phi0: Initial phase. Defaults to 0.
+        
+        """
         if len(self.get_last_eigenvalues())<eigenvector+1:
             raise RuntimeError("Eigenvalue/vector at index "+str(eigenvector)+" not calculated")
         eigenvalue=self.get_last_eigenvalues()[eigenvector]
