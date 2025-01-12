@@ -81,16 +81,13 @@ Once set up, we can use this problem and solve for the stationary state at the m
 	    problem.save_state("start.dump") # Save the initial state
 	    
 	    neigen=2
-	    def create_Bond_curve(Bo,eigenindex,start_high_L=False):
-		if start_high_L:
-		    problem.load_state("end.dump",ignore_outstep=True) # Load the initial state
-		else:
-		    problem.load_state("start.dump",ignore_outstep=True) # Load the initial state
+	    def create_Bond_curve(Bo,eigenindex,startfile, postfix,start_high_L=False):
+		problem.load_state(startfile,ignore_outstep=True) # Load the initial state
 		# Go to the desired Bond number and length
 		problem.go_to_param(Bo=Bo)
 		problem.go_to_param(L=(maxL if start_high_L else minL))
 		# Create and output file for this Bond number
-		curve=NumericalTextOutputFile(problem.get_output_directory("curve_Bo_"+str(Bo)+"_"+str(eigenindex)+"_"+("upper" if start_high_L else "lower")+".txt"),header=["L","ReLambda","ImLambda"])    
+		curve=NumericalTextOutputFile(problem.get_output_directory("curve_Bo_"+str(Bo)+"_"+str(eigenindex)+"_"+postfix+".txt"),header=["L","ReLambda","ImLambda"])    
 		# Solve the eigenproblem and add the first eigenvalue to the curve
 		problem.solve_eigenproblem(neigen)        
 		# We need to solve one eigenproblem only
@@ -98,33 +95,37 @@ Once set up, we can use this problem and solve for the stationary state at the m
 		problem.activate_eigenbranch_tracking(eigenvector=eigenindex)
 		problem.solve() # And solve for it
 		
-		curve.add_row(problem.L,numpy.real(problem.get_last_eigenvalues()[0]),numpy.imag(problem.get_last_eigenvalues()[0]))
-		problem.output_at_increased_time()
 		# Scan the curve
+		curve.add_row(problem.L,numpy.real(problem.get_last_eigenvalues()[0]),numpy.imag(problem.get_last_eigenvalues()[0]))
 		dL0=(maxL-minL)/20*(-1 if start_high_L else 1) # Initial step size
 		dL=dL0 # Current step size
 		while problem.L.value<=maxL and problem.L.value>=minL:
 		    # We must use arclength continuation here, since we hit fold bifurcations if Bo!=0
 		    dL=problem.arclength_continuation("L",dL,max_ds=dL0)        
-		    problem.output_at_increased_time()
 		    curve.add_row(problem.L,numpy.real(problem.get_last_eigenvalues()[0]),numpy.imag(problem.get_last_eigenvalues()[0]))
 		problem.deactivate_bifurcation_tracking() # Stop the bifurcation tracking (here, eigenbranch tracking)
 		
 	    
 	    # Create the Bond curve for Bo=0
-	    create_Bond_curve(0,0)
+	    create_Bond_curve(0,0,"start.dump","std")
 	    # Save the end state for later (high L)
 	    problem.save_state("end.dump")
 	    # Create the Bond curve for Bo=1
-	    create_Bond_curve(0,1)
+	    create_Bond_curve(0,1,"start.dump","std")
 	    
 	    # Now create the lower L curves for Bo=0.0025
-	    create_Bond_curve(0.0025,0)
-	    create_Bond_curve(0.0025,1)
+	    create_Bond_curve(0.0025,0,"start.dump","fold")
+	    create_Bond_curve(0.0025,1,"start.dump","fold")
 	    
 	    # And also the higher L curves for Bo=0.0025
-	    create_Bond_curve(0.0025,0,start_high_L=True)
-	    create_Bond_curve(0.0025,1,start_high_L=True)    
+	    create_Bond_curve(0.0025,0,"end.dump","unstab",start_high_L=True)
+	    # Save the end state for later, when going back to Bo=0 
+	    problem.save_state("end2.dump")
+	    create_Bond_curve(0.0025,1,"end.dump","unstab",start_high_L=True)    
+	    
+	    # Now we have found a rather strange unstable branch, where the interface is not straight despite of Bo=0. 
+	    # Here, the two curvatures cancel each other out, but it is not stable.
+	    create_Bond_curve(0,0,"end2.dump","unstab")      
 
 
 ..  figure:: eigenconti.*
@@ -134,7 +135,12 @@ Once set up, we can use this problem and solve for the stationary state at the m
 	:class: with-shadow
 	:width: 80%
 
-	Eigenbranches of a liquid bridge with gravity. The original Rayleigh-Plateau instability is broken by the presence of gravity.
+	Eigenbranches of a liquid bridge with gravity. The original Rayleigh-Plateau instability is broken by the presence of gravity. The subcritical pitchfork bifurcation becomes imperfect when gravity is considered.
+
+.. note::
+
+	If you want to find the pitchfork bifurcation using the bifurcation tracking tools (cf. :numref:`sectemporalbiftrack`), you will get some issues here. Since symmetry broken by the pitchfork bifurcation is not centered around the :math:`x`-axis, the pitchfork won't be found. To overcome this issue, you can just enforce the ``"top"`` boundary to be at ``mesh_y=self.L/2`` and do it the same way with the ``"bottom"`` to ``mesh_y=-self.L/2`` with an :py:class:`~pyoomph.meshes.bcs.EnforcedDirichlet` including the pinning of the ``_kinbc`` at ``"right/bottom"``. If the symmetry broken by the pitchfork is symmetric with respect to the :math:`x`-axis, it works fine.
+
 
 .. only:: html
 

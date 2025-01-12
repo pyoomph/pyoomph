@@ -1951,7 +1951,7 @@ class Problem(_pyoomph.Problem):
     
 
     # Can be used for go_to_param or 
-    def remesh_handler_during_continuation(self, force: bool = False, resolve: bool = True, resolve_before_eigen: bool = False, reactivate_biftrack_neigen: int = 4, reactivate_biftrack_shift:float=0,resolve_max_newton_steps : Optional[int]=None,num_adapt:Optional[int]=None):
+    def remesh_handler_during_continuation(self, force: bool = False, resolve: bool = True, resolve_before_eigen: bool = False, reactivate_biftrack_neigen: int = 4, reactivate_biftrack_shift:float=0,resolve_max_newton_steps : Optional[int]=None,num_adapt:Optional[int]=None,resolve_globally_convergent_newton:bool=False):
         """
         Handle remeshing during continuation. We might have to calculate e.g. a new eigenvector when doing bifurcation tracking.
         In that case, set Problem.do_remeshing_when_necessary to False to prevent any automatic remeshing.
@@ -1963,6 +1963,7 @@ class Problem(_pyoomph.Problem):
             reactivate_biftrack_neigen (int, optional): Number of eigenvalues to reactivate bifurcation tracking. Defaults to 4.
             reactivate_biftrack_shift (float, optional): Shift for the eigenvalues to reactivate bifurcation tracking. Defaults to 0.
             resolve_max_newton_steps (int, optional): Maximum number of Newton steps to resolve the problem. 
+            resolve_globally_convergent_newton: Use a globally convergent Newton solver. Defaults to False.
             
 
         Returns:
@@ -2008,9 +2009,9 @@ class Problem(_pyoomph.Problem):
             self.solve_eigenproblem(reactivate_biftrack_neigen,azimuthal_m=m,normal_mode_k=k,shift=reactivate_biftrack_shift)
             self.activate_bifurcation_tracking(biftrack_param, biftrack)
             if resolve:
-                self.solve(max_newton_iterations=resolve_max_newton_steps)
+                self.solve(max_newton_iterations=resolve_max_newton_steps,globally_convergent_newton=resolve_globally_convergent_newton)
         elif resolve:
-            self.solve(max_newton_iterations=resolve_max_newton_steps)
+            self.solve(max_newton_iterations=resolve_max_newton_steps,globally_convergent_newton=resolve_globally_convergent_newton)
 
     def _link_geometry_and_equations(self):
         #Go through the templates and create them

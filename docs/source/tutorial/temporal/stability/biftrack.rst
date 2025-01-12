@@ -1,3 +1,5 @@
+.. _sectemporalbiftrack:
+
 Bifurcation tracking
 ~~~~~~~~~~~~~~~~~~~~
 
