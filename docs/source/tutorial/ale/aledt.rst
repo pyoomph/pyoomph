@@ -71,13 +71,13 @@ where :math:`\psi(\vec{x},t)` are the shape/basis functions, which are due to th
 
 .. math:: :label: eqalepartialtnoale
 
-   \text{partial}\_\text{t}^{\text{ALE=False}\text{(c)}=\sum_l \dot{c}_l(t) \psi(\vec{x},t)
+   \text{partial}\_\text{t}^{\text{ALE=False}}\text{(c)}=\sum_l \dot{c}_l(t) \psi(\vec{x},t)
 
 Thereby, when the mesh moves, the entire field (including the time derivative) will co-move with the mesh. If we want to compensate for the mesh motion, we have to compensate for the term originating from the chain rule due to the time-dependence of the mesh coordinates. To that end :py:func:`~pyoomph.expressions.generic.partial_t` has an optional argument ``ALE``, which defaults to ``ALE="auto"``. If ``ALE`` is ``False``, we calculate the time derivative according to :math:numref:`eqalepartialtnoale`. However, if ``ALE=True`` is passed, we get
 
 .. math:: :label: eqalepartialtwithale
 
-   \text{partial}\_\text{t}^{\text{ALE=True}\text{(c)}=\text{partial}\_\text{t}^{\text{ALE=False}\text{(c)}-\dot{\vec{x}}\cdot\nabla c
+   \text{partial}\_\text{t}^{\text{ALE=True}}\text{(c)}=\text{partial}\_\text{t}^{\text{ALE=False}}\text{(c)}-\dot{\vec{x}}\cdot\nabla c
 
 Thereby, the field :math:`c` is moved against the mesh motion and hence stays in place when the mesh moves. Since ``ALE=True`` requires the evaluation of the mesh velocity :math:`\dot{\vec{x}}`, it is not required on static meshes. On a static mesh, :math:`\dot{\vec{x}}=0` holds, and hence the calculation is redundantly time-consuming during the assembly of the system. Pyoomph also allows to pass ``ALE="auto"`` (the default value) to set it to ``False`` if the mesh is static, i.e. no :py:class:`~pyoomph.generic.codegen.Equations` are added that call :py:meth:`~pyoomph.generic.codegen.Equations.activate_coordinates_as_dofs`. Thereby, the redundant computation of :math:`\dot{\vec{x}}` is not carried out. If the mesh is moving, i.e. an equation for the mesh coordinates is present, ``ALE="auto"`` will become ``ALE=True``, i.e. expanding according to :math:numref:`eqalepartialtwithale`.
 
