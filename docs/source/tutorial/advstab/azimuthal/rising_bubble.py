@@ -166,7 +166,7 @@ class RisingBubbleProblem(Problem):
         eqs+=NavierStokesEquations(dynamic_viscosity=1/Ga ,mass_density=1,gravity=vector(0,-1)*partial_t(U),mode="CR")                
         
         # Free surface with the additional pressure of the bubble and the absorbed hydrostatic pressure
-        eqs+=NavierStokesFreeSurface(surface_tension=1/self.Bo,additional_normal_traction=-P+var("coordinate_y"))@"interface"
+        eqs+=NavierStokesFreeSurface(surface_tension=1/self.Bo,additional_normal_traction=P+var("coordinate_y"))@"interface"
         
         # Constraints fixing the bubble velocity U and the bubble pressure P        
         eqs+=WeakContribution(1/2*var("coordinate_y")**2*var("normal_y"),Utest)@"interface"        
