@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -120,8 +120,8 @@ namespace pyoomph
     double temporal_error_in_position(oomph::Node *const &node_pt, const unsigned &i);
     double temporal_error_in_value(oomph::Data *const &data_pt, const unsigned &i);
 
-    void assign_initial_values_impulsive(oomph::Data *const &data_pt) {}
-    void assign_initial_positions_impulsive(oomph::Node *const &node_pt) {}
+    void assign_initial_values_impulsive(oomph::Data *const &data_pt); //{}
+    void assign_initial_positions_impulsive(oomph::Node *const &node_pt); //{}
 
     void set_num_unsteady_steps_done(unsigned n) { unsteady_steps_done_for_degrading = n; }
     void increment_num_unsteady_steps_done() { unsteady_steps_done_for_degrading++; }

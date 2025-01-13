@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -509,6 +509,16 @@ class MeshDataCacheCombinedOperator(MeshDataCacheOperatorBase):
         return False
 
 class MeshDataCombineWithEigenfunction(MeshDataCacheOperatorBase):
+    """
+    Can be added as ``operator`` to :py:class:`~pyoomph.output.meshio.MeshFileOutput` to combine the solution with the eigenfunction data. Both will be written to the same file and can be postprocessed in e.g. Paraview.
+
+    Args:
+        eigenindex: Index of the eigenfunction to combine with the solution. Can be a single index or a list of indices.
+        eigen_prefix_real: Prefix for the real part of the eigenfunction data.
+        eigen_prefix_imag: Prefix for the imaginary part of the eigenfunction data.
+        eigen_prefix_merged: Prefix for the merged eigenfunction data.
+        add_eigen_to_mesh_positions: If True, the eigenfunction data will be added to the mesh positions. 
+    """
     def __init__(self,eigenindex:Union[int,Sequence[int]],eigen_prefix_real:str="EigenRe_",eigen_prefix_imag:str="EigenIm_",eigen_prefix_merged:str="Eigen_",add_eigen_to_mesh_positions=False):
         super(MeshDataCombineWithEigenfunction, self).__init__()
         
@@ -623,6 +633,17 @@ class MeshDataCombineWithEigenfunction(MeshDataCacheOperatorBase):
 
 
 class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
+    """
+    Can be added as ``operator`` to :py:class:`~pyoomph.output.meshio.MeshFileOutput` to extrude the mesh in the z-direction. Most useful combined with :py:class:`MeshDataCombineWithEigenfunction` and Cartesian normal mode stability analysis.
+    
+    Args:
+        n_segments: Number of segments in the z-direction.
+        default_length: Default length of the extrusion (when no wave number is available).
+        phase: Phase of the extrusion to start with.
+        apply_k_mode_expansion: If True, the extrusion will consider the exp(i*k*z) factor of the eigenfunction.
+        use_k_for_length: If True, the length of the extrusion will be determined by the wave number (if available, otherwise default_length).
+        numperiods: Number of periods to extrude (in terms of either default_length or 2*pi/k).
+    """
     def __init__(self,n_segments:int=32,default_length=1,phase:float=0.0,apply_k_mode_expansion:bool=True,use_k_for_length:bool=True,numperiods:float=1):
         super(MeshDataCartesianExtrusion, self).__init__()
         self.n_segments=n_segments
@@ -686,7 +707,8 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                 new_nodal_field_inds["normal_z"] = max(new_nodal_field_inds.values()) + 1
             
 
-            field_operators["coordinate_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "coordinate_y"] #type:ignore
+            #field_operators["coordinate_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "coordinate_y"] #type:ignore
+            field_operators["coordinate_z"] = [lambda : numpy.repeat(zs,len(base.nodal_values[:,0])).flatten()] #type:ignore
             if "lagrangian_z" in base.nodal_field_inds:
                 field_operators["lagrangian_z"] = [lambda cy: numpy.tile(cy, n_segments+1), "lagrangian_y"] #type:ignore
             field_operators["normal_z"] = [lambda ny: numpy.tile(ny,n_segments+1), "normal_y"] #type:ignore
@@ -798,36 +820,28 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                         pass
 
 
-        if False:
+        if True:
             for vfield,components in vector_fields.items(): #type:ignore
                 if vfield in completed_eigen_vector_fields:
                     continue
                 if vfield+"_x" in new_nodal_field_inds:
                     if vfield+"_y" in new_nodal_field_inds:
-                        new_nodal_field_inds[vfield+"_z"] = max(new_nodal_field_inds.values()) + 1
-                        field_operators[vfield+"_z"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_y"] #type:ignore
+                        field_operators[vfield+"_y"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_y"] #type:ignore
+                        if vfield+"_normal" in new_nodal_field_inds:                                                
+                            new_nodal_field_inds[vfield+"_z"] = max(new_nodal_field_inds.values()) + 1
+                            field_operators[vfield+"_z"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_normal"] #type:ignore
                     else:
-                        new_nodal_field_inds[vfield + "_y"] = max(new_nodal_field_inds.values()) + 1
-                    if vfield+"_normal" in new_nodal_field_inds:
-                        print(field_operators,"for",vfield)
-                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(phis), vx).flatten()-numpy.outer(numpy.sin(phis), vphi).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
-                        #field_operators[vfield + "_y"] = [lambda vx,vphi: numpy.outer(numpy.sin(phis), vx).flatten()+numpy.outer(numpy.cos(phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
-                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(k*phis), vx).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
-                        #field_operators[vfield + "_y"] = [lambda vx,vphi: numpy.outer(numpy.cos(k*phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
-                        #field_operators[vfield + "_x"] = [lambda vx,vphi: numpy.outer(numpy.cos(phis), vx).flatten()-0*numpy.outer(numpy.sin(phis), vphi).flatten(),vfield + "_x",vfield + "_normal"] #type:ignore
-                        #field_operators[vfield + "_y"] = [lambda vx,vphi: 0*numpy.outer(numpy.sin(phis), vx).flatten()+numpy.outer(numpy.cos(phis), vphi).flatten(),vfield + "_x",vfield+"_normal"] #type:ignore
-
-                        if vfield+"_normal" in new_nodal_field_inds:
+                        field_operators[vfield+"_x"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_x"] #type:ignore
+                        if vfield+"_normal" in new_nodal_field_inds:                                                
+                            new_nodal_field_inds[vfield + "_y"] = max(new_nodal_field_inds.values()) + 1
+                            field_operators[vfield+"_y"]= [lambda vy: numpy.tile(vy,n_segments+1), vfield+"_normal"] #type:ignore
+                    if vfield+"_normal" in new_nodal_field_inds:                                                
                             del new_nodal_field_inds[vfield+"_normal"]
                             newindex=0
                             for name, index in sorted(new_nodal_field_inds.items(), key=lambda item: item[1]): #type:ignore
                                 new_nodal_field_inds[name]=newindex
                                 newindex+=1
 
-                    else:
-                        raise RuntimeError("Normal field not found for "+vfield)
-                        field_operators[vfield + "_x"] = [lambda vx: vx,vfield + "_x"] #type:ignore
-                        field_operators[vfield + "_y"] = [lambda vx: vx,vfield + "_x"] #type:ignore
 
         
                 
@@ -912,7 +926,7 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
                         hex27inds+=[mp(eis[0], offs+i), mp(eis[1], offs +i), mp(eis[2], offs+i)] #type:ignore
                     new_elem_indices.append(hex27inds) #type:ignore
                     new_elem_types.append(14) #type:ignore
-                elemental_phi_row=numpy.linspace(0,self.angle,upper_limit//phi_increm,endpoint=not closed)+self.start_angle  
+                elemental_phi_row=numpy.linspace(0,2*numpy.pi,upper_limit//phi_increm,endpoint=True)+self.phase  
                 elemental_phi_row+=elemental_phi_row[-1]/(2*len(elemental_phi_row))
             elif elemtype==6: # Quad4 -> Tris at the center and hex in bulk
                 for offs in range(0, upper_limit, phi_increm):
@@ -1061,6 +1075,15 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
         
 
 class MeshDataRotationalExtrusion(MeshDataCacheOperatorBase):
+    """
+    Can be added as ``operator`` to :py:class:`~pyoomph.output.meshio.MeshFileOutput` to extrude the mesh along the azimuthal phi-coordinate. Most useful combined with :py:class:`MeshDataCombineWithEigenfunction` and azimuthal normal mode stability analysis.
+
+    Args:
+        n_segments: Number of segments to extrude the mesh to.
+        angle: Angle to extrude the mesh to. If larger than 2*pi, it will be cut off at 2*pi.
+        start_angle: Angle to start the extrusion at.
+        rotate_eigendata_with_mode_m: If True, the eigendata will be rotated with the azimuthal mode number m. This is useful for azimuthal normal mode stability analysis.
+    """
     def __init__(self,n_segments:int=32,angle:float=2*numpy.pi,start_angle:float=0.0,rotate_eigendata_with_mode_m:bool=True):
         super(MeshDataRotationalExtrusion, self).__init__()
         self.n_segments=n_segments
@@ -1160,7 +1183,7 @@ class MeshDataRotationalExtrusion(MeshDataCacheOperatorBase):
                             if componame.endswith("_x"):
                                 r_index=cindex
                             elif componame.endswith("_phi"):
-                                phi_index=cindex
+                                phi_index=cindex                                
 
                         if r_index is not None and phi_index is not None:
                             def get_x_component(ReR,ImR,ReP,ImP): #type:ignore
@@ -1183,6 +1206,28 @@ class MeshDataRotationalExtrusion(MeshDataCacheOperatorBase):
                             vector_fields[vecname]=[vecname+component for component in ["_x","_y","_z"][0:len(composRes)]]
                             #print(new_nodal_field_inds,vector_fields)
 
+                
+        # Also assemble the eigenperturbation of the position
+        if "EigenRe_coordinate_x" in base.nodal_field_inds:
+            
+            def get_x_component(ReR,ImR): #type:ignore
+                Vr_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImR).flatten() #type:ignore
+                #Vphi_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImP).flatten() #type:ignore
+                return Vr_cos_phi#+Vphi_sin_phi #type:ignore
+            def get_y_component(ReR,ImR): #type:ignore
+                Vr_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImR).flatten() #type:ignore
+                #Vphi_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImP).flatten() #type:ignore
+                return Vr_sin_phi#-Vphi_cos_phi #type:ignore
+            field_operators["Eigen_coordinate_x"]= [get_x_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
+            field_operators["Eigen_coordinate_y"]= [get_y_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
+            if "EigenRe_coordinate_y" in base.nodal_field_inds:
+                field_operators["Eigen_coordinate_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),"EigenRe_coordinate_y","EigenIm_coordinate_y"] #type:ignore
+                new_nodal_field_inds["Eigen_coordinate_z"] = max(new_nodal_field_inds.values()) + 1
+                vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y","_z"]]
+            else:                
+                new_nodal_field_inds["Eigen_coordinate_y"] = max(new_nodal_field_inds.values()) + 1
+                vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y"]]
+            completed_eigen_vector_fields.add("Eigen_coordinate")
 
         for vfield,components in vector_fields.items(): #type:ignore
             if vfield in completed_eigen_vector_fields:

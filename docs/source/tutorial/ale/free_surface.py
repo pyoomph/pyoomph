@@ -4,7 +4,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -40,7 +40,7 @@ class KinematicBC(InterfaceEquations):
 		l,eta=var_and_test("_kin_bc") # Lagrange multiplier
 		x,chi=var_and_test("mesh") # unknown mesh coordinates
 		# Let the normal mesh velocity follow the normal fluid velocity
-		self.add_residual(weak(dot(n,u-partial_t(x)),eta)-weak(l,dot(n,chi)))
+		self.add_residual(weak(dot(n,u-mesh_velocity()),eta)-weak(l,dot(n,chi)))
 
 	def before_assigning_equations_postorder(self, mesh):
 		# pin the Lagrange multiplier, when the mesh is locally entirely pinned

@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -132,7 +132,7 @@ class GenericStabilizationMethod(Equations):
     def get_momentum_residual(self):
         ns=self.get_flow_equations()
         u,p=var(["velocity","pressure"])
-        res=ns.mass_density*material_derivative(u,u,ALE="auto")+grad(p)
+        res=ns.mass_density*material_derivative(u,u)+grad(p)
         if ns.bulkforce is not None:
             res-=ns.bulkforce
         if ns.gravity is not None:

@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -411,6 +411,38 @@ def trace(M:Expression)->Expression:
 	Expression: The trace of the matrix expression.
 	"""
 	return _pyoomph.GiNaC_trace(M)
+
+def determinant(M:Expression,n:int=0)->Expression:
+	"""
+	Compute the determinant of a matrix expression.
+
+	Parameters:
+		M (Expression): The matrix expression for which to compute the determinant.
+		n (int): Range of the matrix to consider for the determinant. Default is 0 (extract nonzero block), <0 means full matrix, >0 upper left matrix of n x n.
+  
+
+	Returns:
+		Expression: The determinant of the matrix expression.
+	"""
+	return _pyoomph.GiNaC_determinant(M,Expression(n))
+
+
+def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True)->Expression:
+	"""
+	Compute the inverse of a matrix expression.
+
+	Parameters:
+		M (Expression): The matrix expression for which to compute the determinant.
+		n (int): Range of the matrix to consider for the inverse. Default is 0 (extract nonzero block), <0 means full matrix, >0 upper left matrix of n x n.
+		use_subexpression_for_det (bool): Flag indicating whether to use a subexpression for the determinant. Default is True.
+  
+
+	Returns:
+		Expression: The symbolical inverse of the matrix expression.
+	"""
+	flags=1 if use_subexpression_for_det else 0
+	return _pyoomph.GiNaC_inverse_matrix(M,Expression(n),Expression(flags))
+
 
 def var_and_test(n: str, tag: List[str] = [], domain: Union[None, str, "FiniteElementCodeGenerator"] = None) -> Tuple[Expression, Expression]:
 	"""

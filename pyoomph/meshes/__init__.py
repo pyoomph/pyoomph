@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -25,6 +25,6 @@
 # ========================================================================
  
 from .simplemeshes import RectangularQuadMesh,LineMesh,CuboidBrickMesh
-from .bcs import DirichletBC,NeumannBC,EnforcedBC,PinWhere,PeriodicBC,AxisymmetryBC,InactiveDirichletBC,InteriorBoundaryOrientation,EnforcedDirichlet
+from .bcs import DirichletBC,NeumannBC,EnforcedBC,PinWhere,PeriodicBC,AxisymmetryBC,InactiveDirichletBC,InteriorBoundaryOrientation,EnforcedDirichlet,UnpinDofs
 from .mesh import MeshTemplate,AnyMesh,AnySpatialMesh
-__all__ = ["LineMesh","RectangularQuadMesh","CuboidBrickMesh","DirichletBC","NeumannBC","EnforcedBC","MeshTemplate","PinWhere","PeriodicBC","AxisymmetryBC","InactiveDirichletBC","InteriorBoundaryOrientation","AnyMesh","AnySpatialMesh","EnforcedDirichlet"]
+__all__ = ["LineMesh","RectangularQuadMesh","CuboidBrickMesh","DirichletBC","NeumannBC","EnforcedBC","MeshTemplate","PinWhere","PeriodicBC","AxisymmetryBC","InactiveDirichletBC","InteriorBoundaryOrientation","AnyMesh","AnySpatialMesh","EnforcedDirichlet","UnpinDofs"]

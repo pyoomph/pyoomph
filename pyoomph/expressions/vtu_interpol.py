@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ import vtk
 class _VTUInterpolatorBase:    
     def __init__(self,vtufile:str,spatial_scale:ExpressionOrNum=1,offset=vector(0),resize_internally:bool=True):
         self.vtufile=vtufile
-        self.spatial_scale_factor=spatial_scale
+        self.spatial_scale_factor=0+spatial_scale
         self.offset=offset
         self.resize_internally=resize_internally
         self._dim=2
@@ -132,12 +132,13 @@ class VTUInterpolatorByVTK(_VTUInterpolatorBase):
     # use_cache: If you interpolate for multiple fields, it is sometimes better to interpolate each point only once and store the results of all fields in a cache
     # This can be quite memory intensive, though
     def __init__(self, vtufile: str,spatial_scale:ExpressionOrNum=1,resize_internally:bool=True,use_cache:Union[bool,Literal["auto"]]="auto"):
-        super().__init__(vtufile,spatial_scale=spatial_scale,resize_internally=resize_internally)
+        super().__init__(vtufile,spatial_scale=0+spatial_scale,resize_internally=resize_internally)
         self.use_cache=use_cache
         self._use_cache=True if self.use_cache is True else False
         self._num_interpolators=0
         self._cache={}
         self._fields_to_cache=[]
+        
         
         # Load the VTU
         self.vtu_in=vtk.vtkXMLUnstructuredGridReader()
@@ -160,14 +161,15 @@ class VTUInterpolatorByVTK(_VTUInterpolatorBase):
             self._dim=1
         else:
             self._dim=0
-            scalef=1
+            scalef=1        
+        
         self.vector_scale=1
         # Rescale it to fit in unity range
         if self.resize_internally:
             transform=vtk.vtkTransform()
             transform.Scale(1/scalef,1/scalef,1/scalef)
             self.vtu=vtk.vtkTransformFilter()
-            self.vtu.SetTransformAllInputVectors(True)
+            self.vtu.SetTransformAllInputVectors(False)
             self.vtu.SetInputData(self.vtu_in.GetOutput())
             self.vtu.SetTransform(transform)            
             self.vtu.Update()
@@ -176,8 +178,12 @@ class VTUInterpolatorByVTK(_VTUInterpolatorBase):
             self.vtu=self.vtu_in    
         
         # The point used to probe the current positions
+        
+
+
         self.probe_pt=vtk.vtkPointSource()
         self.probe_pt.SetNumberOfPoints(1)
+        #eps=1e-6*(scalef if not self.resize_internally else 1)
         self.probe_pt.SetRadius(0.0)       
         # And the interpolator
         self.interpolator=vtk.vtkProbeFilter()        

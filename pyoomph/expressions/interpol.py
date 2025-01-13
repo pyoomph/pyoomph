@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -140,7 +140,7 @@ class InterpolateRectBivariateSpline2d(CustomMathExpression):
 
 
 class MeshFileInterpolation2d(CustomMathExpression):
-	def __init__(self,meshfilename:str,fieldname:str,coordinate_unit:"ExpressionOrNum"=1, result_unit:"ExpressionOrNum"=1):
+	def __init__(self,meshfilename:str,fieldname:str,coordinate_unit:"ExpressionOrNum"=1, result_unit:"ExpressionOrNum"=1,use_clough_tocher=False):
 		super().__init__()
 		mesh=meshio.read(meshfilename)
 		points=mesh.points[:,0:2]
@@ -161,8 +161,13 @@ class MeshFileInterpolation2d(CustomMathExpression):
 		data=mesh.point_data[fieldname]
 		if vector_dir is not None:
 			data=data[:,vector_dir]
-		triang=Triangulation(points[:,0], points[:,1], mesh.cells[0].data)
-		self.interp=LinearTriInterpolator(triang, data)	    
+		
+		if use_clough_tocher:
+			from scipy.interpolate import CloughTocher2DInterpolator
+			self.interp=CloughTocher2DInterpolator(points[:,0:2], data, rescale=True)
+		else:
+			triang=Triangulation(points[:,0], points[:,1], mesh.cells[0].data)
+			self.interp=LinearTriInterpolator(triang, data)		
 		self.coordinate_unit=Expression(coordinate_unit)
 		self.result_unit=Expression(result_unit)
 

@@ -16,7 +16,7 @@ jobs:
         os: [ubuntu-latest, macos-13, windows-latest]
 
     env:
-      CIBW_SKIP: "cp36-* cp37-* cp38-* cp313-* pp* *-manylinux_i686 *-musllinux* *_ppc64le *_s390x *_universal2 *_arm64" 
+      CIBW_SKIP: "cp36-* cp37-* cp38-* pp* *-manylinux_i686 *-musllinux* *_ppc64le *_s390x *_universal2 *_arm64" 
 
     steps:
       - uses: actions/checkout@v4

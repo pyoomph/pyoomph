@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -59,6 +59,7 @@ namespace pyoomph
 
 	public:
 		virtual pyoomph::Node *resolve_copy_master(pyoomph::Node *cpy);
+		std::vector<pyoomph::Node*> add_interpolated_nodes_at(const std::vector<std::vector<double> > & coords,bool all_as_boundary_nodes);
 		virtual void store_copy_master(pyoomph::Node *cpy, pyoomph::Node *mst);
 		virtual void _setup_information_from_old_mesh(Mesh *old);
 		virtual void _save_state(std::vector<double> &meshdata);

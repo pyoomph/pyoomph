@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -160,6 +160,7 @@ typedef struct JITHangInfoEntry
 typedef struct JITHangInfo
 {
   int nummaster;
+  bool ARRAY_DECL_NFIELDS(has_contributions); // Is any of the hanging equations non-pinned?
   JITHangInfoEntry_t ARRAY_DECL_NHANG(masters); // 0..nummasters-1
 } JITHangInfo_t;
 
@@ -170,6 +171,7 @@ typedef struct JITShapeInfo
   unsigned int n_int_pt;             // Number of integration points
   double int_pt_weight;            // Eulerian weight at the current integration point
   double int_pt_weight_Lagrangian; // Lagrangian weight at the current integration point
+  double int_pt_weight_unity;            // Weight at the current integration point in s space, i.e. without any mapping [ sqrt(det(g_ab)) ]
   double ARRAY_DECL_NNODE(ARRAY_DECL_NDIM(int_pt_weights_d_coords)); // Weights derived by coordinates, [i_dim,l_node], i.e. w*dJ_Eulerian/dX^l_i
   double ****int_pt_weights_d2_coords; // Weights derived by coordinates, [i_dim,j_dim,l_node_i,l_node_j], i.e. w*d2J_Eulerian/(dX^l_i*dX^l_j)
   
@@ -184,6 +186,7 @@ typedef struct JITShapeInfo
   double ARRAY_DECL_NNODE(shape_C2);                // C2 shapes (node index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dx_shape_C2));            // C2 shapes ( node index, coord index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dX_shape_C2));            // Corresponding Lagrangian version
+  double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dS_shape_C2));            // Corresponding local coordinate version
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(d_dx_shape_dcoord_C2)))); // derivative of dx_shape_C2 w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index)
   double ******d2_dx2_shape_dcoord_C2; // second derivative of dx_shape_C2 w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index,deriv. coord node index2, deriv coord dir index2)
 
@@ -192,6 +195,7 @@ typedef struct JITShapeInfo
   double ARRAY_DECL_NNODE(shape_C2TB);                // C2TB shapes (node index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dx_shape_C2TB));            // C2TB shapes (node index, coord index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dX_shape_C2TB));            // Lagrangian version
+  double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dS_shape_C2TB));            // Corresponding local coordinate version
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(d_dx_shape_dcoord_C2TB)))); // derivative of dx_shape_C2TB w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index)
   double ******d2_dx2_shape_dcoord_C2TB; // second derivative of dx_shape_C2TB w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index,deriv. coord node index2, deriv coord dir index2)
 
@@ -200,6 +204,7 @@ typedef struct JITShapeInfo
   double ARRAY_DECL_NNODE(shape_C1);                // C1 shapes (node index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dx_shape_C1));            // C1 shapes (node index, coord index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dX_shape_C1));            // Corresponding Lagrangian version
+  double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dS_shape_C1));            // Corresponding local coordinate version
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(d_dx_shape_dcoord_C1)))); // derivative of dx_shape_C1 w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index)
   double ******d2_dx2_shape_dcoord_C1; // second derivative of dx_shape_C2 w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index,deriv. coord node index2, deriv coord dir index2)
   double ARRAY_DECL_NNODE(ARRAY_DECL_NNODE(nodal_shape_C1)); // C1 shapes (node index, node index). In principle just delta_{i,j}
@@ -207,6 +212,7 @@ typedef struct JITShapeInfo
   double ARRAY_DECL_NNODE(shape_C1TB);                // C1TB shapes (node index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dx_shape_C1TB));            // C1TB shapes (node index, coord index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dX_shape_C1TB));            // Corresponding Lagrangian version
+  double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dS_shape_C1TB));            // Corresponding local coordinate version
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(d_dx_shape_dcoord_C1TB)))); // derivative of dx_shape_C1TB w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index)
   double ******d2_dx2_shape_dcoord_C1TB; // second derivative of dx_shape_C2 w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index,deriv. coord node index2, deriv coord dir index2)
   double ARRAY_DECL_NNODE(ARRAY_DECL_NNODE(nodal_shape_C1TB)); // C1TB shapes (node index, node index). In principle just delta_{i,j}  
@@ -214,6 +220,7 @@ typedef struct JITShapeInfo
   double ARRAY_DECL_NNODE(shape_DL);                // DL shapes (node index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dx_shape_DL));            // DL shapes (node index, coord index)
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dX_shape_DL));            // Corresponding Lagrangian derivatives
+  double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(dS_shape_DL));            // Corresponding local coordinate version
   double ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(ARRAY_DECL_NDIM(ARRAY_DECL_NNODE(d_dx_shape_dcoord_DL)))); // derivative of dx_shape_DL w/r to nodal coords (intpt,node index, coord index, deriv. coord node index, deriv coord dir index)
   double ******d2_dx2_shape_dcoord_DL; // second derivative of dx_shape_DL w/r to nodal coords (intpt,node index, coord index, deriv. coord node index, deriv coord dir index,deriv. coord node index2, deriv coord dir index2)
   double ARRAY_DECL_NNODE(ARRAY_DECL_NNODE(nodal_shape_DL)); // DL shapes (node index, node index). In principle just delta_{i,j}
@@ -224,11 +231,13 @@ typedef struct JITShapeInfo
   double *shape_Pos; // Pos space shapes. These will be mapped to the dominant element space
   double (*dx_shape_Pos)[MAX_NODAL_DIM];
   double (*dX_shape_Pos)[MAX_NODAL_DIM];
+  double (*dS_shape_Pos)[MAX_NODAL_DIM];
   double (*d_dx_shape_dcoord_Pos)[MAX_NODAL_DIM][MAX_NODES][MAX_NODAL_DIM];
   #else
   double *shape_Pos; // Pos space shapes. These will be mapped to the dominant element space
   double **dx_shape_Pos;
   double **dX_shape_Pos;
+  double **dS_shape_Pos;
   double ****d_dx_shape_dcoord_Pos;  
   #endif
    double ******d2_dx2_shape_dcoord_Pos; // second derivative of dx_shape_DL w/r to nodal coords (node index, coord index, deriv. coord node index, deriv coord dir index,deriv. coord node index2, deriv coord dir index2)
@@ -439,8 +448,8 @@ typedef struct JITFuncSpec_Table_FiniteElement
   JITFuncSpec_HessianVectorProduct_FiniteElement *HessianVectorProduct;
   bool hessian_generated;
 
-  unsigned num_Z2_flux_terms;
-  JITFuncSpec_GetZ2Fluxes_FiniteElement GetZ2Fluxes;
+  unsigned num_Z2_flux_terms,num_Z2_flux_terms_for_eigen;
+  JITFuncSpec_GetZ2Fluxes_FiniteElement GetZ2Fluxes,GetZ2FluxesForEigen;
   JITFuncSpec_RequiredShapes_FiniteElement_t shapes_required_Z2Fluxes;
 
   JITFuncSpec_InitialCondition_FiniteElement *InitialConditionFunc;

@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -146,7 +146,7 @@ class ScipyEigenSolver(GenericEigenSolver):
 		return None
 
 
-	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
+	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,DefaultMatrixType,DefaultMatrixType]:
 		if shift is None:
 			shift=self.shift
 		if target is not None:
@@ -159,9 +159,13 @@ class ScipyEigenSolver(GenericEigenSolver):
 			neval=n
 
 		if neval>=n-1:
-			evals,evects=scipy.linalg.eig(J.toarray(),b=M.toarray(),left=False) #type:ignore
+			
+			evals,evects=scipy.linalg.eig(J.toarray(),b=M.toarray(),left=False) #type:ignore			
 			if sort:
-				srt=numpy.argsort(-evals)[0:min(neval,n)] #type:ignore
+				if target:
+					srt = numpy.argsort(numpy.abs(evals-target))
+				else:
+					srt=numpy.argsort(-evals)[0:min(neval,n)] #type:ignore
 				infcrop=numpy.argmax(numpy.isfinite((evals[srt[:]]))) #type:ignore
 				srt=srt[infcrop:] #type:ignore
 				#evals,evects=evals[srt],numpy.transpose(evects)[srt]
@@ -170,12 +174,16 @@ class ScipyEigenSolver(GenericEigenSolver):
 			evects=numpy.transpose(evects) #type:ignore
 			evals=cast(NPComplexArray,evals)
 			evects=cast(NPComplexArray,evects)
-			return evals,evects
+			return evals,evects,J,M
 		else:
 			OPInv=self.get_OPInv(M,J,shift)
 			evals,evects=scipy.sparse.linalg.eigs(J,M=M,sigma=shift,return_eigenvectors=True,k=neval,OPinv=OPInv,which=which,OPpart=OPpart,v0=v0,ncv=self.ncv,tol=self.tol) #type:ignore
 			if sort:
-				srt = numpy.argsort(-evals)[0:min(neval, n)] #type:ignore
+				if target:
+					srt = numpy.argsort(numpy.abs(evals-target))
+				else:
+					srt = numpy.argsort(-evals)[0:min(neval, n)] #type:ignore
+     
 				infcrop = numpy.argmax(numpy.isfinite((evals[srt[:]]))) #type:ignore
 				srt = srt[infcrop:] #type:ignore
 				evals = evals[srt] #type:ignore
@@ -184,6 +192,6 @@ class ScipyEigenSolver(GenericEigenSolver):
 			evals=cast(NPComplexArray,evals)
 			evects=cast(NPComplexArray,evects)
 
-			return evals, evects
+			return evals, evects,J,M
 			#return evals,numpy.transpose(evects)
 

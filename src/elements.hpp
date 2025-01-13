@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -266,6 +266,7 @@ namespace pyoomph
 
     static unsigned zeta_time_history;    // Index in time for zeta. Only Eulerian
     static unsigned zeta_coordinate_type; // 0: Lagrangian, 1: Eulerian -- On interfaces usually boundary coordinate
+    static bool use_eigen_error_estimators; 
 
     double zeta_nodal(const unsigned &n, const unsigned &k, const unsigned &i) const
     {

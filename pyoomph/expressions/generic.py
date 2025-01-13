@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -319,12 +319,13 @@ def test_scale_factor(arg:Union[str,NameStrSequence],tag:List[str]=[],domain:Uni
 test_scale_factor.__test__=False
 
 
-def is_zero(arg:ExpressionOrNum)->bool:
+def is_zero(arg:ExpressionOrNum,parameters_to_float:bool=False)->bool:
 	"""
 	Check if the given argument (Expression or numerical value) is zero.
 
 	Parameters:
 	arg (ExpressionOrNum): The argument to be checked.
+ 	parameters_to_float: Flag indicating whether to convert a global parameter to its float values. Defaults to False, i.e. always False applied on a global parameter.
 
 	Returns:
 	bool: True if the argument is zero, False otherwise.
@@ -337,6 +338,11 @@ def is_zero(arg:ExpressionOrNum)->bool:
 		return arg==0
 	elif isinstance(arg,Expression): # type: ignore
 		return arg.is_zero()
+	elif isinstance(arg,_pyoomph.GiNaC_GlobalParam):
+	    if parameters_to_float:
+	        return arg.value==0
+	    else:
+	        return False
 	else:
 		raise ValueError("Cannot test for zero: "+repr(arg))
 
@@ -427,6 +433,34 @@ def Weak(a:ExpressionOrNum,b:ExpressionOrNum,*,dimensional_dx:bool=False,coordin
 
 
 
+def minimize_functional_derivative(F:ExpressionOrNum,only_with_respect_to:Optional[Union[Expression,set[Expression],List[Expression],Tuple[Expression,...]]]=None,*,coordinate_system:OptionalCoordinateSystem=None,lagrangian:bool=False,dimensional_dx:bool=False,dimensional_testfunctions:bool=True)->Expression:
+    if only_with_respect_to is None:
+        only_with_respect_to=[]
+    elif isinstance(only_with_respect_to,(set,tuple,list)):
+        only_with_respect_to=list(only_with_respect_to)
+    else:
+        only_with_respect_to=[only_with_respect_to]
+        
+    flags=0
+    if coordinate_system is None:
+        coordinate_system=_pyoomph.Expression(0)
+    else:
+        coordinate_system = 0 + _pyoomph.GiNaC_wrap_coordinate_system(coordinate_system)
+    # Must agree with weak(a,b) flags
+    if dimensional_dx:
+        flags+=2
+    if lagrangian:
+        flags+=1
+    # Additional flags
+    if dimensional_testfunctions:
+        flags+=64
+    flags=Expression(flags)
+    if not isinstance(F,_pyoomph.Expression):
+        F=_pyoomph.Expression(F)
+          
+    return _pyoomph.GiNaC_minimize_functional_derivative(F,only_with_respect_to,flags,coordinate_system)
+
+
 def timestepper_weight(order:int,index:int,scheme:TimeSteppingScheme="BDF1")->Expression:
 	return _pyoomph.GiNaC_time_stepper_weight(order,index,scheme)
 
@@ -458,17 +492,30 @@ def contract(a:ExpressionOrNum,b:ExpressionOrNum)->Expression:
 def eval_flag(which:str)->Expression:
 	return _pyoomph.GiNaC_EvalFlag(which)
 
-def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"],bool]=False,scheme:OptionalTimeSteppingScheme=None,nondim:bool=False)->Expression:
+
+def mesh_velocity(scheme:OptionalTimeSteppingScheme=None,nondim:bool=False)->Expression:
+	"""
+	Get the mesh velocity, i.e. the time derivative of the mesh coordinates without ALE correction.
+ 
+	Returns:
+		Expression: Just a shorthand for `partial_t(var("mesh"),ALE=False)`.
+	"""
+	return partial_t(nondim("mesh") if nondim else var("mesh"),ALE=False,scheme=scheme,nondim=nondim)
+
+
+def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"],bool]="auto",scheme:OptionalTimeSteppingScheme=None,nondim:bool=False)->Expression:
 	"""
 	Compute the partial derivative of a function with respect to time, i.e. .. :math:`\\partial_t^n f`. 
-	This is evaluated at the nodal values directly, i.e. co-moving with a moving mesh. To correct for it by the mesh velocity :math:`\\dot{\\vec{X}}`, use the `ALE=True` or `ALE="auto"`. 
+	With `ALE=False`, this is evaluated at the nodal values directly, i.e. co-moving with a moving mesh. To correct for it by the mesh velocity :math:`\\dot{\\vec{X}}`, use the `ALE=True` or `ALE="auto"`. 
  	In the latter case, the correction will only be considered if equations for the moving mesh are present, i.e. if :py:meth:`~pyoomph.generic.codegen.Equations.activate_coordinates_as_dofs` has been called by any :py:class:`~pyoomph.generic.codegen.Equations` added to this or any parent domain.
+  
+	If you want to obtain the mesh velocity, please use it with `ALE=False`.
   
  	
 	Args:
 		f : The function to differentiate. It can be an expression or a string representing a variable.
 		order: The order of the derivative. Defaults to 1, maximum is 2.
-		ALE : Flag indicating whether to use Arbitrary Lagrangian-Eulerian (ALE) formulation. Defaults to False, "auto" will activate the ALE correction if you combine it with a moving mesh only.
+		ALE : Flag indicating whether to use Arbitrary Lagrangian-Eulerian (ALE) formulation. Defaults to "auto". "auto" will activate the ALE correction if you combine it with a moving mesh only.
 		scheme : The time stepping scheme to use. Defaults to None, meaning the default time stepping scheme set at problem level.
 		nondim : Flag indicating whether to use non-dimensional time. Defaults to False.
 
@@ -499,11 +546,11 @@ def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"]
 			if order!=1:
 				raise ValueError("Currently, I can only take the first order time derivative with ALE")
 			#return diff(f,t)-contract(partial_t(var("mesh"),ALE=False),grad(f))
-			return diff(f,t)-directional_derivative(f,partial_t(var("mesh"),ALE=False))
+			return diff(f,t)-directional_derivative(f,mesh_velocity(scheme=scheme))
 		elif ALE=="auto":
 			if order==1:
 				#return diff(f, t) - eval_flag("moving_mesh")*contract(partial_t(var("mesh"),ALE=False),grad(f))
-				return diff(f, t) - eval_flag("moving_mesh")*directional_derivative(f,partial_t(var("mesh"),ALE=False))
+				return diff(f, t) - eval_flag("moving_mesh")*directional_derivative(f,mesh_velocity(scheme=scheme))
 			else:
 				v = [t] * order
 				return diff(f, *v)
@@ -513,7 +560,7 @@ def partial_t(f:Union[ExpressionOrNum,str],order:int=1,ALE:Union[Literal["auto"]
 		v=[t]*order
 		return diff(f,*v)
 
-def material_derivative(f:Union[ExpressionOrNum,str],velocity:Union[ExpressionOrNum,str],ALE:Union[Literal["auto"],bool]=False,dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
+def material_derivative(f:Union[ExpressionOrNum,str],velocity:Union[ExpressionOrNum,str],ALE:Union[Literal["auto"],bool]="auto",dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
 	"""
 	Compute the material derivative of a function with respect to time, i.e. :math:`\\partial_t f + \\nabla f \\cdot \\vec{u}`. Note that for tensorial quantities, one usually uses the :py:func:`upper_convected_derivative` instead.
 
@@ -549,7 +596,7 @@ def convected_derivative(A:ExpressionOrNum,velocity:ExpressionOrNum,alpha:Expres
 	res-=advection_factor*(matproduct(A,transpose(g_alpha))+matproduct(g_alpha,A))
 	return res
 
-def upper_convected_derivative(A:ExpressionOrNum,velocity:ExpressionOrNum,ALE:Union[Literal["auto"],bool]=False,dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
+def upper_convected_derivative(A:ExpressionOrNum,velocity:ExpressionOrNum,ALE:Union[Literal["auto"],bool]="auto",dt_scheme:OptionalTimeSteppingScheme=None,nondim:bool=False,lagrangian:bool=False,dt_factor:ExpressionOrNum=1,advection_factor:ExpressionOrNum=1,coordsys:OptionalCoordinateSystem=None)->Expression:
 	"""
  	Returns the upper-convected derivative of a tensor field :math:`\\mathbf{A}`, i.e. :math:`\\partial_t \\mathbf{A} + \\vec{u}\\cdot\\nabla\\mathbf{A}-(\\nabla \\vec{u})^\\mathrm{T}\\cdot \\mathbf{A} - \\mathbf{A}\\cdot\\nabla\\vec{u}`.
 
@@ -795,7 +842,7 @@ def identity_matrix(dim: int = -1) -> Expression:
 
 
 def dyadic(a: Expression, b: Expression) -> Expression:
-	"""
+    """
 	Compute the dyadic product of two expressions.
 
 	Args:
@@ -804,8 +851,8 @@ def dyadic(a: Expression, b: Expression) -> Expression:
 
 	Returns:
 		Expression: The dyadic product of `a` and `b`.
-	"""
-	return matrix([[a[i] * b[j] for j in range(3)] for i in range(3)])
+    """
+    return matrix([[a[i] * b[j] for j in range(3)] for i in range(3)])
 
 
 def unit_vector(dir: Union[int, Literal["x", "y", "z"]]) -> Expression:
@@ -931,17 +978,21 @@ def convert_to_expression(a:Union[ExpressionOrNum,NPAnyArray])->Expression:
 	else:
 		return _pyoomph.Expression(a)
 
-def dot(a:ExpressionOrNum,b:ExpressionOrNum)->Expression:    
+def dot(a:Union[ExpressionOrNum,str],b:Union[ExpressionOrNum,str])->Expression:    
 	"""
 	Compute the dot product between two vectors.
 
 	Parameters:
-	a (ExpressionOrNum): The first vector.
-	b (ExpressionOrNum): The second vector.
+	a: The first vector. String will be wrapped in a var expression.
+	b: The second vector. String will be wrapped in a var expression.
 
 	Returns:
 	Expression: The dot product of the two vectors.
 	"""
+	if isinstance(a,str):
+		a=var(a)
+	if isinstance(b,str):
+		b=var(b)
 	if not isinstance(a,_pyoomph.Expression):
 		a=convert_to_expression(a)
 	if not isinstance(b,_pyoomph.Expression):

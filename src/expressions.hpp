@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 #include <vector>
 #include <map>
 #include "exception.hpp"
+#include <complex>
 
 namespace pyoomph
 {
@@ -241,6 +242,9 @@ namespace GiNaC
   PYGINACSTRUCT(pyoomph::GlobalParameterWrapper, GiNaCGlobalParameterWrapper);
   template <>
   void GiNaCGlobalParameterWrapper::print(const print_context &c, unsigned level) const;
+  template <>
+  bool GiNaCGlobalParameterWrapper::info(unsigned inf) const;
+
 
   PYGINACSTRUCT(pyoomph::PlaceHolderResolveInfo, GiNaCPlaceHolderResolveInfo);
   template <>
@@ -263,7 +267,8 @@ namespace GiNaC
   template <>
   GiNaC::ex GiNaCFakeExponentialMode::derivative(const GiNaC::symbol &s) const;
 
-  typedef symbol potential_real_symbol;
+  //typedef symbol potential_real_symbol;
+  typedef realsymbol potential_real_symbol;
 }
 
 namespace pyoomph
@@ -284,6 +289,7 @@ namespace pyoomph
     extern GiNaC::potential_real_symbol X;
     extern GiNaC::potential_real_symbol Y; // Lagrangian
     extern GiNaC::potential_real_symbol Z;
+    extern GiNaC::potential_real_symbol local_coordinate_1,local_coordinate_2,local_coordinate_3;
     extern GiNaC::potential_real_symbol nx;
     extern GiNaC::potential_real_symbol ny;
     extern GiNaC::potential_real_symbol nz;
@@ -305,6 +311,7 @@ namespace pyoomph
     GiNaC::ex replace_global_params_by_current_values(const GiNaC::ex &in);
 
     double eval_to_double(const GiNaC::ex &inp);
+    std::complex<double> eval_to_complex(const GiNaC::ex &inp);    
 
     DECLARE_FUNCTION_5P(grad) // 1: what to grad, 2: nodal dimension or -1, 3: element dimension or -1, 4: Coordinate System object, 5: withdim(0,1)
     DECLARE_FUNCTION_6P(directional_derivative)
@@ -316,6 +323,10 @@ namespace pyoomph
     DECLARE_FUNCTION_5P(div)
     DECLARE_FUNCTION_1P(transpose)
     DECLARE_FUNCTION_1P(trace)
+    DECLARE_FUNCTION_2P(determinant)    
+    DECLARE_FUNCTION_3P(inverse_matrix)    
+
+    DECLARE_FUNCTION_4P(minimize_functional_derivative)    
 
     DECLARE_FUNCTION_4P(unitvect)
 
@@ -323,6 +334,7 @@ namespace pyoomph
 
     DECLARE_FUNCTION_1P(get_real_part)
     DECLARE_FUNCTION_1P(get_imag_part)
+    DECLARE_FUNCTION_1P(split_subexpressions_in_real_and_imaginary_parts)
 
     DECLARE_FUNCTION_3P(symbol_subs)
     DECLARE_FUNCTION_3P(remove_mode_from_jacobian_or_hessian)
@@ -357,6 +369,9 @@ namespace pyoomph
 
     DECLARE_FUNCTION_2P(single_index)
     DECLARE_FUNCTION_3P(double_index)
+
+    
+    
 
     DECLARE_FUNCTION_2P(Diff)
 

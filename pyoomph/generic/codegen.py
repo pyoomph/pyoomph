@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ import _pyoomph
 from ..typings import Optional
 
 from ..meshes.mesh import assert_spatial_mesh,InterfaceMesh,ODEStorageMesh
-from ..expressions import AxisymmetryBreakingCoordinateSystem, find_dominant_element_space, scale_factor, vector,matrix,evaluate_in_domain,testfunction,weak,var,nondim,Expression,rational_num
+from ..expressions import AxisymmetryBreakingCoordinateSystem,AxisymmetricCoordinateSystem, find_dominant_element_space, scale_factor, vector,matrix,evaluate_in_domain,testfunction,weak,var,nondim,Expression,rational_num,minimize_functional_derivative
 
 # from ..expressions import var, get_global_symbol, nondim, vector, testfunction, scale_factor, cartesian, partial_t
 from ..expressions.coordsys import ODECoordinateSystem, BaseCoordinateSystem
@@ -308,13 +308,32 @@ class BaseEquations(_pyoomph.Equations):
             b=testfunction(b)
         self.add_residual(weak(a,b,dimensional_dx=dimensional_dx,coordinate_system=coordinate_system,lagrangian=lagrangian),destination=destination)
         return self
+    
+    def add_functional_minimization(self,F:"ExpressionOrNum",with_respect_to:Optional[Union[Expression,List[Expression]]]=None,*,dimensional_dx:bool=False,dimensional_testfunctions:bool=True,lagrangian:bool=False,coordinate_system:"OptionalCoordinateSystem"=None,destination:Optional[str]=None):
+        """Adds the weak form of the functional minimization of W=integral(F dOmega) to the equations.
+
+        Args:
+            F (ExpressionOrNum): Integrand of the functional.
+            with_respect_to (Optional[Union[Expression,List[Expression]]], optional): Optionally only derive with respect to all shape functions appearing in the listed expressions. Defaults to None, meaning all shape functions in F.
+            dimensional_dx (bool, optional): Consider spatial scaling in the weak form integral. Defaults to False.
+            dimensional_testfunctions (bool, optional): Expand by dimensional testfunctions. Defaults to True.
+            lagrangian (bool, optional): Weak formulation is integrated over the Lagrangian domain. Defaults to False.
+            coordinate_system (OptionalCoordinateSystem, optional): Optional coordinate system. Defaults to the equations' coordinate system, then parent equations and eventually the problem coordinate system. Defaults to None.
+            destination (Optional[str], optional): Residual destination identifier. Defaults to None.
+
+        Returns:
+            BaseEquations: Returns self for chaining.
+        """
+        dF=minimize_functional_derivative(F, only_with_respect_to=with_respect_to, dimensional_testfunctions=dimensional_testfunctions,coordinate_system=coordinate_system,lagrangian=lagrangian,dimensional_dx=dimensional_dx)
+        self.add_residual(dF,destination=destination)
+        return self
 
     def get_dx(self, use_scaling:bool=True, lagrangian:bool=False,coordsys:Optional[_pyoomph.CustomCoordinateSystem]=None)->"Expression":
         master = self._get_combined_element()  # TODO This does not allow for dx on individual coordinate systems
         if coordsys is None:
             coordsys = master.get_coordinate_system()
         assert isinstance(coordsys,BaseCoordinateSystem)
-        return coordsys.integral_dx(self.get_element_dimension(), use_scaling,master.get_scaling("spatial"), lagrangian)
+        return coordsys.integral_dx(self.get_nodal_dimension(), self.get_element_dimension(), use_scaling,master.get_scaling("spatial"), lagrangian)
 
     def after_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str,elem_dim:Optional[int]=None):
         pass        
@@ -354,6 +373,15 @@ class BaseEquations(_pyoomph.Equations):
             raise exception
 
 
+    def get_azimuthal_r0_info(self):
+        """Returns a dict [0,1,2]-> Set[str] with the names of the fields that are pinned at r=0 for azimuthal symmetry.
+        Entry 0 contains the names of the fields that are pinned to zero at r=0 for normal (axisymmetric solves). This pinning is strongly enforced.
+        Entry 1 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with m=1. This pinning is implemented by modifying the eigenproblem matrices.
+        Entry 2 contains the names of the fields that are pinned at r=0 for azimuthal eigensolves with m>=2. This pinning is implemented by modifying the eigenproblem matrices.        
+        """
+        master=self._get_combined_element()
+        return master._azimuthal_r0_info
+
     def before_precice_initialise(self,eqtree:"EquationTree"):
         pass
 
@@ -388,7 +416,15 @@ class BaseEquations(_pyoomph.Equations):
         self._additional_residuals:Dict[str,Expression]={}
         self._fields_defined_on_my_domain:Dict[str,FiniteElementSpaceEnum]={}
         #: Set this to true if you require internal facet contributions for DG methods, at best in the constructor
-        self.requires_interior_facet_terms:bool=False 
+        self.requires_interior_facet_terms:bool=False   
+        
+        # Stores the data to pin for azimuthal stuff
+        self._azimuthal_r0_info:dict[int,set(str)]={} # Which fields will be pinned at the azimuthal symmetry axis for a given azimuthal mode
+        self._azimuthal_r0_info[0]=set()
+        self._azimuthal_r0_info[1]=set()
+        self._azimuthal_r0_info[2]=set()              
+        
+    
 
     def interior_facet_terms_required(self):
         return self.requires_interior_facet_terms
@@ -493,6 +529,10 @@ class BaseEquations(_pyoomph.Equations):
     def on_apply_boundary_conditions(self,mesh:"AnyMesh"):
         pass
     
+    
+    def _fill_interinter_connections(self,eqtree:"EquationTree",interinter:Set[str]):
+        pass
+    
     def before_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str):
         pass
 
@@ -584,6 +624,10 @@ class BaseEquations(_pyoomph.Equations):
 
     def _perform_define_fields(self):
         master = self._get_combined_element()
+        if self.get_parent_domain() is not None:
+            p=self.get_parent_domain().get_equations().get_azimuthal_r0_info()
+            for i in range(3):
+                master._azimuthal_r0_info[i]=p[i].copy()
         master.define_fields()
         master.sanity_check()
 
@@ -877,6 +921,14 @@ class BaseEquations(_pyoomph.Equations):
                 return vector([vr("lagrangian_x"), vr("lagrangian_y")])
             elif dim == 3:
                 return vector([vr("lagrangian_x"), vr("lagrangian_y"), vr("lagrangian_z")])
+        elif name == "local_coordinate":
+            dim = cg.get_element_dimension()
+            if dim == 1:
+                return vector([vr("local_coordinate_1")])
+            elif dim == 2:
+                return vector([vr("local_coordinate_1"), vr("local_coordinate_2")])
+            elif dim == 3:
+                return vector([vr("local_coordinate_1"), vr("local_coordinate_2"), vr("local_coordinate_3")])            
         elif name == "normal":
             return cg.get_coordinate_system().get_normal_vector_or_component(cg,component=None,only_base_mode=only_base_mode,only_perturbation_mode=only_perturbation_mode,where=where)
             dim = cg.get_nodal_dimension()
@@ -902,11 +954,13 @@ class BaseEquations(_pyoomph.Equations):
             #return cg._get_normal_component(2)
             return cg.get_coordinate_system().get_normal_vector_or_component(cg,component=2,only_base_mode=only_base_mode,only_perturbation_mode=only_perturbation_mode,where=where)
         elif name == "dx":
-            return _pyoomph.FiniteElementCode._get_dx(cg, False)
+            return _pyoomph.FiniteElementCode._get_dx(cg, False,False)
+        elif name == "dx_unity":
+            return _pyoomph.FiniteElementCode._get_dx(cg, False,True)
         elif name == "_nodal_delta":
             return _pyoomph.FiniteElementCode._get_nodal_delta(cg)
         elif name == "dX":
-            return _pyoomph.FiniteElementCode._get_dx(cg, True)
+            return _pyoomph.FiniteElementCode._get_dx(cg, True,False)
         elif name == "element_size_Eulerian":
             return _pyoomph.FiniteElementCode._get_element_size_symbol(cg,False,True)*(cg.get_coordinate_system().volumetric_scaling(scale_factor("spatial"),self.get_element_dimension()) if dimensional else 1)
         elif name == "cartesian_element_size_Eulerian":
@@ -1524,6 +1578,13 @@ class EquationTree:
             v._fill_dummy_equations(problem,False,pathname=(dn if is_bulk_root else pathname+"/"+dn))
         
 
+    def _fill_interinter_connections(self,iconns:Set[str]):
+        if self._equations:
+            myiconns=set([x for x in iconns if x.startswith(self.get_full_path().lstrip("/"))])
+            self._equations._fill_interinter_connections(self,myiconns)
+        for _,v in self._children.items():
+            v._fill_interinter_connections(iconns)
+
     def _set_parent_to_equations(self,problem:"Problem"):
         if self._codegen is not None:
             self._codegen._set_problem(problem)
@@ -1915,6 +1976,23 @@ class Equations(BaseEquations):
             cg._coordinate_space = coordinate_space
             if coordinate_space not in ["C2TB", "C2", "C1TB", "C1"]:
                 raise ValueError("Can only set the coordinate space to either C2TB, C2, C1TB or C1")
+        rcomponent="_x"
+        zcomponent="_y"
+        csys=self.get_coordinate_system()
+        if isinstance(csys,AxisymmetricCoordinateSystem):
+            if csys.use_x_as_symmetry_axis:
+                rcomponent="_y"
+                zcomponent="_x"
+        if self.get_nodal_dimension()<2:
+            zcomponent=None
+        # x-axis is always pinned
+        master._azimuthal_r0_info[0].add("mesh"+rcomponent)
+        master._azimuthal_r0_info[1].add("mesh"+rcomponent)
+        master._azimuthal_r0_info[2].add("mesh"+rcomponent)
+        if zcomponent is not None:
+            master._azimuthal_r0_info[1].add("mesh"+zcomponent)
+            master._azimuthal_r0_info[2].add("mesh"+zcomponent)
+        
 
     def define_scalar_field(self, name:str, space:"FiniteElementSpaceEnum",scale:Optional[Union["ExpressionOrNum",str]]=None,testscale:Optional[Union["ExpressionOrNum",str]]=None,discontinuous_refinement_exponent:Optional[float]=None):
         """
@@ -1951,6 +2029,11 @@ class Equations(BaseEquations):
             self.set_scaling(**{name: scale})
         if testscale is not None:
             self.set_test_scaling(**{name:testscale})
+            
+        # Scalar fields are pinned by default for |m|=1 and |m|>=2
+        if space!="D0" and space!="DL":
+            master._azimuthal_r0_info[1].add(name)
+            master._azimuthal_r0_info[2].add(name)
 
 
     def define_vector_field(self, name:str, space:"FiniteElementSpaceEnum", dim:Optional[int]=None,scale:"ExpressionNumOrNone"=None,testscale:"ExpressionNumOrNone"=None):
@@ -1978,6 +2061,32 @@ class Equations(BaseEquations):
             self.set_scaling(**{name:scale})
         if testscale is not None:
             self.set_test_scaling(**{name:testscale})
+            
+        # Vector fields are pinned by default for |m|=1 and |m|>=2
+        if space!="D0":
+            rcomponent="_x"
+            zcomponent="_y"
+            csys=self.get_coordinate_system()
+            if isinstance(csys,AxisymmetricCoordinateSystem):
+                if csys.use_x_as_symmetry_axis:
+                    rcomponent="_y"
+                    zcomponent="_x"
+            if dim<2:
+                zcomponent=None
+            mst._azimuthal_r0_info[0].add(name+rcomponent)
+            if name+rcomponent in mst._azimuthal_r0_info[1]:
+                mst._azimuthal_r0_info[1].remove(name+rcomponent)
+            mst._azimuthal_r0_info[2].add(name+rcomponent)
+            if zcomponent is not None:
+                mst._azimuthal_r0_info[1].add(name+zcomponent)
+                mst._azimuthal_r0_info[2].add(name+zcomponent)
+            if isinstance(csys,AxisymmetryBreakingCoordinateSystem):
+                mst._azimuthal_r0_info[0].add(name+"_phi")          
+                if name+"_phi" in mst._azimuthal_r0_info[1]:
+                    mst._azimuthal_r0_info[1].remove(name+"_phi")      
+                mst._azimuthal_r0_info[2].add(name+"_phi")
+                
+    
 
     def define_tensor_field(self, name:str, space:"FiniteElementSpaceEnum", dim:Optional[int]=None,scale:"ExpressionNumOrNone"=None,testscale:"ExpressionNumOrNone"=None, symmetric:bool=False):
         dim = dim if dim is not None else self.get_nodal_dimension()  # TODO: Here, it should be nodal_dimension!
@@ -1992,16 +2101,20 @@ class Equations(BaseEquations):
             self.set_scaling(**{name:scale})
         if testscale is not None:
             self.set_test_scaling(**{name:testscale})
+        # TODO: set the azimuthal r=0 info for tensor fields
 
 
 
     def get_nodal_delta(self) -> Expression:
         return nondim("_nodal_delta")
 
-    def add_spatial_error_estimator(self, expr:"Expression"):
+    def add_spatial_error_estimator(self, expr:"Expression",for_base:bool=True,for_eigen:bool=True):
         master = self._get_combined_element()
         cg=master._assert_codegen()
-        cg._add_Z2_flux(expr)
+        if for_base:
+            cg._add_Z2_flux(expr,False)
+        if for_eigen:
+            cg._add_Z2_flux(expr,True)
 
 
 
@@ -2132,6 +2245,8 @@ class ODEEquations(BaseEquations):
             return _pyoomph.Expression(0)
         elif name == "lagrangian_x" or name == "lagrangian_y" or name == "langrangian_z":
             return _pyoomph.Expression(0)
+        elif name == "local_coordinate_1" or name == "local_coordinate_2" or name == "local_coordinate_3":
+            return _pyoomph.Expression(0)
         else:
             return super(ODEEquations, self).expand_additional_field(name, dimensional, expression,
                                                                      in_domain, no_jacobian, no_hessian, where)
@@ -2245,6 +2360,11 @@ class CombinedEquations(Equations):
             if isinstance(e, BaseEquations): #type:ignore
                 res=res+"\n"+indent+e._tree_string(indent)
         return res
+    
+    def _fill_interinter_connections(self,eqtree:"EquationTree",interinter:Set[str]):
+        for e in self._subelements:
+            if isinstance(e, BaseEquations):
+                e._fill_interinter_connections(eqtree,interinter)
 
     def _init_output(self,eqtree:"EquationTree",continue_info:Optional[Dict[str,Any]],rank:int):
         for e in self._subelements:
@@ -2861,6 +2981,8 @@ class GlobalLagrangeMultiplier(ODEEquations):
 
     def get_information_string(self) -> str:
         return ", ".join([str(n) + " with contrib. " + str(v) for n, v in self._entries.items()])
+
+
 
 class ScalarField(Equations):
     """

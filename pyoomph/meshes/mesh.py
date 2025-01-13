@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -950,7 +950,7 @@ class MeshFromTemplateBase(BaseMesh):
                     icg._set_lagrangian_dimension(
                         self._codegen.get_lagrangian_dimension())
                     icg._coordinate_space = self._codegen._coordinate_space
-                    icg._do_define_fields(self._codegen.dimension - 1)
+                    icg._do_define_fields(self._codegen.dimension - 2)
 
     def _compile_bulk_equations(self) -> _pyoomph.DynamicBulkElementInstance:
         assert self._problem is not None
@@ -1426,6 +1426,7 @@ class ODEStorageMesh(_pyoomph.ODEStorageMesh):
         self._codegen._index_fields()  # type:ignore
         self._codegen.get_equations()._set_current_codegen(ocg)  # type:ignore
         self._element = None
+        self.ignore_initial_condition=False
         for _, eqtree in self._eqtree.get_children().items():
             raise RuntimeError("ODE domains may not have children yet")
 
@@ -1480,6 +1481,8 @@ class ODEStorageMesh(_pyoomph.ODEStorageMesh):
         return self.get_code_gen().get_code()
 
     def setup_initial_conditions_with_interfaces(self, resetting_first_step: bool, ic_name: str):
+        if self.ignore_initial_condition:
+            return
         self.setup_initial_conditions(resetting_first_step, ic_name)
 
     def elements(self) -> Iterator[_pyoomph.OomphGeneralisedElement]:

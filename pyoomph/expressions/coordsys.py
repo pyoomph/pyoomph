@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ from .generic import *
 
 from ..typings import *
 from ..expressions import *
+
 
 if TYPE_CHECKING:
     from ..generic.codegen import Equations,FiniteElementCodeGenerator,FiniteElementSpaceEnum
@@ -156,19 +157,19 @@ class BaseCoordinateSystem(_pyoomph.CustomCoordinateSystem):
     def volumetric_scaling(self, spatial_scale:ExpressionOrNum, elem_dim:int)->ExpressionOrNum:
         return spatial_scale ** elem_dim
 
-    def integral_dx(self, ndim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:        
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:        
         if lagrangian:
             if with_scale:
-                return spatial_scale ** (ndim) * nondim("dX" )
+                return spatial_scale ** (edim) * nondim("dX" )
             else:
                 return nondim("dX")
         else:
             if with_scale:
-                return spatial_scale ** (ndim) * nondim("dx" )
+                return spatial_scale ** (edim) * nondim("dx" )
             else:
                 return nondim("dx")
 
-    def get_coords(self, ndim:int, with_scales:bool, lagrangian:bool) -> List[Expression]:
+    def get_coords(self, ndim:int, with_scales:bool, lagrangian:bool,mesh_coords:bool=False) -> List[Expression]:
         rel_scales = [self.x_rel_scale, self.y_rel_scale, self.z_rel_scale]
         if lagrangian:
             if with_scales:
@@ -176,12 +177,19 @@ class BaseCoordinateSystem(_pyoomph.CustomCoordinateSystem):
                 x,y,z=rel_scales[0]*x,rel_scales[1]*y,rel_scales[2]*z
             else:
                 x, y, z = nondim(["lagrangian_x", "lagrangian_y", "lagrangian_z"])
-        else:
+        else:            
             if with_scales:
-                x, y, z = var(["coordinate_x", "coordinate_y", "coordinate_z"])
+                if mesh_coords:
+                    x, y, z = var(["mesh_x", "mesh_y", "mesh_z"])
+                else:
+                    x, y, z = var(["coordinate_x", "coordinate_y", "coordinate_z"])
                 x,y,z=rel_scales[0]*x,rel_scales[1]*y,rel_scales[2]*z
             else:
-                x, y, z = nondim(["coordinate_x", "coordinate_y", "coordinate_z"])
+                if mesh_coords:
+                    x, y, z = nondim(["mesh_x", "mesh_y", "mesh_z"])
+                else:
+                    x, y, z = nondim(["coordinate_x", "coordinate_y", "coordinate_z"])
+                
         all_coords = [x, y, z]
         if ndim == 1:
             return [x]
@@ -223,7 +231,8 @@ class ODECoordinateSystem(BaseCoordinateSystem):
         return Expression(1)
 
     def expand_coordinate_or_mesh_vector(self,cg:"FiniteElementCodeGenerator", name:str,dimensional:bool,no_jacobian:bool,no_hessian:bool):        
-        raise RuntimeError("ODEs don't have coordinates")
+        return Expression(0)
+        #raise RuntimeError("ODEs don't have coordinates")
 
 # Cartesian
 class CartesianCoordinateSystem(BaseCoordinateSystem):
@@ -368,18 +377,18 @@ class AxisymmetricCoordinateSystem(BaseCoordinateSystem):
     def volumetric_scaling(self, spatial_scale:ExpressionOrNum, elem_dim:int)->ExpressionOrNum:
         return spatial_scale ** (elem_dim + 1)
 
-    def integral_dx(self, ndim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:
-        if ndim >= 3:
-            raise RuntimeError("Axisymmetry does not work for dimension " + str(ndim))
-        ndim_offs=ndim+1
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:
+        if edim >= 3:
+            raise RuntimeError("Axisymmetry does not work for dimension " + str(edim))
+        edim_offs=edim+1
         if lagrangian:
             if with_scale:
-                return spatial_scale ** ndim_offs * 2 * pi * nondim("lagrangian_y" if self.use_x_as_symmetry_axis else "lagrangian_x") * nondim("dX")
+                return spatial_scale ** edim_offs * 2 * pi * nondim("lagrangian_y" if self.use_x_as_symmetry_axis else "lagrangian_x") * nondim("dX")
             else:
                 return 2 * pi * nondim("lagrangian_y" if self.use_x_as_symmetry_axis else "lagrangian_x") * nondim("dX")
         else:
             if with_scale:
-                return spatial_scale ** ndim_offs * 2 * pi * nondim("coordinate_y" if self.use_x_as_symmetry_axis else "coordinate_x") * nondim("dx")
+                return spatial_scale ** edim_offs * 2 * pi * nondim("coordinate_y" if self.use_x_as_symmetry_axis else "coordinate_x") * nondim("dx")
             else:
                 return 2 * pi * nondim("coordinate_y" if self.use_x_as_symmetry_axis else "coordinate_x") * nondim("dx")
 
@@ -556,6 +565,13 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
         
         self.with_normal_component_in_mesh_coordinates=False # Actually, quite important!
 
+
+    def get_wavenumber_k(self,dimensional:bool=True):
+        return self.k_symbol/(scale_factor("spatial") if dimensional else 1)
+    
+    def get_additional_coordinate(self,dimensional:bool=True):
+        return self.xadd*(scale_factor("spatial") if dimensional else 1)
+    
     def get_mode_expansion_of_var_or_test(self,code:_pyoomph.FiniteElementCode,fieldname:str,is_field:bool,is_dim:bool,expr:Expression,where:str,expansion_mode:int)->Expression:
         if where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python"):
             return expr # Don't do this for integral expressions, fluxes, initial and dirichlets
@@ -571,7 +587,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 expr=_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(0))
             
         
-        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z"}
+        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z","local_coordinate_1","local_coordinate_2","local_coordinate_3"}
         if not code._coordinates_as_dofs:
             ignore_fields=ignore_fields.union({"coordinate_x","coordinate_y","coordinate_z","mesh_x","mesh_y","mesh_z"})
         if fieldname in ignore_fields:
@@ -595,25 +611,18 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def _map_residal_on_additional_eigenproblem(self,residual:Expression,re_im_mapping:Callable[[Expression],Expression])->Expression:
         zero = _pyoomph.Expression(0)
-        # First order in epsilon is just derive by epsilon and set epsilon to zero afterwards
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
-        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)
-        # Map on the real/imag part part
-        real_or_imag = re_im_mapping(replaced_m)
-        # Remove any contributions of the base mode from the Jacobian and mass matrix
-        # The Jacobian arises by deriving with respect to all degrees of freedom.
-        # Here, we must ensure that we only derive with respect to the perturbed mode, not to the base mode (mode zero)
-        # For the Hessian, we just want the zero mode terms, i.e. getting the second derivatives with respect to the base mode with the correct I*m-terms
-        rem_jacobian_flag = _pyoomph.Expression(1)
-        azimode = _pyoomph.Expression(1)
-        rem_hessian_flag = _pyoomph.Expression(2)
-        no_jacobian_entries_from_base_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(real_or_imag, zero,rem_jacobian_flag)
-        #no_hessian_entries_from_azimuthal_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(no_jacobian_entries_from_base_mode, azimode,rem_hessian_flag)
-        no_hessian_entries_from_normal_mode=no_jacobian_entries_from_base_mode
-        return _pyoomph.GiNaC_collect_common_factors(no_hessian_entries_from_normal_mode)
+        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.k_symbol, self.normal_mode)        
+        res=re_im_mapping(_pyoomph.GiNaC_split_subexpressions_in_real_and_imaginary_parts(replaced_m))
+        return 0+res
+        #return _pyoomph.GiNaC_collect_common_factors(res)
 
     def map_residual_on_normal_mode_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
+        #print("MAPPING REAL",residual)
+        #print(self._map_residal_on_additional_eigenproblem(residual,real_part))
+        #print("EXPANDED",_pyoomph._currently_generated_element().expand_placeholders(self._map_residal_on_additional_eigenproblem(residual,real_part),True))
+        #print("DONE MAPPING REAL")
         return self._map_residal_on_additional_eigenproblem(residual,real_part)
 
     def map_residual_on_normal_mode_eigenproblem_imag(self,residual:Expression)->Expression:
@@ -637,45 +646,107 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
 
     def scalar_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
-        # TODO MOVING COORDINATES
         res:List[ExpressionOrNum] = []
-        coords = self.get_coords(3, with_scales, lagrangian)
-        dcoords=self.map_to_zero_epsilon(coords)
-        pcoords=self.map_to_first_order_epsilon(coords)
+        dcoords=self.map_to_zero_epsilon(self.get_coords(3, with_scales, lagrangian))
+        pcoords=self.map_to_first_order_epsilon(self.get_coords(3, with_scales, lagrangian,mesh_coords=True))
+        xadd=self.get_additional_coordinate(with_scales)
         for i, a in enumerate(dcoords):
-            if i < ndim:
-                movmesh_term=0
-                #if not lagrangian:
-                #    movmesh_term+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[i]
-                res.append(diff(arg, a)+movmesh_term)
-            elif i == ndim:
-                #movmesh_term=(0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.phi)-arg)/dcoords[0]**2 * pcoords[0]
-                #movmesh_term=(0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*diff(arg,self.xadd) * pcoords[i]
-                #movmesh_term+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[0],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[0]
-                movmesh_term=0 # TODO
-                #if not lagrangian:
-                #    movmesh_term+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[i]
-                res.append( diff(arg,self.xadd) +movmesh_term ) 
+            if i < ndim:    
+                res.append(diff(arg, a))
+            elif i == ndim:                
+                if not lagrangian:
+                    res.append(diff(arg, xadd))
+                else:
+                    res.append(0) 
             else:
                 res.append(0)
+                
+        if not lagrangian:
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            Xk=pcoords[0]                        
+            k=self.get_wavenumber_k(dimensional=with_scales)
+            I=self.imaginary_i
+            x=dcoords[0]
+            if ndim==2:
+                Yk=pcoords[1]
+                y=dcoords[1]
+                res[0]+=mm*(-diff(Xk, x)*diff(arg, x) - diff(Yk, x)*diff(arg, y) )
+                res[1]+=mm*(-diff(Xk, y)*diff(arg, x) - diff(Yk, y)*diff(arg, y)  )                
+                res[2]+=mm*( I*k*(-Xk*diff(arg, x) - Yk*diff(arg, y)) )
+            elif ndim==1:
+                res[0]+=mm*(-diff(Xk, x)*diff(arg, x))
+                res[1]+=mm*(-I*k*Xk*diff(arg, x)) # XXX Not according to Duarte
+                pass
+            elif ndim==0:
+                pass
+            else:
+                raise RuntimeError("Not implemented")
+   
         return vector(res)
+    
+    
 
     def vector_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
-        print("vector divergence",arg,ndim,edim,with_scales,lagrangian)
-        res:Expression = Expression(0)
-        coords = self.get_coords(3, with_scales, lagrangian)
-        dcoords=self.map_to_zero_epsilon(coords)
-        pcoords=self.map_to_first_order_epsilon(coords)
-        #print(pcoords)
-        #exit()
-        for i in range(ndim):
-            res += diff(arg[i], dcoords[i])
-            if not lagrangian:
-                res+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[i],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[i]
-                #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[i],self.xadd))*diff(pcoords[i],self.xadd)
-        res+=diff(arg[ndim],self.xadd)
+        I=self.imaginary_i
+        k=self.get_wavenumber_k(dimensional=with_scales)
+        dcoords=self.map_to_zero_epsilon(self.get_coords(3, with_scales, lagrangian))
+        pcoords=self.map_to_first_order_epsilon(self.get_coords(3, with_scales, lagrangian,mesh_coords=True))
+        Xk=pcoords[0]
+        x=dcoords[0]
+        xadd=self.get_additional_coordinate(with_scales)
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")*(1 if not lagrangian else 0)
+        if ndim==0:
+            return diff(arg[0], xadd) # TODO: Test this
+        elif ndim==1:
+            if edim==0:     
+                # TODO Such things might be problematic when you e.g. calculate div(var("u",domain="..")). 
+                # If ".." has edim=ndim, then this expression will likely be evaluated with edim=ndim-1, which is not what we want
+                return diff(arg[1], xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], xadd) )
+            elif edim==1:                
+                return diff(arg[0], x) + diff(arg[1], xadd)*(1 if not lagrangian else 0) + mm*( -I*Xk*k*diff(arg[1], x) - diff(Xk, x)*diff(arg[0], x) )
+        elif ndim==2:
+            Yk=pcoords[1]
+            y=dcoords[1]
+           
+            if edim==0:
+                return diff(arg[2], xadd)*(1 if not lagrangian else 0) + mm*( I*Xk*k*diff(arg[0], xadd) + I*Yk*k*diff(arg[1], xadd) )
+            elif edim==1:
+                res=diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], xadd)*(1 if not lagrangian else 0) #+ mm * (    )
+                mmterm=0
+                Xk1,Xk2=pcoords[0],pcoords[1]
+                sadd=xadd
+                u1,u2,u3=arg[0],arg[1],arg[2]
+                X01=self.map_to_zero_epsilon(var("coordinate_x"))
+                X02=self.map_to_zero_epsilon(var("coordinate_y"))
+                s1=var("local_coordinate_1")
+                mmterm+=I*k*Xk1*diff(u1, sadd) + I*k*Xk2*diff(u2, sadd) - I*k*Xk1*diff(X01, s1)**2*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(X02, s1)*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk1*diff(X01, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X01, s1)*diff(X02, s1)*diff(u1, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)**2*diff(u2, sadd)/(diff(X01, s1)**2 + diff(X02, s1)**2) - I*k*Xk2*diff(X02, s1)*diff(u3, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + 2*diff(0, s1)*diff(X01, s1)**2*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X01, s1)*diff(X02, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) + 2*diff(0, s1)*diff(X02, s1)**2*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)**2*diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk1, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X01, s1)*diff(X02, s1)*diff(Xk2, s1)*diff(u1, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - 2*diff(X02, s1)**2*diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**4 + 2*diff(X01, s1)**2*diff(X02, s1)**2 + diff(X02, s1)**4) - diff(0, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) - diff(0, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk1, s1)*diff(u1, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2) + diff(Xk2, s1)*diff(u2, s1)/(diff(X01, s1)**2 + diff(X02, s1)**2)
+                res+=mm*mmterm
+                return res
+            elif edim==2:
+                return diff(arg[0], x) + diff(arg[1], y) + diff(arg[2], xadd)*(1 if not lagrangian else 0) + mm * ( -I*k*Xk*diff(arg[2], x) - I*k*Yk*diff(arg[2], y) - diff(Xk, x)*diff(arg[0], x) - diff(Xk, y)*diff(arg[1], x) - diff(Yk, x)*diff(arg[0], y) - diff(Yk, y)*diff(arg[1], y) )
+        raise RuntimeError("Any other combinations are not implemented yet!")
         
-        return res
+        
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:        
+        if lagrangian:
+            if with_scale:
+                return spatial_scale ** (edim) * nondim("dX" )
+            else:
+                return nondim("dX")
+        else:
+            from ..expressions import square_root
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            
+            dcoords=self.map_to_zero_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian))
+            pcoords=self.map_to_first_order_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian,mesh_coords=True))
+            
+            dx_eps=sum([diff(pc,dc) for pc,dc in zip(pcoords,dcoords)])*nondim("dx")            
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            if with_scale:
+                return spatial_scale ** (edim) * (nondim("dx") + mm*dx_eps )
+            else:
+                return nondim("dx")+ mm*dx_eps
+    
     
     def tensor_divergence(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
         raise RuntimeError("Not implemented")
@@ -683,31 +754,66 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
     def vector_gradient(self, arg: _pyoomph.Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> _pyoomph.Expression:
         res:List[List[ExpressionOrNum]] = []
         # TODO MOVING COORDINATES
-        coords=self.get_coords(ndim, with_scales, lagrangian)
-        dcoords=self.map_to_zero_epsilon(coords)
-        pcoords=self.map_to_first_order_epsilon(coords)
+        dcoords=self.map_to_zero_epsilon(self.get_coords(ndim, with_scales, lagrangian))
+        pcoords=self.map_to_first_order_epsilon(self.get_coords(ndim, with_scales, lagrangian,mesh_coords=True))
+        k=self.get_wavenumber_k(dimensional=with_scales)
+        xadd=self.get_additional_coordinate(with_scales)
         for b in range(ndim):
             line:List[ExpressionOrNum] = []
             entry = arg[b]
             for a in range(ndim):
-                line.append(diff(entry, dcoords[a]))
-                #if not lagrangian:
-                    #line[-1]+=- _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]                
-            line.append(diff(entry, self.xadd))
-            #if not lagrangian:
-            #        line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(entry,self.xadd))*self.imaginary_i*self.k_symbol
+                line.append(diff(entry, dcoords[a]))                
+            if not lagrangian:
+                line.append(diff(entry, xadd))
+            else:
+                line.append(0)
             res.append(line)
         line:List[ExpressionOrNum] = []
-        for a in range(ndim):
-            line.append(diff(arg[ndim], dcoords[a]))
-            #if not lagrangian:
-            #    line[-1]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[ndim],self.xadd))*self.imaginary_i*self.k_symbol * pcoords[a]
-        line.append(diff(arg[ndim],self.xadd))
-        
-        #if not lagrangian:
-                #line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg[ndim],self.xadd))#*self.imaginary_i*self.k_symbol
-                #line[-1]+= _pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[ndim])*self.imaginary_i*self.k_symbol
+        if not lagrangian:
+            for a in range(ndim):
+                line.append(diff(arg[ndim], dcoords[a]))
+            line.append(diff(arg[ndim],xadd))
+        else:
+            for a in range(ndim+1):        
+                line.append(0)            
+               
         res.append(line)
+        
+        if not lagrangian: 
+            if edim!=ndim:
+                raise RuntimeError("Vector gradient on the CartesianCoordinateSystemWithAdditionalNormalMode is not implemented for edim!=ndim. If you need it, implement it!")
+            I=self.imaginary_i            
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            if ndim==1:               
+                Xk=pcoords[0]
+                vX,vY=arg[0],arg[1]                
+                x,y=dcoords[0],xadd
+                
+                #res[0][0]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
+                #res[0][1]+=mm*( I*k*Xk*diff(vY, x) + I*k*vY*diff(Xk, x) - diff(Xk, x)*diff(vX, x) )
+                #res[1][0]+=mm*( -diff(Xk, x)*diff(vY, x) )
+                #res[1][1]+=mm*( -I*k*Xk*diff(vY, x) )
+                res[0][0]+=mm*(-diff(Xk, x)*diff(vX, x))
+                res[0][1]+=mm*(-I*k*Xk*diff(vX, x))
+                res[1][0]+=mm*(-diff(Xk, x)*diff(vY, x))
+                res[1][1]+=mm*(-I*k*Xk*diff(vY, x))
+                
+
+            else:
+                Xk,Yk=pcoords[0],pcoords[1]
+                u_x,u_y,u_z=arg[0],arg[1],arg[2]
+                x,y,z=dcoords[0],dcoords[1],xadd
+                
+                res[0][0]+=mm*( -diff(Xk, x)*diff(u_x, x) - diff(Yk, x)*diff(u_x, y) )
+                res[0][1]+=mm*( -diff(Xk, y)*diff(u_x, x) - diff(Yk, y)*diff(u_x, y) )
+                res[0][2]+=mm*( -I*k*Xk*1*diff(u_x, x) - I*k*Yk*diff(u_x, y) )
+                res[1][0]+=mm*( -diff(Xk, x)*diff(u_y, x) - diff(Yk, x)*diff(u_y, y) )
+                res[1][1]+=mm*( -diff(Xk, y)*diff(u_y, x) - diff(Yk, y)*diff(u_y, y) )
+                res[1][2]+=mm*( -I*k*Xk*1*diff(u_y, x) - I*k*Yk*diff(u_y, y) )
+                res[2][0]+=mm*( -(diff(Xk, x)*diff(u_z, x) + diff(Yk, x)*diff(u_z, y)) )
+                res[2][1]+=mm*( -(diff(Xk, y)*diff(u_z, x) + diff(Yk, y)*diff(u_z, y)) )
+                res[2][2]+=mm*( -I*k*(Xk*diff(u_z, x) + Yk*diff(u_z, y)) )                                
+        
         return matrix(res)
 
     def tensor_divergence(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
@@ -718,6 +824,9 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def expand_coordinate_or_mesh_vector(self,cg:"FiniteElementCodeGenerator", name:str,dimensional:bool,no_jacobian:bool,no_hessian:bool):        
         if not cg._coordinates_as_dofs:
+            dim=cg.get_nodal_dimension()
+            if dim==0:
+                return Expression(0)
             return super().expand_coordinate_or_mesh_vector(cg,name,dimensional,no_jacobian,no_hessian)
         else:
             dim=cg.get_nodal_dimension()
@@ -726,6 +835,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             else:
                 vr=lambda n : nondim(n,no_jacobian=no_jacobian,no_hessian=no_hessian) # TODO: Apply at domain=cg?
             if self.with_normal_component_in_mesh_coordinates:
+                raise RuntimeError("Not implemented")
                 if dim == 1:
                     return vector([vr(name+"_normal")])
                 elif dim == 1:
@@ -736,7 +846,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                     raise RuntimeError("Cannot use normal mode expansion coordinate system in 3d")
             else:
                 if dim==0:
-                    return 0
+                    return Expression(0)
                 if dim == 1:
                     return vector([vr(name+"_x"),0])
                 elif dim == 2:
@@ -769,6 +879,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
     
     def get_normal_vector_or_component(self,cg:"FiniteElementCodeGenerator",component:Optional[int]=None,only_base_mode:bool=False,only_perturbation_mode:bool=False,where:str="Residual"):
         dim = cg.get_nodal_dimension()
+        edim=cg.get_element_dimension()
         if not cg._coordinates_as_dofs or (where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python")):
             return super().get_normal_vector_or_component(cg,component,only_base_mode,only_perturbation_mode,where=where)
         
@@ -787,22 +898,43 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
             base_factor=0 if only_perturbation_mode else 1
             pert_factor=0 if only_base_mode else 1
             
+            dcoords=self.map_to_zero_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False))
+            pcoords=self.map_to_first_order_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False,mesh_coords=True))
+            
+            if dim==2:
+                if edim==1:
+                    n0=[cg._get_normal_component(0),cg._get_normal_component(1),0]
+                    Xk,Yk=pcoords[0],pcoords[1]
+                    x,y=dcoords[0],dcoords[1]
+                    I=self.imaginary_i
+                    k=self.get_wavenumber_k(dimensional=True)
+                    mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+                    
+                    #neps2=[-n0[1]*(d_by_dx(Yk)-d_by_dy(Xk))]
+                    #neps2.append(n0[0]*(d_by_dx(Yk)-d_by_dy(Xk)))
+                    #neps2.append(-I*k*(n0[0]*Xk+n0[1]*Yk))
+                    if component==0:
+                        return base_factor*n0[0]-pert_factor* mm*n0[1]*(diff(Yk,x)-diff(Xk,y))
+                    elif component==1:
+                        return base_factor*n0[1]+pert_factor*mm*n0[0]*(diff(Yk,x)-diff(Xk,y))
+                    elif component==2:
+                        return -pert_factor*mm*I*k*(n0[0]*Xk+n0[1]*Yk)
             
             if component<dim: 
                 
-                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component_eigenexpansion(component),Expression(1))*self.field_mode
+                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component(component),Expression(1))*self.field_mode
             elif component==dim:                
 
                 #return base_factor*cg._get_normal_component(component)
-                nr0=cg._get_normal_component(0)
+                nx0=cg._get_normal_component(0)
                 #rm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_x"),_pyoomph.Expression(1))*self.field_mode
-                rm=var("mesh_x",only_perturbation_mode=True)
-                n0_dot_xeigen=nr0*rm
+                Xk=pcoords[0]
+                n0_dot_xeigen=nx0*Xk
                 if dim==2:
-                    nz0=cg._get_normal_component(1)
-                    zm=var("mesh_y",only_perturbation_mode=True)
+                    ny0=cg._get_normal_component(1)
+                    Yk=pcoords[1]
                     #zm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_y"),_pyoomph.Expression(1))*self.field_mode
-                    n0_dot_xeigen+=nz0*zm
+                    n0_dot_xeigen+=ny0*Yk
                 if self.with_normal_component_in_mesh_coordinates:
                     raise RuntimeError("Not implemented")
                     xadd_shift=var("mesh_normal",only_perturbation_mode=True)                     
@@ -812,7 +944,8 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
                 #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
                 #exit()
                 #return pert_factor*(nr0*phim-self.imaginary_i*self.normal_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
-                return pert_factor*(-self.imaginary_i*self.normal_mode*(n0_dot_xeigen))
+                #return pert_factor*(-self.imaginary_i*self.k_symbol*(n0_dot_xeigen))
+                return pert_factor*((-self.imaginary_i*self.k_symbol*n0_dot_xeigen))
                 
             else:
                 raise RuntimeError("Normal component "+str(component)+" not available")
@@ -855,7 +988,7 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
                 expr=_pyoomph.GiNaC_eval_at_expansion_mode(expr,_pyoomph.Expression(0))
             
         
-        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z"}
+        ignore_fields={"time","lagrangian_x","lagrangian_y","lagrangian_z","local_coordinate_1","local_coordinate_2","local_coordinate_3"}
         if not code._coordinates_as_dofs:
             ignore_fields=ignore_fields.union({"coordinate_x","coordinate_y","coordinate_z","mesh_x","mesh_y","mesh_z"})
         if fieldname in ignore_fields:
@@ -881,20 +1014,10 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         zero = _pyoomph.Expression(0)
         # First order in epsilon is just derive by epsilon and set epsilon to zero afterwards
         first_order_in_eps = _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(residual), self.expansion_eps), self.expansion_eps, zero)
-        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.m_angular_symbol, self.angular_mode)
-        # Map on the real/imag part part
-        real_or_imag = re_im_mapping(replaced_m)
-        # Remove any contributions of the base mode from the Jacobian and mass matrix
-        # The Jacobian arises by deriving with respect to all degrees of freedom.
-        # Here, we must ensure that we only derive with respect to the perturbed mode, not to the base mode (mode zero)
-        # For the Hessian, we just want the zero mode terms, i.e. getting the second derivatives with respect to the base mode with the correct I*m-terms
-        rem_jacobian_flag = _pyoomph.Expression(1)
-        azimode = _pyoomph.Expression(1)
-        rem_hessian_flag = _pyoomph.Expression(2)
-        no_jacobian_entries_from_base_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(real_or_imag, zero,rem_jacobian_flag)
-        #no_hessian_entries_from_azimuthal_mode = _pyoomph.GiNaC_remove_mode_from_jacobian_or_hessian(no_jacobian_entries_from_base_mode, azimode,rem_hessian_flag)
-        no_hessian_entries_from_azimuthal_mode=no_jacobian_entries_from_base_mode
-        return _pyoomph.GiNaC_collect_common_factors(no_hessian_entries_from_azimuthal_mode)
+        replaced_m = _pyoomph.GiNaC_SymSubs(first_order_in_eps, self.m_angular_symbol, self.angular_mode)        
+        real_or_imag = re_im_mapping(_pyoomph.GiNaC_split_subexpressions_in_real_and_imaginary_parts(replaced_m))        
+        return 0+real_or_imag
+        #return _pyoomph.GiNaC_collect_common_factors(real_or_imag)
 
     def map_residual_on_angular_eigenproblem_real(self,residual:Expression)->Expression:
         real_part=_pyoomph.GiNaC_get_real_part
@@ -921,7 +1044,36 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
 
 
-
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:        
+        
+        if edim >= 3:
+            raise RuntimeError("Axisymmetry does not work for dimension " + str(edim))
+        edim_offs=edim+1
+       
+        if lagrangian:
+            if with_scale:
+                return spatial_scale ** edim_offs * 2 * pi * nondim("lagrangian_x") * nondim("dX")
+            else:
+                return 2 * pi * nondim("lagrangian_x") * nondim("dX") 
+            
+        
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+        
+        dcoords=self.map_to_zero_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian))
+        pcoords=self.map_to_first_order_epsilon(self.get_coords(nodal_dim, with_scale, lagrangian,mesh_coords=True))
+        
+        if nodal_dim==2:
+            dx_eps=(dcoords[0]*diff(pcoords[0], dcoords[0]) + dcoords[0]*diff(pcoords[1], dcoords[1]) + pcoords[0])*nondim("dx")            
+        elif nodal_dim==1:
+            dx_eps=(dcoords[0]*diff(pcoords[0], dcoords[0])  + pcoords[0])*nondim("dx")            
+        else:
+            raise RuntimeError("Not implemented")
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+        if with_scale:
+            return 2*pi* spatial_scale ** (edim) * (dcoords[0]* nondim("dx") + mm*dx_eps )
+        else:
+            return 2*pi*(dcoords[0]*nondim("dx")+ mm*dx_eps)
+            
     def scalar_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
         res:List[ExpressionOrNum] = []
         coords = self.get_coords(3, with_scales, lagrangian)
@@ -930,91 +1082,135 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
         for i, a in enumerate(dcoords):
             if i < ndim:
                 res.append(diff(arg, a))
-            elif i == ndim:
-                res.append( diff(arg,self.phi) / dcoords[0] - (0 if lagrangian else 1)*_pyoomph.GiNaC_EvalFlag("moving_mesh")*(diff(arg,self.phi)-arg)/dcoords[0]**2 * pcoords[0])
+            elif i == ndim and not lagrangian:
+                res.append( diff(arg,self.phi) / dcoords[0])
             else:
                 res.append(0)
+        import _pyoomph
+        if not lagrangian:
+            mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+            x=dcoords[0]
+            Xp=pcoords[0]
+            psi=arg
+            phi=self.phi
+            m=self.m_angular_symbol
+            I=self.imaginary_i
+            if ndim==1:
+                res[0]+=mm*(-diff(Xp, x)*diff(psi, x))
+                res[1]+=mm*(-I*m*Xp*diff(psi, x)/x - Xp*diff(psi, phi)/x**2)         
+            elif ndim==2:
+                y=dcoords[1]
+                Yp=pcoords[1]
+                res[0]+=mm*(-diff(Xp, x)*diff(psi, x) - diff(Yp, x)*diff(psi, y))
+                res[1]+=mm*(-diff(Xp, y)*diff(psi, x) - diff(Yp, y)*diff(psi, y))
+                res[2]+=mm*( -I*m*Xp*diff(psi, x)/x - I*m*Yp*diff(psi, y)/x - Xp*diff(psi, phi)/x**2    )
+            else:
+                raise RuntimeError("Not implemented")
         return vector(res)
 
     def vector_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool) -> Expression:
-        # dvr/dr        dvr/(r*dt)-vt/r
-        # dvt/dr        dvt/(r*dt)+vr/r
+        if lagrangian:
+            return super().vector_gradient(arg, ndim, edim, with_scales, lagrangian)
 
-        # Or here:
-        # df(v[0],r)        d_by_dt*v[0]/r-v[1]/r
-        # df(v[1],r)        d_by_dt*v[1]/r+v[0]/r
+        if edim!=ndim:
+            raise RuntimeError("TODO: Cannot take a vector gradient in axisymmetry-breaking coordinate system for edim!=ndim")
 
-        # dvr/dr        dvr/(r*dt)-vt/r      dvr/dz
-        # dvt/dr        dvt/(r*dt)+vr/r      dvt/dz
-        # dvz/dr        dvz/(r*dt)           dvz/dz
-        # Or
-        # df(v[0],r)        df(v[0],z)               d_by_dt*v[0]/r-v[2]/r
-        # df(v[1],r)        df(v[1],z)               d_by_dt*v[1]/r
-        # df(v[2],r)        df(v[2],z)               d_by_dt*v[2]/r+v[0]/r
-
-
-        df = diff
         zero=Expression(0)
+        I=self.imaginary_i
+        m=self.m_angular_symbol
+        phi=self.phi
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")                                                        
         if ndim >= 3:
             raise RuntimeError("Vector gradient in axisymmetry does not work for dimension " + str(ndim))
         if ndim == 1:
             r, = self.get_coords(ndim, with_scales, lagrangian)
-            dr=self.map_to_zero_epsilon(r)
-            pr=self.map_to_first_order_epsilon(r)
-            #res = [[df(v[0], r), d_by_dt * v[0] / r - v[1] / r, 0], [df(v[1], r), d_by_dt * v[1] / r + v[0] / r, 0],[0, 0, 0]]
-            res:List[List[ExpressionOrNum]] = [[df(arg[0], dr), df(arg[0],self.phi) / dr - arg[1] / dr,zero],
-                   [df(arg[1], dr), df(arg[1],self.phi) / dr + arg[0] / dr,zero],[zero,zero,zero]]
-#            res = [[df(v[0], r), df(v[1], r), 0], [d_by_dt * v[0] / r - v[1] / r, d_by_dt * v[1] / r + v[0] / r, 0],[0, 0, 0]]
+            X0=self.map_to_zero_epsilon(r)
+            Xm=self.map_to_first_order_epsilon(r)
             if not lagrangian:
-                res[0][1]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[0],self.phi)-arg[1])/dr**2 * pr
-                res[1][1]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[1],self.phi)+arg[0])/dr**2 * pr            
+                res:List[List[ExpressionOrNum]] = [[diff(arg[0], X0), diff(arg[0],self.phi) / X0 - arg[1] / X0,zero],
+                   [diff(arg[1], X0), diff(arg[1],self.phi) / X0 + arg[0] / X0,zero],[zero,zero,zero]]                
+                res[0][0]+=mm*(-diff(Xm, X0)*diff(arg[0], X0))
+                res[0][1]+=mm*(-I*m*Xm*diff(arg[0], X0)/X0 + Xm*arg[1]/X0**2 - Xm*diff(arg[0], phi)/X0**2)
+                res[1][0]+=mm*(-diff(Xm, X0)*diff(arg[1], X0))
+                res[1][1]+=mm*(-I*m*Xm*diff(arg[1], X0)/X0 - Xm*arg[0]/X0**2 - Xm*diff(arg[1], phi)/X0**2)
+            else:
+                res:List[List[ExpressionOrNum]] = [[diff(arg[0], r), 0, 0], [0, 0, 0], [0, 0, arg[0] / r]]
         else:
-#            raise RuntimeError("TODO")
             if arg.nops() != 3:
                 raise RuntimeError(
                     "Cannot take a 2d axisymmetric vector gradient from a vector with dim!=2:  " + str(arg))
-            r, z = self.get_coords(ndim, with_scales, lagrangian)
-            dr=self.map_to_zero_epsilon(r)
-            dz=self.map_to_zero_epsilon(z)
-            pr=self.map_to_first_order_epsilon(r)
+            xc, yc = self.get_coords(ndim, with_scales, lagrangian)
+            x=self.map_to_zero_epsilon(xc)
+            y=self.map_to_zero_epsilon(yc)
+            Xp=self.map_to_first_order_epsilon(xc)
+            Yp=self.map_to_first_order_epsilon(yc)
             #pr=r-dr            
-            res:List[List[ExpressionOrNum]]=[[ df(arg[0],dr),df(arg[0],dz),df(arg[0],self.phi)/dr-arg[2]/dr],
-                 [df(arg[1],dr),df(arg[1],dz),df(arg[1],self.phi)/dr],
-                 [df(arg[2],dr) ,df(arg[2],dz),df(arg[2],self.phi)/dr+arg[0]/dr]]
-            if not lagrangian:                
-                res[0][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[0],self.phi)-arg[2])/dr**2 * pr
-                res[1][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[1],self.phi))/dr**2 * pr
-                res[2][2]+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(df(arg[2],self.phi)+arg[0])/dr**2 * pr
+            #res:List[List[ExpressionOrNum]]=[[ diff(arg[0],dr),diff(arg[0],dz),diff(arg[0],self.phi)/dr-arg[2]/dr],
+             #    [diff(arg[1],dr),diff(arg[1],dz),diff(arg[1],self.phi)/dr],
+             #    [diff(arg[2],dr) ,diff(arg[2],dz),diff(arg[2],self.phi)/dr+arg[0]/dr]]
+            res:List[List[ExpressionOrNum]]= [[diff(arg[0], x), diff(arg[0], y), -arg[2]/x + diff(arg[0], phi)/x], 
+                                              [diff(arg[1], x), diff(arg[1], y), diff(arg[1], phi)/x], 
+                                              [diff(arg[2], x), diff(arg[2], y), arg[0]/x + diff(arg[2], phi)/x]]
+            res[0][0]+=mm*(-diff(Xp, x)*diff(arg[0], x) - diff(Yp, x)*diff(arg[0], y))
+            res[0][1]+=mm*(-diff(Xp, y)*diff(arg[0], x) - diff(Yp, y)*diff(arg[0], y))
+            res[0][2]+=mm*(-I*m*Xp*diff(arg[0], x)/x - I*m*Yp*diff(arg[0], y)/x + Xp*arg[2]/x**2 - Xp*diff(arg[0], phi)/x**2)
+            res[1][0]+=mm*(-diff(Xp, x)*diff(arg[1], x) - diff(Yp, x)*diff(arg[1], y))
+            res[1][1]+=mm*(-diff(Xp, y)*diff(arg[1], x) - diff(Yp, y)*diff(arg[1], y))
+            res[1][2]+=mm*(-I*m*Xp*diff(arg[1], x)/x - I*m*Yp*diff(arg[1], y)/x - Xp*diff(arg[1], phi)/x**2)
+            res[2][0]+=mm*(-diff(Xp, x)*diff(arg[2], x) - diff(Yp, x)*diff(arg[2], y))
+            res[2][1]+=mm*(-diff(Xp, y)*diff(arg[2], x) - diff(Yp, y)*diff(arg[2], y))
+            res[2][2]+=mm*(-I*m*Xp*diff(arg[2], x)/x - I*m*Yp*diff(arg[2], y)/x - Xp*arg[0]/x**2 - Xp*diff(arg[2], phi)/x**2)
+
         return matrix(res)
 
 
 
     def vector_divergence(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
+        if lagrangian:
+            return super().vector_divergence(arg, ndim, edim, with_scales, lagrangian)
         res = 0
         coords = self.get_coords(arg.nops(), with_scales, lagrangian)
         dcoords=self.map_to_zero_epsilon(coords)
-        #pcoords=[cm-c0 for cm,c0 in zip(coords,dcoords) ] # Perturbed coordinates
         pcoords=self.map_to_first_order_epsilon(coords)
-#        nops = arg.nops()
-        if ndim== 1:
-            res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
+        mm=_pyoomph.GiNaC_EvalFlag("moving_mesh")
+        m=self.m_angular_symbol
+        I=self.imaginary_i     
+        phi=self.phi       
+
+        if ndim== 1:            
+            if edim==1:
+                res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1],self.phi)/dcoords[0]
+                res+=mm*(-I*m*pcoords[0]*diff(arg[1],dcoords[0])/dcoords[0] - diff(pcoords[0], dcoords[0])*diff(arg[0], dcoords[0]) - pcoords[0]*arg[0]/dcoords[0]**2 - pcoords[0]*diff(arg[1], phi)/dcoords[0]**2)
+                return res
+            else: # edim=0 case                     
+                res=(arg[0] + diff(arg[1], phi))/dcoords[0]
+                res+=mm*(pcoords[0]*(-I*m*arg[1] + I*m*diff(arg[0], phi) - arg[0] - diff(arg[1], phi))/dcoords[0]**2)
+                return res
+
         elif ndim == 2:
-            res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
+            x=dcoords[0]
+            y=dcoords[1]
+            Xp=pcoords[0]
+            Yp=pcoords[1]
+            if edim==2:                
+                res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
+                res+=mm*(-I*m*Xp*diff(arg[2], x)/x - I*m*Yp*diff(arg[2], y)/x - diff(Xp, x)*diff(arg[0], x) - diff(Xp, y)*diff(arg[1], x) - diff(Yp, x)*diff(arg[0], y) - diff(Yp, y)*diff(arg[1], y) - Xp*arg[0]/x**2 - Xp*diff(arg[2], phi)/x**2)
+                return res
+            elif edim==1:
+                s=var("local_coordinate_1")
+                res = diff(arg[0], dcoords[0]) + arg[0] / dcoords[0] + diff(arg[1], dcoords[1])+diff(arg[2],self.phi) / dcoords[0]
+                # TODO: We really must simplify this!
+                res+=mm*( -I*m*Xp*arg[2]/x**2 + I*m*Xp*diff(arg[0], phi)/x**2 + I*m*Yp*diff(arg[1], phi)/x**2 + I*m*Xp*arg[2]*diff(x, s)**2/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Xp*diff(x, s)**2*diff(arg[0], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Xp*diff(x, s)*diff(y, s)*diff(arg[1], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + I*m*Yp*arg[2]*diff(x, s)*diff(y, s)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Yp*diff(x, s)*diff(y, s)*diff(arg[0], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Yp*diff(y, s)**2*diff(arg[1], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) - I*m*Xp*diff(x, s)*diff(arg[2], s)/(x*diff(x, s)**2 + x*diff(y, s)**2) - I*m*Yp*diff(y, s)*diff(arg[2], s)/(x*diff(x, s)**2 + x*diff(y, s)**2) + Xp*arg[0]/x**2 + Xp*diff(arg[2], phi)/x**2 - 2*x**2*diff(x, s)**2*diff(Xp, s)*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x**2*diff(x, s)*diff(Xp, s)*diff(y, s)*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x**2*diff(x, s)*diff(y, s)*diff(Yp, s)*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x**2*diff(y, s)**2*diff(Yp, s)*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(x, s)**3*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(x, s)**2*diff(y, s)*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(x, s)*diff(y, s)**2*diff(arg[0], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) - 2*x*Xp*diff(y, s)**3*diff(arg[1], s)/(x**2*diff(x, s)**4 + 2*x**2*diff(x, s)**2*diff(y, s)**2 + x**2*diff(y, s)**4) + diff(Xp, s)*diff(arg[0], s)/(diff(x, s)**2 + diff(y, s)**2) + diff(Yp, s)*diff(arg[1], s)/(diff(x, s)**2 + diff(y, s)**2) - 2*x**3*arg[0]*diff(x, s)*diff(Xp, s)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**3*arg[0]*diff(y, s)*diff(Yp, s)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**3*diff(x, s)*diff(Xp, s)*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**3*diff(y, s)*diff(Yp, s)*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*arg[0]*diff(x, s)**2/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*arg[0]*diff(y, s)**2/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*diff(x, s)**2*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) - 2*x**2*Xp*diff(y, s)**2*diff(arg[2], phi)/(x**4*diff(x, s)**2 + x**4*diff(y, s)**2) + 2*x*arg[0]*diff(x, s)*diff(Xp, s)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*x*arg[0]*diff(y, s)*diff(Yp, s)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*x*diff(x, s)*diff(Xp, s)*diff(arg[2], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*x*diff(y, s)*diff(Yp, s)*diff(arg[2], phi)/(x**2*diff(x, s)**2 + x**2*diff(y, s)**2) + 2*Xp*diff(x, s)*diff(arg[0], s)/(x*diff(x, s)**2 + x*diff(y, s)**2) + 2*Xp*diff(y, s)*diff(arg[1], s)/(x*diff(x, s)**2 + x*diff(y, s)**2))
+                return res
+                #raise RuntimeError("divergence with ndim=2, edim=1 not implemented")
+            else:
+                raise RuntimeError("divergence with ndim=2, edim=0 not implemented")
+            return res
+            
         else:
             raise RuntimeError("Cannot use this coordinate system on a 3d mesh")
-        if not lagrangian:
-            #print(coords)
-            #if cg._coordinates_as_dofs and (where=="Residual" or (not self.expand_with_modes_for_python_debugging or where!="Python")):
-            # Derive the u_r/r term by the denominator 
-            # Only on a moving mesh:
-            #res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[0]+ diff(arg[ndim],self.phi))/dcoords[0]**2 * pcoords[0]
-            res+= -_pyoomph.GiNaC_EvalFlag("moving_mesh")*(arg[0]+ diff(arg[ndim],self.phi))/dcoords[0]**2 * pcoords[0]
-            #if ndim==1:
-                
-                #exit()
-            #else:
-            #    raise RuntimeError("TODO")
-        return res
+        
+        
 
 
     def define_vector_field(self, name:str, space:"FiniteElementSpaceEnum", ndim:int, element:"Equations") -> Tuple[List[Expression], List[Expression], List[str]]:
@@ -1069,7 +1265,8 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
 
 
     def get_normal_vector_or_component(self,cg:"FiniteElementCodeGenerator",component:Optional[int]=None,only_base_mode:bool=False,only_perturbation_mode:bool=False,where:str="Residual"):
-        dim = cg.get_nodal_dimension()
+        dim = cg.get_nodal_dimension()        
+        edim=cg.get_element_dimension()
         if not cg._coordinates_as_dofs or (where!="Residual" and (not self.expand_with_modes_for_python_debugging or where!="Python")):
             return super().get_normal_vector_or_component(cg,component,only_base_mode,only_perturbation_mode,where=where)
         
@@ -1085,38 +1282,69 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
             # Normal expansion            
             base_factor=0 if only_perturbation_mode else 1
             pert_factor=0 if only_base_mode else 1
+            dcoords=self.map_to_zero_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False))
+            pcoords=self.map_to_first_order_epsilon(self.get_coords(dim, with_scales=True, lagrangian=False,mesh_coords=True))
             
-            if component<dim: # Radial normal
-                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component_eigenexpansion(component),Expression(1))*self.field_mode
+            if edim==2:
+                raise RuntimeError("Not implemented")
+                
+            if component<dim:                 
+                return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component(component),Expression(1))*self.field_mode
             elif component==dim:                
-                nr0=cg._get_normal_component(0)
-                #rm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_x"),_pyoomph.Expression(1))*self.field_mode
-                rm=var("mesh_x",only_perturbation_mode=True)
-                n0_dot_xeigen=nr0*rm
+
+                #return base_factor*cg._get_normal_component(component)
+                nx0=cg._get_normal_component(0)
+                Xk=pcoords[0]
+                n0_dot_xeigen=nx0*Xk
                 if dim==2:
-                    nz0=cg._get_normal_component(1)
-                    zm=var("mesh_y",only_perturbation_mode=True)
-                    #zm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_y"),_pyoomph.Expression(1))*self.field_mode
-                    n0_dot_xeigen+=nz0*zm
+                    ny0=cg._get_normal_component(1)
+                    Yk=pcoords[1]
+                    n0_dot_xeigen+=ny0*Yk
                 if self.with_phi_component_in_mesh_coordinates:
-                    phim=var("mesh_phi",only_perturbation_mode=True)
+                    raise RuntimeError("Not implemented")
                 else:
-                    phim=0
-                #return pert_factor*self.expansion_eps*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))*self.field_mode
-                #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
-                #exit()
-                return pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
+                    pass
+                return pert_factor*((-self.imaginary_i*self.m_angular_symbol/dcoords[0]*n0_dot_xeigen))
                 
             else:
                 raise RuntimeError("Normal component "+str(component)+" not available")
-        print(dim)
-        exit()
-        if component is None:
-            posscompos=[nondim("normal_"+d,domain=cg) for d in ["x","y","z"]]
-            mycomps=posscompos[:dim]        
-            return vector(*mycomps)
-        else:
-            return cg._get_normal_component(component)            
+            ## Old code
+            if False:
+                # Normal expansion            
+                base_factor=0 if only_perturbation_mode else 1
+                pert_factor=0 if only_base_mode else 1
+                
+                if component<dim: # Radial normal
+                    return base_factor*cg._get_normal_component(component) +pert_factor*self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(cg._get_normal_component_eigenexpansion(component),Expression(1))*self.field_mode
+                elif component==dim:                
+                    nr0=cg._get_normal_component(0)
+                    #rm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_x"),_pyoomph.Expression(1))*self.field_mode
+                    rm=var("mesh_x",only_perturbation_mode=True)
+                    n0_dot_xeigen=nr0*rm
+                    if dim==2:
+                        nz0=cg._get_normal_component(1)
+                        zm=var("mesh_y",only_perturbation_mode=True)
+                        #zm=self.expansion_eps*_pyoomph.GiNaC_eval_at_expansion_mode(var("mesh_y"),_pyoomph.Expression(1))*self.field_mode
+                        n0_dot_xeigen+=nz0*zm
+                    if self.with_phi_component_in_mesh_coordinates:
+                        phim=var("mesh_phi",only_perturbation_mode=True)
+                    else:
+                        phim=0
+                    #return pert_factor*self.expansion_eps*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))*self.field_mode
+                    #print(pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen)))                
+                    #exit()
+                    return pert_factor*(nr0*phim-self.imaginary_i*self.angular_mode/var("mesh_x",only_base_mode=True)*(n0_dot_xeigen))
+                    
+                else:
+                    raise RuntimeError("Normal component "+str(component)+" not available")
+            print(dim)
+            exit()
+            if component is None:
+                posscompos=[nondim("normal_"+d,domain=cg) for d in ["x","y","z"]]
+                mycomps=posscompos[:dim]        
+                return vector(*mycomps)
+            else:
+                return cg._get_normal_component(component)            
             
 
     def tensor_divergence(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
@@ -1156,12 +1384,12 @@ class RadialSymmetricCoordinateSystem(BaseCoordinateSystem):
     def volumetric_scaling(self, spatial_scale:ExpressionOrNum, elem_dim:int) -> ExpressionOrNum:
         return spatial_scale ** (elem_dim + 2)
 
-    def integral_dx(self, ndim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:
-        if ndim >= 3:
-            raise RuntimeError("Does not work for dimension " + str(ndim))        
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:
+        if edim >= 3:
+            raise RuntimeError("Does not work for dimension " + str(edim))        
         if lagrangian:
             if with_scale:
-                return spatial_scale ** (ndim + 2) * 4 * pi * (nondim(
+                return spatial_scale ** (edim + 2) * 4 * pi * (nondim(
                     "lagrangian_x") - self.Rcenter) ** 2 * nondim("dX")
             else:
                 return 4 * pi * (nondim(
@@ -1169,7 +1397,7 @@ class RadialSymmetricCoordinateSystem(BaseCoordinateSystem):
                     "spatial")) ** 2 * nondim("dX")
         else:
             if with_scale:
-                return spatial_scale ** (ndim + 2) * 4 * pi * (nondim(
+                return spatial_scale ** (edim + 2) * 4 * pi * (nondim(
                     "coordinate_x") - self.Rcenter / scale_factor(
                     "spatial")) ** 2 * nondim("dx")
             else:
@@ -1217,3 +1445,203 @@ class RadialSymmetricCoordinateSystem(BaseCoordinateSystem):
 
     def directional_tensor_derivative(self,T:Expression,direct:Expression,lagrangian:bool,dimensional:bool,ndim:int,edim:int)->Expression:
         raise RuntimeError("Implement the directional tensor derivative for this coordinate system")
+
+
+
+
+
+
+
+
+class BaseDifferentialGeometryCoordinateSystem(BaseCoordinateSystem):
+    """A coordinate system that uses differential geometry to define grad, div, etc.
+    This is just a base class. Please inherit from this class and implement at least the method :py:meth:`~pyoomph.expressions.coordsys.get_real_position_vector_from_mesh_coordinates`.
+    """
+    def __init__(self):
+        super().__init__()
+        #: Select the maximum supported nodal dimension of the mesh
+        self.max_nodal_dimension = 3
+        #: Select suffixes of the vector components
+        self.vector_component_suffixes = ["x", "y", "z"]
+        #: Additional vector components (used for e.g. additional normal mode)
+        self.additional_vector_component_suffixes = []
+        #: Additional local coordinates (used for e.g. additional normal mode)
+        self.additional_local_coordinates=[]        
+        #: Use subexpressions for the transformations
+        self.use_subexpressions = True	
+        
+        self._values_to_substitute = {} # Values to subsitute at the end of an expansion
+        
+        self._dx_integration_factor=1
+        # Cache for the covariant basis vectors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a list of basis vectors        
+        self._cached_basis_vectors = {}
+        # Cache for the covariant metric tensors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a g_ab
+        self._cached_covariant_metrics = {}
+        # Cache for the contravariant metric tensors, map from (bool[lagrangian],bool[dimensional],ndim,edim) to a g^ab
+        self._cached_contravariant_metrics = {}
+
+
+	# The following functions must or should be overridden
+
+    def get_real_position_vector_from_mesh_coordinates(self, mesh_xs: Expression, ndim: int, edim: int,dimensional:bool,lagrangian:bool) -> Expression:
+        raise NotImplementedError("Please implement the position of the real position vector in the local coordinate system by overriding the method get_real_position_vector_from_mesh_coordinates of your class "+str(self.__class__))
+
+    def geometric_jacobian(self) -> Expression:
+        # This function is only used to weight error estimates in the mesh adaptation
+        return Expression(1)
+
+
+
+	# The following functions usually do not need any overriding
+ 
+    def substitute_values_for_additional_local_coordinates(self,expr:Expression)->Expression:
+        import _pyoomph
+        for k,v in self._values_to_substitute.items():
+            expr=_pyoomph.GiNaC_SymSubs(expr,k,v)
+        return expr 
+
+    def add_additional_parametric_variable(self, name: str,value_to_substitute:Optional[ExpressionOrNum]=0,dx_integration_factor:Optional[ExpressionOrNum]=None) -> Expression:
+        """Add a new local coordinate to the coordinate system. This can be e.g. phi in an axisymmetric coordinate system
+
+        """
+        import _pyoomph
+        res_symb=_pyoomph.GiNaC_new_symbol(name)
+        self.additional_local_coordinates.append(res_symb)
+        if value_to_substitute is not None:
+            value_to_substitute=Expression(value_to_substitute)
+            self._values_to_substitute[res_symb]=value_to_substitute
+        if dx_integration_factor is not None:
+            self._dx_integration_factor*=dx_integration_factor
+        return res_symb
+
+    def volumetric_scaling(self, spatial_scale:ExpressionOrNum, elem_dim:int)->ExpressionOrNum:
+        eaug=self.get_augmented_edim(None,elem_dim)
+        return spatial_scale ** (eaug)
+
+    def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:            
+        from ..expressions import determinant,square_root
+        eaug=self.get_augmented_edim(nodal_dim,edim)			
+        if eaug==0:
+            J=1        
+        else:
+            g_ab=self.get_covariant_metric_tensor(nodal_dim,edim,lagrangian,False) # Cannot do it with scales here=> Can mess up the sqrt
+            g=self.substitute_values_for_additional_local_coordinates(determinant(g_ab))
+            J=square_root(g)
+            if self.use_subexpressions:
+                J=subexpression(J)                                
+        if with_scale:
+            vs=self.volumetric_scaling(spatial_scale,edim)
+        else:
+            vs=1
+        return self._dx_integration_factor*vs*J * nondim("dx_unity") 
+		
+        
+        
+    def vector_gradient_dimension(self, basedim:int, lagrangian:bool=False)->int:
+        # Just alwas 3
+        return 3
+    
+    def get_local_coordinate(self, i:int, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> List[Expression]:
+        if i<edim:            
+            return nondim("local_coordinate_"+str(i+1))
+        elif i<edim+len(self.additional_local_coordinates):
+            return self.additional_local_coordinates[i-edim]
+        else:
+            raise RuntimeError("The local coordinate index is out of bounds.")
+        
+    def get_all_local_coordinates(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> List[Expression]:
+        eaug=self.get_augmented_edim(ndim,edim)
+        return [self.get_local_coordinate(i,ndim,edim,lagrangian,dimensional) for i in range(eaug)]
+    
+    def get_augmented_edim(self, ndim:Optional[int],edim: int) -> int:
+        return edim+len(self.additional_local_coordinates)
+
+    def get_covariant_basis_vectors(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> List[Expression]:
+        if (lagrangian,dimensional,ndim, edim) in self._cached_basis_vectors:
+            return self._cached_basis_vectors[(lagrangian,dimensional,ndim, edim)]
+        s = var("local_coordinate")  # Local coordinate
+        if dimensional:
+            mesh_coord=var("lagrangian" if lagrangian else "coordinate")
+        else:
+            mesh_coord=nondim("lagrangian" if lagrangian else "coordinate")
+        x=self.get_real_position_vector_from_mesh_coordinates(mesh_coord,ndim,edim,lagrangian,dimensional)
+        t=[diff(x,s[i]) for i in range(edim)] # covariant basis vector        
+        for sadd in self.additional_local_coordinates:
+            t.append(diff(x,sadd))
+        if len(t)!=self.get_augmented_edim(ndim,edim):
+            raise RuntimeError("The number of basis vectors does not match the augmented dimension. Make sure that the length of additional_local_coordinates is agrees with the augmented dimension, which must be implemented via the get_augmented_edim method.")
+        self._cached_basis_vectors[(lagrangian,dimensional,ndim, edim)] = t
+        return t
+    
+    def get_covariant_metric_tensor(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> Expression:
+        if (lagrangian,dimensional,ndim, edim) in self._cached_covariant_metrics:
+            return self._cached_covariant_metrics[(lagrangian,dimensional,ndim, edim)]
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,dimensional)
+        eaug=self.get_augmented_edim(ndim,edim)
+        g_covar=matrix([[dot(t[i],t[j]) for j in range(eaug)] for i in range(eaug)])
+        self._cached_covariant_metrics[(lagrangian,dimensional,ndim, edim)] = g_covar
+        return g_covar
+        
+    def get_contravariant_metric_tensor(self, ndim: int, edim: int,lagrangian:bool,dimensional:bool) -> Expression:
+        
+        from ..expressions import inverse_matrix # Don't know why I have to import it manually here
+        
+        if (lagrangian,dimensional,ndim, edim) in self._cached_contravariant_metrics:
+            return self._cached_contravariant_metrics[(lagrangian,dimensional,ndim, edim)]
+        g_covar=self.get_covariant_metric_tensor(ndim,edim,lagrangian,dimensional)
+        g_contra=inverse_matrix(g_covar,n=self.get_augmented_edim(ndim,edim),use_subexpression_for_det=self.use_subexpressions)
+        if self.use_subexpressions:
+            g_contra=subexpression(g_contra)
+        self._cached_contravariant_metrics[(lagrangian,dimensional,ndim, edim)] = g_contra
+        return g_contra
+        
+
+    def define_vector_field(self, name: str, space: "FiniteElementSpaceEnum", ndim: int, element: "Equations") -> Tuple[List[Expression], List[Expression], List[str]]:
+        namelist: List[str] = []
+        if ndim > self.max_nodal_dimension:
+            raise RuntimeError(
+                "Cannot use a this coordinate system in "+str(ndim)+"D")
+        for i in range(ndim):
+            namelist.append(name + "_" + self.vector_component_suffixes[i])
+        for v in self.additional_vector_component_suffixes:
+            namelist.append(name + "_" + v)  # TODO: Axisymmetric?
+
+        v: List[Expression] = []
+        vtest: List[Expression] = []
+        s = scale_factor(name)
+        S = test_scale_factor(name)
+        for i, f in enumerate(namelist):
+            if i >= ndim+1:
+                break
+            element.set_scaling(**{f: name})
+            vc = element.define_scalar_field(f, space)
+            vc = var(f)
+            v.append(vc / s)
+            element.set_test_scaling(**{f: name})
+            vtest.append(testfunction(f) / S)
+        return v, vtest, namelist
+
+    def scalar_gradient(self, arg: Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> Expression:
+        g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,with_scales)
+        eaug=self.get_augmented_edim(ndim,edim)
+        s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
+        # TODO: This is likely not right!
+        return self.substitute_values_for_additional_local_coordinates(sum([g_contra[a,b]*t[a]*diff(arg,s[b]) for a in range(eaug) for b in range(eaug)]))
+    
+    def vector_gradient(self, arg: List[Expression], ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> List[Expression]:
+        g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,with_scales)
+        eaug=self.get_augmented_edim(ndim,edim)
+        s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
+        # TODO: This is likely not right!
+        return self.substitute_values_for_additional_local_coordinates(sum([g_contra[a,b]*dyadic(t[a],diff(arg,s[b])) for a in range(eaug) for b in range(eaug)]))
+    
+    def vector_divergence(self, arg: Expression, ndim: int, edim: int, with_scales: bool, lagrangian: bool) -> Expression:
+        g_contra=self.get_contravariant_metric_tensor(ndim,edim,lagrangian,with_scales)
+        t=self.get_covariant_basis_vectors(ndim,edim,lagrangian,with_scales)
+        eaug=self.get_augmented_edim(ndim,edim)
+        s=self.get_all_local_coordinates(ndim,edim,lagrangian,with_scales)
+        return self.substitute_values_for_additional_local_coordinates(sum([g_contra[a,b]*dot(t[a].evalm(),diff(arg,s[b]).evalm()) for a in range(eaug) for b in range(eaug)]))
+    
+

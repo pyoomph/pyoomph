@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -164,13 +164,26 @@ class SpatialErrorEstimator(Equations):
 
     so that the jump in "u" is used, after weighting by the factor 5, as error estimator.
     Error estimators expressions must be nondimensional.
+    
+    for_which controls whether these error estimators are used for the base solution, potential eigenfunctions or both.
     """
 
-    def __init__(self,*fluxes:Union[str,Expression],**kwargs:ExpressionOrNum):
+    def __init__(self,*fluxes:Union[str,Expression],for_which:Literal["both","base","eigen"]="both",**kwargs:ExpressionOrNum):
         super(SpatialErrorEstimator, self).__init__()
         self.fluxes:Dict[Union[str,Expression],ExpressionOrNum]={x:1.0 for x in fluxes}
         for lhs,rhs in kwargs.items():
             self.fluxes[lhs]=rhs
+        if for_which=="both":
+            self.for_base_solution=True
+            self.for_eigenfunction=True
+        elif for_which=="base":
+            self.for_base_solution=True
+            self.for_eigenfunction=False
+        elif for_which=="eigen":
+            self.for_base_solution=False
+            self.for_eigenfunction=True
+        else:
+            raise ValueError("Unsupported value for for_which: "+str(for_which))
 
     def define_error_estimators(self):
         for flux,factor in self.fluxes.items():
@@ -183,7 +196,7 @@ class SpatialErrorEstimator(Equations):
                     jflux=grad(nondim(flux),nondim=True)
             else:
                 jflux=flux
-            self.add_spatial_error_estimator(factor*jflux)
+            self.add_spatial_error_estimator(factor*jflux,for_base=self.for_base_solution,for_eigen=self.for_eigenfunction)
 
     def get_information_string(self) -> str:
         return ", ".join(map(str,self.fluxes))
@@ -677,7 +690,10 @@ class IntegralObservables(Equations):
         else:
             dx=self.get_dx(coordsys=self._coordinante_system)
         for k,v in self.integral_observables.items():
+            #import _pyoomph
+            #_pyoomph.set_verbosity_flag(1)
             self.add_integral_function(k, v * dx)
+            #_pyoomph.set_verbosity_flag(0)
         for k,v in self.dependent_funcs.items():
             self.add_dependent_integral_function(k,v)
 
@@ -810,9 +826,13 @@ class _AverageOrIntegralConstraintBase(Equations):
         for field,integral_value in self.constraints.items():
             u,utest=var_and_test(field)
             l,ltest=var_and_test(field,domain=odestorage)
-            self.add_weak(u/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
-            self.add_weak(self.get_integral_contribution(field)/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
+            #self.add_weak(u/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
+            #self.add_weak(self.get_integral_contribution(field)/scale_factor(field),ltest,dimensional_dx=self.dimensional_dx)
+            self.add_weak(self.get_constraint(field,u),ltest,dimensional_dx=self.dimensional_dx)
             self.add_weak(l,utest/test_scale_factor(field),dimensional_dx=False)
+
+    def get_constraint(self,field:str,u:Expression):
+        return (u-self.get_integral_contribution(field))/scale_factor(field)
 
     def get_global_residual_contribution(self,field:str)-> ExpressionOrNum:
         raise RuntimeError("Must be implemented")
@@ -866,5 +886,5 @@ class AverageConstraint(_AverageOrIntegralConstraintBase):
         return 0 # No global contribution
     
     def get_integral_contribution(self,field:str)-> ExpressionOrNum:
-        return -self.constraints[field] # Consider the offset for the average
+        return self.constraints[field] # Consider the offset for the average
     

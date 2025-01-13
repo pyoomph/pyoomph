@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@
  
 import _pyoomph
 
-from ..expressions import eval_flag,evaluate_in_past,partial_t,scale_factor
+from ..expressions import eval_flag,evaluate_in_past,partial_t,scale_factor,mesh_velocity
 from ..expressions.generic import Expression,ExpressionOrNum
 from ..generic.codegen import Equations,var,InterfaceEquations
 
@@ -133,10 +133,9 @@ class TracerParticles(Equations):
         adv=self.advection_expression
 
         TF=eval_flag("timefrac_tracer")
-        adv_blend=adv*TF+evaluate_in_past(adv)*(1-TF)
-        #ALE_term=eval_flag("moving_mesh")*(TF*partial_t(var("mesh"),ALE=False)+(1-TF)*evaluate_in_past(partial_t(var("mesh"),ALE=False)))
+        adv_blend=adv*TF+evaluate_in_past(adv)*(1-TF)        
         # TODO: ALE term in past?
-        ALE_term = eval_flag("moving_mesh") * partial_t(var("mesh"), ALE=False)
+        ALE_term = eval_flag("moving_mesh") * mesh_velocity()
         ALE_corrected=scale_factor("temporal")/scale_factor("spatial")*(adv_blend-ALE_term)
         cg._register_tracer_advection(self.tracer_name, ALE_corrected)
 

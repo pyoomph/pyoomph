@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,6 +38,97 @@ using namespace oomph;
 
 namespace pyoomph
 {
+
+
+   void rotate_complex_eigenvector_nicely(oomph::Vector<double> &real_eigen, oomph::Vector<double> &imag_eigen)
+  {
+    // Get the dots of the real and imaginary parts
+    double GrGr = 0.0, GiGi = 0.0, GrGi = 0.0;
+    for (unsigned n = 0; n < real_eigen.size(); n++)
+    {
+      GrGr += real_eigen[n] * real_eigen[n];
+      GiGi += imag_eigen[n] * imag_eigen[n];
+      GrGi += real_eigen[n] * imag_eigen[n];
+    }
+
+    // Sample phi: We search for a phi that gives a rotated eigenvectors by multiplication with exp(-i*phi)
+    // so that <Re(eigenvector),Im(eigenvector)> is zero and <Re(eigenvector),Re(eigenvector)> is maximized
+    const unsigned n_phi_samples=30; // Test so many initial guesses for phi
+    const unsigned n_inter=15;
+    double best_phi=0.0;
+    double best_GrGr=GrGr;
+    for (unsigned iphi=0;iphi<n_phi_samples;iphi++)
+    {
+      double phi=2.0*MathematicalConstants::Pi*double(iphi)/double(n_phi_samples);      
+      // If res==0, <Re(eigenvector),Im(eigenvector)> will be rotated to zero
+      double res=-GiGi*sin(phi)*cos(phi) - GrGi*sin(phi)*sin(phi) + GrGi*cos(phi)*cos(phi) + GrGr*sin(phi)*cos(phi);
+      unsigned iter=0;
+      bool success=false;
+      for  ( unsigned  iter=0; iter<n_inter;iter++)
+      {
+        // Newton iteration to find phi
+        double J=GiGi*sin(phi)*sin(phi) - GiGi*cos(phi)*cos(phi) - 4*GrGi*sin(phi)*cos(phi) - GrGr*sin(phi)*sin(phi) + GrGr*cos(phi)*cos(phi);
+        if (std::fabs(J)<1.0e-10)
+        {         
+          break; // Singular Jacobian
+        }
+        phi-=res/J;
+        res=-GiGi*sin(phi)*cos(phi) - GrGi*sin(phi)*sin(phi) + GrGi*cos(phi)*cos(phi) + GrGr*sin(phi)*cos(phi);
+        if (std::fabs(res)<1.0e-10)
+        {
+          success=true; // Found a good zero
+          break;
+        }
+      }
+      if (!success) continue;      
+      // Test whether it maximizes <Re(eigenvector),Re(eigenvector)>
+      double GrGr_new=GrGr*cos(phi)*cos(phi) + GiGi*sin(phi)*sin(phi) - 2*GrGi*sin(phi)*cos(phi);
+      if (GrGr_new>best_GrGr)
+      {
+        best_GrGr=GrGr_new;
+        best_phi=phi;
+      }
+    }
+
+    // Rotate the eigenvector
+    if (best_phi!=0.0)
+    {      
+      double c=cos(best_phi);
+      double s=sin(best_phi);
+      GrGr = 0.0, GiGi = 0.0, GrGi = 0.0;    
+      for (unsigned n = 0; n < real_eigen.size(); n++)
+      {
+        double new_real=real_eigen[n]*c-imag_eigen[n]*s;
+        double new_imag=real_eigen[n]*s+imag_eigen[n]*c;
+        real_eigen[n]=new_real;
+        imag_eigen[n]=new_imag;
+        GrGr += real_eigen[n] * real_eigen[n];
+        GiGi += imag_eigen[n] * imag_eigen[n];
+        GrGi += real_eigen[n] * imag_eigen[n];
+      }
+      std::cout << "Rotating eigenvector by " << best_phi << " to get <Re(eigenvector),Im(eigenvector)> = " << GrGi <<" ~ 0, maximize <Re(eigenvector),Re(eigenvector)>=" << GrGr << " and <Im(eigenvector),Im(eigenvector)>= " << GiGi << std::endl;
+    }
+    else
+    {
+      std::cout << "Rotating eigenvector by " << best_phi << " to get <Re(eigenvector),Im(eigenvector)> = " << GrGi <<" ~ 0, maximize <Re(eigenvector),Re(eigenvector)>=" << GrGr << " and <Im(eigenvector),Im(eigenvector)>= " << GiGi << std::endl;
+    }
+
+    // Normalize the eigenvector to its real part
+    double length_eigen_real = 0.0;
+    for (unsigned n = 0; n < real_eigen.size(); n++)
+    {
+      length_eigen_real += real_eigen[n] * real_eigen[n];
+    }
+    length_eigen_real = sqrt(length_eigen_real);
+    for (unsigned n = 0; n < real_eigen.size(); n++)
+    {
+      real_eigen[n] /= length_eigen_real;
+      imag_eigen[n] /= length_eigen_real;
+    }
+
+  }
+
+
   MyHopfHandler::MyHopfHandler(Problem *const &problem_pt,
                                double *const &parameter_pt) : Solve_which_system(0), Parameter_pt(parameter_pt), Omega(0.0)
   {
@@ -209,41 +300,25 @@ namespace pyoomph
     }
 
     // Normalise the guess for phi
-    double length = 0.0, GrGr = 0.0, GrGi = 0.0, GiGi = 0.0;
+
     for (unsigned n = 0; n < Ndof; n++)
     {
-      GrGr += phi[n] * phi[n];
-      GrGi += phi[n] * psi[n];
-      GiGi += psi[n] * psi[n];
+      Phi[n]=phi[n];
+      Psi[n]=psi[n];
     }
+    rotate_complex_eigenvector_nicely(Phi, Psi);
 
-    /// Correct the initial eigenvector guess
-    double rotation_vector = atan2(GrGr - GiGi + sqrt(pow(GrGr - GiGi, 2) + 4 * pow(GrGi, 2)), 2 * GrGi);
-    //  std::cout << "FROM C: Gs: " << GrGr << "  " << GiGi << " " << GrGi << "  " << rotation_vector << std::endl;
-
-    // Now add the real part of the null space components to the problem
-    // unknowns and initialise it all
     for (unsigned n = 0; n < Ndof; n++)
     {
       problem_pt->GetDofPtr().push_back(&Phi[n]);
-      C[n] = Phi[n] = phi[n] * cos(rotation_vector) - psi[n] * sin(rotation_vector);
-      length += Phi[n] * Phi[n];
+      C[n] = Phi[n];
     }
-    length = sqrt(length);
 
     for (unsigned n = 0; n < Ndof; n++)
     {
       problem_pt->GetDofPtr().push_back(&Psi[n]);
-      Psi[n] = phi[n] * sin(rotation_vector) + psi[n] * cos(rotation_vector);
     }
 
-    // Normalize it
-    for (unsigned n = 0; n < Ndof; n++)
-    {
-      C[n] /= length;
-      Phi[n] /= length;
-      Psi[n] /= length;
-    }
 
     // Now add the parameter
     problem_pt->GetDofPtr().push_back(parameter_pt);
@@ -367,6 +442,8 @@ namespace pyoomph
       // Get the basic residuals, jacobian and mass matrix
       elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);
 
+      bool lambda_tracking=(Parameter_pt==Problem_pt->get_lambda_tracking_real());
+
       // Initialise the pen-ultimate residual
       residuals[3 * raw_ndof] = -1.0 /
                                 (double)(Problem_pt->mesh_pt()->nelement()) * eigenweight;
@@ -382,10 +459,10 @@ namespace pyoomph
           unsigned global_unknown = elem_pt->eqn_number(j);
           // Real part
           residuals[raw_ndof + i] +=
-              jacobian(i, j) * Phi[global_unknown] + Omega * M(i, j) * Psi[global_unknown];
+              jacobian(i, j) * Phi[global_unknown] - Omega * M(i, j) * Psi[global_unknown];
           // Imaginary part
           residuals[2 * raw_ndof + i] +=
-              jacobian(i, j) * Psi[global_unknown] - Omega * M(i, j) * Phi[global_unknown];
+              jacobian(i, j) * Psi[global_unknown] + Omega * M(i, j) * Phi[global_unknown];
         }
         // Get the global equation number
         unsigned global_eqn = elem_pt->eqn_number(i);
@@ -396,6 +473,19 @@ namespace pyoomph
         // Imaginary part
         residuals[3 * raw_ndof + 1] += (Psi[global_eqn] * C[global_eqn]) /
                                        Count[global_eqn];
+      }
+
+      if (lambda_tracking)
+      {
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          for (unsigned j = 0; j < raw_ndof; j++)
+          {
+            unsigned global_unknown = elem_pt->eqn_number(j);
+            residuals[raw_ndof + i] += (*Parameter_pt) * M(i, j) * Phi[global_unknown];          
+            residuals[2 * raw_ndof + i] +=  (*Parameter_pt) * M(i, j) * Psi[global_unknown];              
+          }
+        }
       }
     }
     else
@@ -459,7 +549,8 @@ namespace pyoomph
                                    DenseMatrix<double> &jacobian)
   {
 
-    bool ana_dparam = Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[3 * Ndof]);
+    bool lambda_tracking=(Parameter_pt==Problem_pt->get_lambda_tracking_real());
+    bool ana_dparam = lambda_tracking || Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[3 * Ndof]);
     bool ana_hessian = ana_dparam && Problem_pt->are_hessian_products_calculated_analytically() && dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
 
     // The standard case
@@ -470,7 +561,10 @@ namespace pyoomph
 
       if (!ana_hessian)
       {
-
+        if (lambda_tracking)
+        {
+          throw_runtime_error("Cannot track a complex eigenbranch without having analytical Hessian");
+        }
         // Get the basic residuals and jacobian
         DenseMatrix<double> M(raw_ndof);
         elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);
@@ -483,12 +577,12 @@ namespace pyoomph
           for (unsigned m = 0; m < raw_ndof; ++m)
           {
             jacobian(raw_ndof + n, raw_ndof + m) = jacobian(n, m);
-            jacobian(raw_ndof + n, 2 * raw_ndof + m) = Omega * M(n, m);
+            jacobian(raw_ndof + n, 2 * raw_ndof + m) = -Omega * M(n, m);
             jacobian(2 * raw_ndof + n, 2 * raw_ndof + m) = jacobian(n, m);
-            jacobian(2 * raw_ndof + n, raw_ndof + m) = -Omega * M(n, m);
+            jacobian(2 * raw_ndof + n, raw_ndof + m) = Omega * M(n, m);
             unsigned global_eqn = elem_pt->eqn_number(m);
-            jacobian(raw_ndof + n, 3 * raw_ndof + 1) += M(n, m) * Psi[global_eqn];
-            jacobian(2 * raw_ndof + n, 3 * raw_ndof + 1) -= M(n, m) * Phi[global_eqn];
+            jacobian(raw_ndof + n, 3 * raw_ndof + 1) -= M(n, m) * Psi[global_eqn];
+            jacobian(2 * raw_ndof + n, 3 * raw_ndof + 1) += M(n, m) * Phi[global_eqn];
           }
 
           unsigned local_eqn = elem_pt->eqn_number(n);
@@ -613,7 +707,7 @@ namespace pyoomph
         multi_assm.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian, &M));
 
         multi_assm.back().add_hessian(Eig_local, &dJdU_Eig, &dMdU_Eig);
-        multi_assm.back().add_param_deriv(Parameter_pt, &dRdParam, &dJdParam, &dMdParam);
+        if (!lambda_tracking) multi_assm.back().add_param_deriv(Parameter_pt, &dRdParam, &dJdParam, &dMdParam);
         pyoomph_elem_pt->get_multi_assembly(multi_assm);
 
         // Residuals
@@ -627,14 +721,14 @@ namespace pyoomph
           {
             // residuals[raw_ndof + i] += jacobian(i, j) * Phi_local[j] + Omega * M(i, j) * Psi_local[j];
             // residuals[2 * raw_ndof + i] += jacobian(i, j) * Psi_local[j] - Omega * M(i, j) * Phi_local[j];
-            residuals[raw_ndof + i] += jacobian(i, j) * Eig_local[j] + Omega * M(i, j) * Eig_local[raw_ndof + j];
-            residuals[2 * raw_ndof + i] += jacobian(i, j) * Eig_local[raw_ndof + j] - Omega * M(i, j) * Eig_local[j];
+            residuals[raw_ndof + i] += jacobian(i, j) * Eig_local[j] - Omega * M(i, j) * Eig_local[raw_ndof + j];
+            residuals[2 * raw_ndof + i] += jacobian(i, j) * Eig_local[raw_ndof + j] + Omega * M(i, j) * Eig_local[j];
           }
           unsigned global_eqn = elem_pt->eqn_number(i);
           residuals[3 * raw_ndof] += (Phi[global_eqn] * C[global_eqn]) / Count[global_eqn];
           residuals[3 * raw_ndof + 1] += (Psi[global_eqn] * C[global_eqn]) / Count[global_eqn];
         }
-
+        
         // Jacobian
         for (unsigned n = 0; n < raw_ndof; ++n)
         {
@@ -645,23 +739,47 @@ namespace pyoomph
           jacobian(2 * raw_ndof + n, 3 * raw_ndof + 1) = 0.0;
           for (unsigned m = 0; m < raw_ndof; ++m)
           {
-            jacobian(raw_ndof + n, m) = dJdU_Eig(n, m) + Omega * dMdU_Eig(raw_ndof + n, m);                                           // dR[Phi]/dU
+            jacobian(raw_ndof + n, m) = dJdU_Eig(n, m) - Omega * dMdU_Eig(raw_ndof + n, m);                                           // dR[Phi]/dU
             jacobian(raw_ndof + n, raw_ndof + m) = jacobian(n, m);                                                                    // dR[Phi]/dPhi
-            jacobian(raw_ndof + n, 2 * raw_ndof + m) = Omega * M(n, m);                                                               // dR[Phi]/dPsi
-            jacobian(raw_ndof + n, 3 * raw_ndof) += dJdParam(n, m) * Eig_local[m] + Omega * dMdParam(n, m) * Eig_local[raw_ndof + m]; // dR[Phi]/dParam
+            jacobian(raw_ndof + n, 2 * raw_ndof + m) = -Omega * M(n, m);                                                               // dR[Phi]/dPsi
+            jacobian(raw_ndof + n, 3 * raw_ndof) += dJdParam(n, m) * Eig_local[m] - Omega * dMdParam(n, m) * Eig_local[raw_ndof + m]; // dR[Phi]/dParam
 
-            jacobian(2 * raw_ndof + n, m) = dJdU_Eig(raw_ndof + n, m) - Omega * dMdU_Eig(n, m);                                           // dR[Psi]/dU
+            jacobian(2 * raw_ndof + n, m) = dJdU_Eig(raw_ndof + n, m) + Omega * dMdU_Eig(n, m);                                           // dR[Psi]/dU
             jacobian(2 * raw_ndof + n, 2 * raw_ndof + m) = jacobian(n, m);                                                                // dR[Psi]/dPsi
-            jacobian(2 * raw_ndof + n, raw_ndof + m) = -Omega * M(n, m);                                                                  // dR[Psi]/dPhi
-            jacobian(2 * raw_ndof + n, 3 * raw_ndof) += dJdParam(n, m) * Eig_local[raw_ndof + m] - Omega * dMdParam(n, m) * Eig_local[m]; // dR[Psi]/dParam
+            jacobian(2 * raw_ndof + n, raw_ndof + m) = Omega * M(n, m);                                                                  // dR[Psi]/dPhi
+            jacobian(2 * raw_ndof + n, 3 * raw_ndof) += dJdParam(n, m) * Eig_local[raw_ndof + m] + Omega * dMdParam(n, m) * Eig_local[m]; // dR[Psi]/dParam
 
-            jacobian(raw_ndof + n, 3 * raw_ndof + 1) += M(n, m) * Eig_local[raw_ndof + m]; // dR[Phi]/dOmega
-            jacobian(2 * raw_ndof + n, 3 * raw_ndof + 1) -= M(n, m) * Eig_local[m];        // dR[Psi]/dOmega
+            jacobian(raw_ndof + n, 3 * raw_ndof + 1) += -M(n, m) * Eig_local[raw_ndof + m]; // dR[Phi]/dOmega
+            jacobian(2 * raw_ndof + n, 3 * raw_ndof + 1) -= -M(n, m) * Eig_local[m];        // dR[Psi]/dOmega
           }
 
           unsigned local_eqn = elem_pt->eqn_number(n);
           jacobian(3 * raw_ndof, raw_ndof + n) = C[local_eqn] / Count[local_eqn];         // dR[Param]/dPhi
           jacobian(3 * raw_ndof + 1, 2 * raw_ndof + n) = C[local_eqn] / Count[local_eqn]; // dR[Omega]/dPsi
+        }
+
+        if (lambda_tracking)
+        {
+          for (unsigned i = 0; i < raw_ndof; i++)
+          {
+            for (unsigned j = 0; j < raw_ndof; j++)
+            {              
+              residuals[raw_ndof + i] += (*Parameter_pt)  * M(i, j) * Eig_local[ j];
+              residuals[2 * raw_ndof + i] += (*Parameter_pt)  * M(i, j) * Eig_local[raw_ndof +j];
+
+              jacobian(raw_ndof + i,j) += (*Parameter_pt)  * dMdU_Eig(i, j)* Eig_local[ j];
+              jacobian(2 * raw_ndof + i,j) += (*Parameter_pt)  * dMdU_Eig(i, j)* Eig_local[raw_ndof +j];
+
+              jacobian(raw_ndof + i,raw_ndof + j) += (*Parameter_pt)  * M(i, j);
+              jacobian(2 * raw_ndof + i,2*raw_ndof+j) += (*Parameter_pt)  * M(i, j);
+
+              jacobian(raw_ndof + i,3 * raw_ndof) +=M(i, j) * Eig_local[ j];
+              jacobian(2*raw_ndof + i,3 * raw_ndof) +=M(i, j) * Eig_local[raw_ndof+j];
+
+
+
+            }
+          }
         }
       }
     } // End of standard case
@@ -1134,7 +1252,15 @@ namespace pyoomph
     case Full_augmented:
     {
       DenseMatrix<double> jacobian(raw_ndof);
-      elem_pt->get_jacobian(residuals, jacobian);
+      DenseMatrix<double> mass_matrix(raw_ndof);
+      if (Parameter_pt==Problem_pt->get_lambda_tracking_real())
+      {      
+        elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, mass_matrix);
+      }
+      else
+      {
+        elem_pt->get_jacobian(residuals, jacobian);
+      }
       residuals[raw_ndof] = -1.0 / Problem_pt->mesh_pt()->nelement() * eigenweight;
       for (unsigned i = 0; i < raw_ndof; i++)
       {
@@ -1146,6 +1272,21 @@ namespace pyoomph
         unsigned global_eqn = elem_pt->eqn_number(i);
         residuals[raw_ndof] += (Phi[global_eqn] * Y[global_eqn]) / Count[global_eqn];
       }
+
+      if (Parameter_pt==Problem_pt->get_lambda_tracking_real())
+      {      
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          for (unsigned j = 0; j < raw_ndof; j++)
+          {
+            residuals[raw_ndof + 1 + i] += (*Parameter_pt)*mass_matrix(i, j) * Y[elem_pt->eqn_number(j)];
+          }
+        }
+      }
+
+
+
+            
     }
     break;
 
@@ -1163,7 +1304,9 @@ namespace pyoomph
                                    Vector<double> &residuals,
                                    DenseMatrix<double> &jacobian)
   {
-    bool ana_dparam = Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[Ndof]);
+    // If true, we do not track a fold by adjusting the parameter, but track an eigenvalue branch
+    bool lambda_continuation=  (Parameter_pt==Problem_pt->get_lambda_tracking_real());      
+    bool ana_dparam = lambda_continuation || Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[Ndof]);    
     bool ana_hessian = ana_dparam && Problem_pt->are_hessian_products_calculated_analytically() && dynamic_cast<BulkElementBase *>(elem_pt);
 
     unsigned augmented_ndof = ndof(elem_pt);
@@ -1208,14 +1351,20 @@ namespace pyoomph
 
     case Full_augmented:
     {
+
+
       if (ana_hessian)
       {
+
+        
 
         jacobian.initialise(0.0);
         residuals.initialise(0.0);
         DenseMatrix<double> djac_dparam(raw_ndof, raw_ndof, 0.0);
         Vector<double> dres_dparam(raw_ndof, 0.0);
+        DenseMatrix<double> M(raw_ndof, raw_ndof, 0.0);
         DenseMatrix<double> dJduPhiH(raw_ndof, raw_ndof, 0.0);
+        DenseMatrix<double> dMduPhiH(raw_ndof, raw_ndof, 0.0);
         Vector<double> Y_local(raw_ndof);
         for (unsigned _e = 0; _e < raw_ndof; _e++)
         {
@@ -1224,9 +1373,19 @@ namespace pyoomph
 
         pyoomph::BulkElementBase *pyoomph_elem_pt = dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
         std::vector<SinglePassMultiAssembleInfo> assemble_info;
-        assemble_info.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian));
-        assemble_info.back().add_param_deriv(Parameter_pt, &dres_dparam, &djac_dparam);
-        assemble_info.back().add_hessian(Y_local, &dJduPhiH);
+        
+        if (!lambda_continuation)
+        {
+          assemble_info.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian));
+          assemble_info.back().add_param_deriv(Parameter_pt, &dres_dparam, &djac_dparam);
+          assemble_info.back().add_hessian(Y_local, &dJduPhiH);
+        }
+        else
+        {
+          assemble_info.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &residuals, &jacobian,&M));
+          assemble_info.back().add_hessian(Y_local, &dJduPhiH,&dMduPhiH);
+        }
+        
         pyoomph_elem_pt->get_multi_assembly(assemble_info);
 
         // Fill augmented residuals
@@ -1255,9 +1414,24 @@ namespace pyoomph
           unsigned global_eqn = elem_pt->eqn_number(n);
           jacobian(raw_ndof, raw_ndof + 1 + n) = Phi[global_eqn] / Count[global_eqn];
         }
+
+         if (lambda_continuation)
+         {      
+          for (unsigned n = 0; n < raw_ndof; n++)
+          {
+            for (unsigned m = 0; m < raw_ndof; m++)
+            {
+              residuals[raw_ndof + 1 + n] += (*Parameter_pt)*M(n, m) * Y[elem_pt->eqn_number(m)];
+              jacobian(raw_ndof + 1 + n, raw_ndof + 1 + m) += (*Parameter_pt)*M(n, m);
+              jacobian(raw_ndof + 1 + n, raw_ndof) += M(n, m) * Y_local[m];
+              jacobian(raw_ndof + 1 + m, n) += (*Parameter_pt)*dMduPhiH(m, n);
+            }
+          }
+         }
       }
       else
       {
+        if (lambda_continuation) throw_runtime_error("Hessian must be calculated analytically for eigenbranch continuation, i.e. finite differences is not implemented yet");
         get_residuals(elem_pt, residuals);
         Vector<double> newres(raw_ndof);
         DenseMatrix<double> newjac(raw_ndof);
@@ -2002,18 +2176,17 @@ namespace pyoomph
     return entry.residual_indices[residual_mode] >= 0;
   }
 
-  ///////////////////////////////////////
 
-  ////////// IMPORTANT PART ////////////
+ 
 
-  //////////////////////////////////////
 
   // Constructors. We must pass a problem, a parameter to optimize (i.e. to change in order to get Re(eigenvalue)=0)
   // and a guess of the eigenvector
   AzimuthalSymmetryBreakingHandler::AzimuthalSymmetryBreakingHandler(Problem *const &problem_pt, double *const &parameter_pt,
-                                                                     const oomph::DoubleVector &real_eigen, const oomph::DoubleVector &imag_eigen, const double &Omega_guess)
-      : Omega(Omega_guess), Parameter_pt(parameter_pt)
+                                                                     const oomph::DoubleVector &real_eigen, const oomph::DoubleVector &imag_eigen, const double &Omega_guess,bool has_imag)
+      : Omega(Omega_guess), Parameter_pt(parameter_pt), has_imaginary_part(has_imag)
   {
+    if (!has_imaginary_part) Omega=0.0;
     call_param_change_handler = false; // These must be false at the moment
     FD_step = 1e-8;                    // Default parameter for finite difference step
     Problem_pt = problem_pt;           // Store the problem
@@ -2021,9 +2194,9 @@ namespace pyoomph
     Ndof = problem_pt->ndof();
 
     // Resize the vectors of additional dofs
-    real_eigenvector.resize(Ndof);
-    imag_eigenvector.resize(Ndof);
-    normalization_vector.resize(Ndof);
+    real_eigenvector.resize(Ndof,0);
+    imag_eigenvector.resize(Ndof,0);
+    normalization_vector.resize(Ndof,0);
     Count.resize(Ndof, 0);
 
     // Loop over all the elements in the problem
@@ -2040,49 +2213,38 @@ namespace pyoomph
       }
     }
 
-    // Normalise the guess for the eigenvectors. First getting the lengths
-    double length_eigen_real = 0.0, GrGr = 0.0, GiGi = 0.0, GrGi = 0.0;
-    for (unsigned n = 0; n < Ndof; n++)
-    {
-      GrGr += real_eigen[n] * real_eigen[n];
-      GiGi += imag_eigen[n] * imag_eigen[n];
-      GrGi += real_eigen[n] * imag_eigen[n];
-    }
 
-    /// Correct the initial eigenvector guess
-    double phi = atan2(GrGr - GiGi + sqrt(pow(GrGr - GiGi, 2) + 4 * pow(GrGi, 2)), 2 * GrGi);
-
-    // Next add the real and imaginary parts of the eigenvector to be determined to the problem
-    // and initialise it all
-    for (unsigned n = 0; n < Ndof; n++)
+    for (unsigned n=0;n<Ndof;n++)
     {
-      problem_pt->GetDofPtr().push_back(&real_eigenvector[n]);
-      normalization_vector[n] = real_eigenvector[n] = real_eigen[n] * cos(phi) - imag_eigen[n] * sin(phi); // Set the real normalization vector and the initial real part of the eigenvector to length 1    length_eigen_real += real_eigenvector[n] * real_eigenvector[n];
-      length_eigen_real += real_eigenvector[n] * real_eigenvector[n];
+      real_eigenvector[n]=real_eigen[n];
+      imag_eigenvector[n]=imag_eigen[n];
     }
-
-    for (unsigned n = 0; n < Ndof; n++)
+    rotate_complex_eigenvector_nicely(real_eigenvector,imag_eigenvector);
+    //std::cout << "BIFTRACKER GOT " << (*parameter_pt) << " " << Omega << " HAS IMAG " << has_imaginary_part << std::endl;
+    for (unsigned n=0;n<Ndof;n++) normalization_vector[n]=real_eigenvector[n];
+    for (unsigned n=0;n<Ndof;n++)
     {
-      problem_pt->GetDofPtr().push_back(&imag_eigenvector[n]);
-      imag_eigenvector[n] = real_eigen[n] * sin(phi) + imag_eigen[n] * cos(phi);
+       problem_pt->GetDofPtr().push_back(&real_eigenvector[n]);
     }
-
-    for (unsigned n = 0; n < Ndof; n++)
+    if (has_imaginary_part)
     {
-      normalization_vector[n] /= sqrt(length_eigen_real);
-      real_eigenvector[n] /= sqrt(length_eigen_real);
-      imag_eigenvector[n] /= sqrt(length_eigen_real);
+      for (unsigned n=0;n<Ndof;n++)
+      {
+       problem_pt->GetDofPtr().push_back(&imag_eigenvector[n]);
+      }
     }
+    
 
     // Now add the parameter as degree of freedom
     problem_pt->GetDofPtr().push_back(parameter_pt);
     // Finally add the unknown imaginary part of the eigenvalue as degree of freedom
-    problem_pt->GetDofPtr().push_back(&Omega);
+    if (has_imaginary_part) problem_pt->GetDofPtr().push_back(&Omega);
 
     // rebuild the Dof_distribution_pt
-    Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(), Ndof * 3 + 2, false);
+    Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(), (has_imaginary_part ? Ndof *  3 + 2 : Ndof*2+1), false);
     // Remove all previous sparse storage used during Jacobian assembly
     Problem_pt->GetSparcseAssembleWithArraysPA().resize(0);
+    
   }
 
   // Destructor (used for cleaning up memory)
@@ -2103,7 +2265,10 @@ namespace pyoomph
     // This does not change if considering m contributions are incorporated already
     unsigned raw_ndof = elem_pt->ndof();
     {
-      return (3 * raw_ndof + 2);
+      if (has_imaginary_part)
+        return (3 * raw_ndof + 2);
+      else
+        return (2 * raw_ndof + 1);
     }
   }
 
@@ -2122,17 +2287,27 @@ namespace pyoomph
     {
       global_eqn = Ndof + elem_pt->eqn_number(ieqn_local - raw_ndof);
     }
-    else if (ieqn_local < 3 * raw_ndof)
+    else if (has_imaginary_part)
     {
-      global_eqn = 2 * Ndof + elem_pt->eqn_number(ieqn_local - 2 * raw_ndof);
-    }
-    else if (ieqn_local == 3 * raw_ndof)
-    {
-      global_eqn = 3 * Ndof;
+      if (ieqn_local < 3 * raw_ndof)
+      {
+        global_eqn = 2 * Ndof + elem_pt->eqn_number(ieqn_local - 2 * raw_ndof);
+      }
+      else if (ieqn_local == 3 * raw_ndof)
+      {
+        global_eqn = 3 * Ndof;
+      }
+      else
+      {
+        global_eqn = 3 * Ndof + 1;
+      }
     }
     else
     {
-      global_eqn = 3 * Ndof + 1;
+      if (ieqn_local == 2 * raw_ndof)
+      {
+        global_eqn = 2 * Ndof;
+      }      
     }
     return global_eqn;
   }
@@ -2140,6 +2315,7 @@ namespace pyoomph
   // This will calculate the residual contribution of the original weak form by calling the function of the element
   void AzimuthalSymmetryBreakingHandler::get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals)
   {
+    bool lambda_tracking=(Parameter_pt==Problem_pt->get_lambda_tracking_real());
     // Need to get raw residuals and jacobian
     unsigned raw_ndof = elem_pt->ndof();
 
@@ -2153,37 +2329,76 @@ namespace pyoomph
     set_assembled_residual(elem_pt, 1);
     elem_pt->get_jacobian_and_mass_matrix(residuals_real, jacobian_real, M_real);
     set_assembled_residual(elem_pt, 2);
-    elem_pt->get_jacobian_and_mass_matrix(residuals_imag, jacobian_imag, M_imag);
+    if (has_imaginary_part)
+    {
+      elem_pt->get_jacobian_and_mass_matrix(residuals_imag, jacobian_imag, M_imag);
+    }
     set_assembled_residual(elem_pt, 0);
     elem_pt->get_residuals(residuals);
 
     // Initialise the pen-ultimate residual
-    residuals[3 * raw_ndof] = -1.0 /
-                              (double)(Problem_pt->mesh_pt()->nelement());
-    residuals[3 * raw_ndof + 1] = 0.0;
+    if (has_imaginary_part)
+    {
+      residuals[3 * raw_ndof] = -1.0 /(double)(Problem_pt->mesh_pt()->nelement())* eigenweight;
+      residuals[3 * raw_ndof + 1] = 0.0;
+    }
+    else
+    {
+      residuals[2 * raw_ndof] = -1.0 /(double)(Problem_pt->mesh_pt()->nelement())* eigenweight;
+    }
 
     // Now multiply to fill in the residuals
     for (unsigned i = 0; i < raw_ndof; i++)
     {
       residuals[raw_ndof + i] = 0.0;
-      residuals[2 * raw_ndof + i] = 0.0;
+      if (has_imaginary_part) residuals[2 * raw_ndof + i] = 0.0;
       for (unsigned j = 0; j < raw_ndof; j++)
       {
         unsigned global_unknown = elem_pt->eqn_number(j);
         // First residual
-        residuals[raw_ndof + i] +=
-            jacobian_real(i, j) * real_eigenvector[global_unknown] - jacobian_imag(i, j) * imag_eigenvector[global_unknown] + Omega * (M_real(i, j) * imag_eigenvector[global_unknown] + M_imag(i, j) * real_eigenvector[global_unknown]);
-        // Second residual
-        residuals[2 * raw_ndof + i] +=
-            jacobian_real(i, j) * imag_eigenvector[global_unknown] + jacobian_imag(i, j) * real_eigenvector[global_unknown] - Omega * (M_real(i, j) * real_eigenvector[global_unknown] + M_imag(i, j) * imag_eigenvector[global_unknown]);
+        if (has_imaginary_part) 
+        {
+          residuals[raw_ndof + i] +=jacobian_real(i, j) * real_eigenvector[global_unknown] - jacobian_imag(i, j) * imag_eigenvector[global_unknown] - Omega * (M_real(i, j) * imag_eigenvector[global_unknown] + M_imag(i, j) * real_eigenvector[global_unknown]);        
+          residuals[2 * raw_ndof + i] += jacobian_real(i, j) * imag_eigenvector[global_unknown] + jacobian_imag(i, j) * real_eigenvector[global_unknown] + Omega * (M_real(i, j) * real_eigenvector[global_unknown] + M_imag(i, j) * imag_eigenvector[global_unknown]);
+        }
+        else
+        {
+          residuals[raw_ndof + i] +=jacobian_real(i, j) * real_eigenvector[global_unknown];        
+        }
       }
       // Get the global equation number
       unsigned global_eqn = elem_pt->eqn_number(i);
 
-      // Real eigenvector normalization
-      residuals[3 * raw_ndof] += (real_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
-      // Imaginary eigenvector normalization
-      residuals[3 * raw_ndof + 1] += (imag_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
+      if (has_imaginary_part) 
+      {
+        residuals[3 * raw_ndof] += (real_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
+        // Imaginary eigenvector normalization
+        residuals[3 * raw_ndof + 1] += (imag_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
+      }
+      else
+      {
+        residuals[2 * raw_ndof] += (real_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
+      }
+    }
+
+    if (lambda_tracking)
+    {
+      for (unsigned i = 0; i < raw_ndof; i++)
+      {
+        for (unsigned j = 0; j < raw_ndof; j++)
+        {
+          unsigned global_unknown = elem_pt->eqn_number(j);
+          if (has_imaginary_part) 
+          {
+            residuals[raw_ndof + i] +=(*Parameter_pt) * (M_real(i, j) * real_eigenvector[global_unknown] - M_imag(i, j) * imag_eigenvector[global_unknown]);        
+            residuals[2 * raw_ndof + i] += (*Parameter_pt) * (M_real(i, j) * imag_eigenvector[global_unknown] + M_imag(i, j) * real_eigenvector[global_unknown]);
+          }
+          else
+          {
+            residuals[raw_ndof + i] +=(*Parameter_pt) *M_real(i, j) * real_eigenvector[global_unknown];        
+          }
+        }
+      }
     }
 
     //=======Correct residuals according to boundary conditions dependent on m=======//
@@ -2202,7 +2417,7 @@ namespace pyoomph
       if (eigen_dofs_forced_zero.count(global_eqn))
       {
         residuals[raw_ndof + i] = 0; // Eigenvector residual values **PATCH
-        residuals[2 * raw_ndof + i] = 0;
+        if (has_imaginary_part) residuals[2 * raw_ndof + i] = 0;
       }
     }
   }
@@ -2210,7 +2425,8 @@ namespace pyoomph
   // Assembling the Jacobian matrix
   void AzimuthalSymmetryBreakingHandler::get_jacobian(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
   {
-    bool ana_dparam = Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[3 * Ndof]);
+    bool lambda_tracking=(Parameter_pt==Problem_pt->get_lambda_tracking_real());
+    bool ana_dparam = lambda_tracking || Problem_pt->is_dparameter_calculated_analytically(Problem_pt->GetDofPtr()[3 * Ndof]);
     // Currently, we only calculate hessian analytically, if also ana_dparam is set (it is usually the case)
     bool ana_hessian = ana_dparam && Problem_pt->are_hessian_products_calculated_analytically() && dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
 
@@ -2226,12 +2442,18 @@ namespace pyoomph
 
     if (!ana_hessian) // FD Hessian terms
     {
-
+      if (lambda_tracking)
+      {
+   //     throw_runtime_error("Lambda tracking not implemented for finite difference Hessian");
+      }
       // Get the base residuals, jacobian and mass matrix of real and imaginary parts
       set_assembled_residual(elem_pt, 1);
       elem_pt->get_jacobian_and_mass_matrix(residuals_real, jacobian_real, M_real);
-      set_assembled_residual(elem_pt, 2);
-      elem_pt->get_jacobian_and_mass_matrix(residuals_imag, jacobian_imag, M_imag);
+      if (has_imaginary_part)
+      {
+        set_assembled_residual(elem_pt, 2);
+        elem_pt->get_jacobian_and_mass_matrix(residuals_imag, jacobian_imag, M_imag);
+      }
       set_assembled_residual(elem_pt, 0);
       elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);
 
@@ -2243,20 +2465,35 @@ namespace pyoomph
       {
         for (unsigned m = 0; m < raw_ndof; ++m)
         {
-          jacobian(raw_ndof + n, raw_ndof + m) = jacobian_real(n, m) + Omega * M_imag(n, m);
-          jacobian(raw_ndof + n, 2 * raw_ndof + m) = -jacobian_imag(n, m) + Omega * M_real(n, m);
-          jacobian(2 * raw_ndof + n, 2 * raw_ndof + m) = jacobian_real(n, m) + Omega * M_imag(n, m);
-          jacobian(2 * raw_ndof + n, raw_ndof + m) = jacobian_imag(n, m) - Omega * M_real(n, m);
-          unsigned global_eqn = elem_pt->eqn_number(m);
-          jacobian(raw_ndof + n, 3 * raw_ndof + 1) += M_real(n, m) * imag_eigenvector[global_eqn] +
-                                                      M_imag(n, m) * real_eigenvector[global_eqn];
-          jacobian(2 * raw_ndof + n, 3 * raw_ndof + 1) -= M_real(n, m) * real_eigenvector[global_eqn] -
-                                                          M_imag(n, m) * imag_eigenvector[global_eqn];
+          if (has_imaginary_part)
+          {
+            jacobian(raw_ndof + n, raw_ndof + m) = jacobian_real(n, m) - Omega * M_imag(n, m);
+            jacobian(raw_ndof + n, 2 * raw_ndof + m) = -jacobian_imag(n, m) - Omega * M_real(n, m);
+            jacobian(2 * raw_ndof + n, 2 * raw_ndof + m) = jacobian_real(n, m) - Omega * M_imag(n, m);
+            jacobian(2 * raw_ndof + n, raw_ndof + m) = jacobian_imag(n, m) + Omega * M_real(n, m);
+            unsigned global_eqn = elem_pt->eqn_number(m);
+            jacobian(raw_ndof + n, 3 * raw_ndof + 1) += M_real(n, m) * imag_eigenvector[global_eqn] +
+                                                        M_imag(n, m) * real_eigenvector[global_eqn];
+            jacobian(2 * raw_ndof + n, 3 * raw_ndof + 1) -= M_real(n, m) * real_eigenvector[global_eqn] -
+                                                            M_imag(n, m) * imag_eigenvector[global_eqn];
+          }
+          else
+          {
+            jacobian(raw_ndof + n, raw_ndof + m) = jacobian_real(n, m);
+            unsigned global_eqn = elem_pt->eqn_number(m);
+          }
         }
 
         unsigned local_eqn = elem_pt->eqn_number(n);
-        jacobian(3 * raw_ndof, raw_ndof + n) = normalization_vector[local_eqn] / Count[local_eqn];
-        jacobian(3 * raw_ndof + 1, 2 * raw_ndof + n) = normalization_vector[local_eqn] / Count[local_eqn];
+        if (has_imaginary_part)
+        {
+          jacobian(3 * raw_ndof, raw_ndof + n) = normalization_vector[local_eqn] / Count[local_eqn];
+          jacobian(3 * raw_ndof + 1, 2 * raw_ndof + n) = normalization_vector[local_eqn] / Count[local_eqn];
+        }
+        else
+        {
+          jacobian(2 * raw_ndof, raw_ndof + n) = normalization_vector[local_eqn] / Count[local_eqn];
+        }
       }
 
       const double FD_step = 1.0e-8;
@@ -2282,7 +2519,8 @@ namespace pyoomph
         {
           jacobian(raw_ndof + m, n) =
               (newres_p[raw_ndof + m] - residuals[raw_ndof + m]) / (FD_step);
-          jacobian(2 * raw_ndof + m, n) =
+          if (has_imaginary_part)
+            jacobian(2 * raw_ndof + m, n) =
               (newres_p[2 * raw_ndof + m] - residuals[2 * raw_ndof + m]) /
               (FD_step);
         }
@@ -2294,16 +2532,16 @@ namespace pyoomph
       // Either calculate the parameter derivatives analitically (ana_dparam=true) or calculate by finite difference.
       if (ana_dparam)
       {
-        Vector<double> dres_dparam(augmented_ndof, 0.0);
-        this->get_dresiduals_dparameter(elem_pt, Problem_pt->GetDofPtr()[3 * Ndof], dres_dparam);
-        for (unsigned m = 0; m < augmented_ndof - 2; m++)
+        Vector<double> dres_dparam(augmented_ndof, 0.0);        
+        this->get_dresiduals_dparameter(elem_pt, Problem_pt->GetDofPtr()[(has_imaginary_part ? 3 : 2) * Ndof], dres_dparam);
+        for (unsigned m = 0; m < augmented_ndof - (has_imaginary_part ? 2 : 1); m++)
         {
-          jacobian(m, 3 * raw_ndof) = dres_dparam[m];
+          jacobian(m, (has_imaginary_part ? 3 : 2) * raw_ndof) = dres_dparam[m];
         }
       }
       else
       {
-        double *unknown_pt = Problem_pt->GetDofPtr()[3 * Ndof];
+        double *unknown_pt = Problem_pt->GetDofPtr()[(has_imaginary_part ? 3 : 2) * Ndof];
         double init = *unknown_pt;
         *unknown_pt += FD_step;
 
@@ -2318,9 +2556,9 @@ namespace pyoomph
         *unknown_pt -= FD_step;
         get_residuals(elem_pt, newres_m);
 
-        for (unsigned m = 0; m < augmented_ndof - 2; m++)
+        for (unsigned m = 0; m < augmented_ndof - (has_imaginary_part ? 2 : 1); m++)
         {
-          jacobian(m, 3 * raw_ndof) = (newres_p[m] - residuals[m]) / FD_step;
+          jacobian(m, (has_imaginary_part ? 3 : 2) * raw_ndof) = (newres_p[m] - residuals[m]) / FD_step;
         }
         // Reset the unknown
         *unknown_pt = init;
@@ -2335,16 +2573,16 @@ namespace pyoomph
 
       // Fill the real and imag eigenvector in local (elemental) indices
       // Vector<double> Yl(raw_ndof), Zl(raw_ndof);
-      Vector<double> Eig(2 * raw_ndof);
+      Vector<double> Eig((has_imaginary_part ? 2 : 1) * raw_ndof);
       for (unsigned _e = 0; _e < raw_ndof; _e++)
       {
         unsigned index = elem_pt->eqn_number(_e);
         Eig[_e] = real_eigenvector[index];
-        Eig[raw_ndof + _e] = imag_eigenvector[index];
+        if (has_imaginary_part) Eig[raw_ndof + _e] = imag_eigenvector[index];
       }
 
-      DenseMatrix<double> JHess_real(2 * raw_ndof, raw_ndof, 0.0), MHess_real(2 * raw_ndof, raw_ndof, 0.0);
-      DenseMatrix<double> JHess_imag(2 * raw_ndof, raw_ndof, 0.0), MHess_imag(2 * raw_ndof, raw_ndof, 0.0);
+      DenseMatrix<double> JHess_real((has_imaginary_part ? 2 : 1) * raw_ndof, raw_ndof, 0.0), MHess_real((has_imaginary_part ? 2 : 1) * raw_ndof, raw_ndof, 0.0);
+      DenseMatrix<double> JHess_imag((has_imaginary_part ? 2 : 1) * raw_ndof, raw_ndof, 0.0), MHess_imag((has_imaginary_part ? 2 : 1) * raw_ndof, raw_ndof, 0.0);
 
       DenseMatrix<double> dJ_real_dparam(raw_ndof, raw_ndof, 0.0), dJ_imag_dparam(raw_ndof, raw_ndof, 0.0);
       DenseMatrix<double> dM_real_dparam(raw_ndof, raw_ndof, 0.0), dM_imag_dparam(raw_ndof, raw_ndof, 0.0);
@@ -2359,39 +2597,49 @@ namespace pyoomph
       if ((resindex = this->resolve_assembled_residual(pyoomph_elem_pt, 0)) >= 0)
       {
         assemble_info.push_back(SinglePassMultiAssembleInfo(resindex, &residuals, &jacobian));
-        assemble_info.back().add_param_deriv(Parameter_pt, &dres_dparam);
+        if (!lambda_tracking) assemble_info.back().add_param_deriv(Parameter_pt, &dres_dparam);
       }
       if ((resindex = this->resolve_assembled_residual(pyoomph_elem_pt, 1)) >= 0)
       {
         assemble_info.push_back(SinglePassMultiAssembleInfo(resindex, &residuals_real, &jacobian_real, &M_real));
         assemble_info.back().add_hessian(Eig, &JHess_real, &MHess_real);
-        assemble_info.back().add_param_deriv(Parameter_pt, &dres_real_dparam, &dJ_real_dparam, &dM_real_dparam);
+        if (!lambda_tracking) assemble_info.back().add_param_deriv(Parameter_pt, &dres_real_dparam, &dJ_real_dparam, &dM_real_dparam);
       }
-      if ((resindex = this->resolve_assembled_residual(pyoomph_elem_pt, 2)) >= 0)
+      if (has_imaginary_part)
       {
-        assemble_info.push_back(SinglePassMultiAssembleInfo(resindex, &residuals_imag, &jacobian_imag, &M_imag));
-        assemble_info.back().add_hessian(Eig, &JHess_imag, &MHess_imag);
-        assemble_info.back().add_param_deriv(Parameter_pt, &dres_imag_dparam, &dJ_imag_dparam, &dM_imag_dparam);
+        if ((resindex = this->resolve_assembled_residual(pyoomph_elem_pt, 2)) >= 0)
+        {
+          assemble_info.push_back(SinglePassMultiAssembleInfo(resindex, &residuals_imag, &jacobian_imag, &M_imag));
+          assemble_info.back().add_hessian(Eig, &JHess_imag, &MHess_imag);
+          if (!lambda_tracking) assemble_info.back().add_param_deriv(Parameter_pt, &dres_imag_dparam, &dJ_imag_dparam, &dM_imag_dparam);
+        }
       }
 
       pyoomph_elem_pt->get_multi_assembly(assemble_info);
 
       // We will fill in the augmented residual vector once more by hand here. Otherwise, it we would call this->get_residual, we would assemble several matrices multiple times
       // Now multiply to fill in the residuals
-      residuals[3 * raw_ndof] = -1.0 / (double)(Problem_pt->mesh_pt()->nelement());
-      residuals[3 * raw_ndof + 1] = 0.0;
+      residuals[(has_imaginary_part ? 3 : 2) * raw_ndof] = -1.0 / (double)(Problem_pt->mesh_pt()->nelement())* eigenweight;
+      if (has_imaginary_part) residuals[3 * raw_ndof + 1] = 0.0;
       for (unsigned i = 0; i < raw_ndof; i++)
       {
         residuals[raw_ndof + i] = 0.0;
-        residuals[2 * raw_ndof + i] = 0.0;
+        if (has_imaginary_part) residuals[2 * raw_ndof + i] = 0.0;
         for (unsigned j = 0; j < raw_ndof; j++)
         {
-          residuals[raw_ndof + i] += jacobian_real(i, j) * Eig[j] - jacobian_imag(i, j) * Eig[raw_ndof + j] + Omega * (M_real(i, j) * Eig[raw_ndof + j] + M_imag(i, j) * Eig[j]);
-          residuals[2 * raw_ndof + i] += jacobian_real(i, j) * Eig[raw_ndof + j] + jacobian_imag(i, j) * Eig[j] - Omega * (M_real(i, j) * Eig[j] + M_imag(i, j) * Eig[raw_ndof + j]);
+          if (has_imaginary_part) 
+          {
+            residuals[raw_ndof + i] += jacobian_real(i, j) * Eig[j] - jacobian_imag(i, j) * Eig[raw_ndof + j] - Omega * (M_real(i, j) * Eig[raw_ndof + j] + M_imag(i, j) * Eig[j]);
+            residuals[2 * raw_ndof + i] += jacobian_real(i, j) * Eig[raw_ndof + j] + jacobian_imag(i, j) * Eig[j] + Omega * (M_real(i, j) * Eig[j] + M_imag(i, j) * Eig[raw_ndof + j]);
+          }
+          else
+          {
+            residuals[raw_ndof + i] += jacobian_real(i, j) * Eig[j] ;
+          }
         }
         unsigned global_eqn = elem_pt->eqn_number(i);
-        residuals[3 * raw_ndof] += (real_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
-        residuals[3 * raw_ndof + 1] += (imag_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
+        residuals[(has_imaginary_part ? 3 : 2) * raw_ndof] += (real_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
+        if (has_imaginary_part) residuals[3 * raw_ndof + 1] += (imag_eigenvector[global_eqn] * normalization_vector[global_eqn]) / Count[global_eqn];
       }
 
       for (unsigned m = 0; m < raw_ndof; m++)
@@ -2399,34 +2647,78 @@ namespace pyoomph
         // First 'row' of the Jacobian:
         // raw Jacobian is already filled by elem_pt->get_jacobian()
         // parameter derivative of the residual
-        jacobian(m, 3 * raw_ndof) = dres_dparam[m];
+        jacobian(m, (has_imaginary_part ? 3 : 2) * raw_ndof) = dres_dparam[m];
 
         // Second and third 'row' of the Jacobian: a lot of Hessian terms!
-        jacobian(raw_ndof + m, 3 * raw_ndof) = 0.0;
-        jacobian(raw_ndof + m, 3 * raw_ndof + 1) = 0.0;
-        jacobian(2 * raw_ndof + m, 3 * raw_ndof) = 0.0;
-        jacobian(2 * raw_ndof + m, 3 * raw_ndof + 1) = 0.0;
+        jacobian(raw_ndof + m, (has_imaginary_part ? 3 : 2) * raw_ndof) = 0.0;
+        if (has_imaginary_part)
+        {
+          jacobian(raw_ndof + m, 3 * raw_ndof + 1) = 0.0;
+          jacobian(2 * raw_ndof + m, 3 * raw_ndof) = 0.0;
+          jacobian(2 * raw_ndof + m, 3 * raw_ndof + 1) = 0.0;
+        }
         for (unsigned int n = 0; n < raw_ndof; n++)
         {
-          jacobian(raw_ndof + m, n) = JHess_real(m, n) - JHess_imag(raw_ndof + m, n) + Omega * (MHess_real(raw_ndof + m, n) + MHess_imag(m, n));
-          jacobian(raw_ndof + m, raw_ndof + n) = jacobian_real(m, n) + Omega * M_imag(m, n);
-          jacobian(raw_ndof + m, 2 * raw_ndof + n) = -jacobian_imag(m, n) + Omega * M_real(m, n);
-          jacobian(raw_ndof + m, 3 * raw_ndof) += dJ_real_dparam(m, n) * Eig[n] - dJ_imag_dparam(m, n) * Eig[raw_ndof + n] + Omega * (dM_real_dparam(m, n) * Eig[raw_ndof + n] + dM_imag_dparam(m, n) * Eig[n]);
-          jacobian(raw_ndof + m, 3 * raw_ndof + 1) += M_real(m, n) * Eig[raw_ndof + n] + M_imag(m, n) * Eig[n];
+          if (has_imaginary_part)
+          {
+            jacobian(raw_ndof + m, n) = JHess_real(m, n) - JHess_imag(raw_ndof + m, n) - Omega * (MHess_real(raw_ndof + m, n) + MHess_imag(m, n));
+            jacobian(raw_ndof + m, raw_ndof + n) = jacobian_real(m, n) - Omega * M_imag(m, n);
+            jacobian(raw_ndof + m, 2 * raw_ndof + n) = -jacobian_imag(m, n) - Omega * M_real(m, n);
+            jacobian(raw_ndof + m, 3 * raw_ndof) += dJ_real_dparam(m, n) * Eig[n] - dJ_imag_dparam(m, n) * Eig[raw_ndof + n] - Omega * (dM_real_dparam(m, n) * Eig[raw_ndof + n] + dM_imag_dparam(m, n) * Eig[n]);
+            jacobian(raw_ndof + m, 3 * raw_ndof + 1) += M_real(m, n) * Eig[raw_ndof + n] + M_imag(m, n) * Eig[n];
 
-          jacobian(2 * raw_ndof + m, n) = JHess_real(raw_ndof + m, n) + JHess_imag(m, n) - Omega * (MHess_real(m, n) + MHess_imag(raw_ndof + m, n));
-          jacobian(2 * raw_ndof + m, raw_ndof + n) = jacobian_imag(m, n) - Omega * M_real(m, n);
-          jacobian(2 * raw_ndof + m, 2 * raw_ndof + n) = jacobian_real(m, n) - Omega * M_imag(m, n);
-          jacobian(2 * raw_ndof + m, 3 * raw_ndof) += dJ_real_dparam(m, n) * Eig[raw_ndof + n] + dJ_imag_dparam(m, n) * Eig[n] - Omega * (dM_real_dparam(m, n) * Eig[n] + dM_imag_dparam(m, n) * Eig[raw_ndof + n]);
-          jacobian(2 * raw_ndof + m, 3 * raw_ndof + 1) -= M_real(m, n) * Eig[n] + M_imag(m, n) * Eig[raw_ndof + n];
+            jacobian(2 * raw_ndof + m, n) = JHess_real(raw_ndof + m, n) + JHess_imag(m, n) + Omega * (MHess_real(m, n) + MHess_imag(raw_ndof + m, n));
+            jacobian(2 * raw_ndof + m, raw_ndof + n) = jacobian_imag(m, n) + Omega * M_real(m, n);
+            jacobian(2 * raw_ndof + m, 2 * raw_ndof + n) = jacobian_real(m, n) - Omega * M_imag(m, n);
+            jacobian(2 * raw_ndof + m, 3 * raw_ndof) += dJ_real_dparam(m, n) * Eig[raw_ndof + n] + dJ_imag_dparam(m, n) * Eig[n] + Omega * (dM_real_dparam(m, n) * Eig[n] + dM_imag_dparam(m, n) * Eig[raw_ndof + n]);
+            jacobian(2 * raw_ndof + m, 3 * raw_ndof + 1) += M_real(m, n) * Eig[n] + M_imag(m, n) * Eig[raw_ndof + n];            
+          }
+          else
+          {
+            jacobian(raw_ndof + m, n) = JHess_real(m, n);
+            jacobian(raw_ndof + m, raw_ndof + n) = jacobian_real(m, n);
+            jacobian(raw_ndof + m, 2 * raw_ndof) += dJ_real_dparam(m, n) * Eig[n];
+          }
         }
         unsigned local_eqn = elem_pt->eqn_number(m);
-        jacobian(3 * raw_ndof, raw_ndof + m) = normalization_vector[local_eqn] / Count[local_eqn];
-        jacobian(3 * raw_ndof + 1, 2 * raw_ndof + m) = normalization_vector[local_eqn] / Count[local_eqn];
+        jacobian((has_imaginary_part ? 3 : 2) * raw_ndof, raw_ndof + m) = normalization_vector[local_eqn] / Count[local_eqn];
+        if (has_imaginary_part)   jacobian(3 * raw_ndof + 1, 2 * raw_ndof + m) = normalization_vector[local_eqn] / Count[local_eqn];
+      }
+
+
+      if (lambda_tracking)
+      {
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          for (unsigned j = 0; j < raw_ndof; j++)
+          {
+            unsigned global_unknown = elem_pt->eqn_number(j);
+            if (has_imaginary_part) 
+            {
+              residuals[raw_ndof + i] +=(*Parameter_pt) * (M_real(i, j) * real_eigenvector[global_unknown] - M_imag(i, j) * imag_eigenvector[global_unknown]);        
+              residuals[2 * raw_ndof + i] += (*Parameter_pt) * (M_real(i, j) * imag_eigenvector[global_unknown] + M_imag(i, j) * real_eigenvector[global_unknown]);
+              //jacobian(raw_ndof + i,j)+=(*Parameter_pt) * (MHess_real(i, j) * real_eigenvector[global_unknown] - MHess_imag(i, j) * imag_eigenvector[global_unknown]);        
+              //jacobian(2*raw_ndof + i,j)+=(*Parameter_pt) * (MHess_real(i, j) * imag_eigenvector[global_unknown] + MHess_imag(i, j) * real_eigenvector[global_unknown]);        
+              jacobian(raw_ndof + i,j)+=(*Parameter_pt) * (MHess_real(i, j)  - MHess_imag(i+raw_ndof, j) );        
+              jacobian(2*raw_ndof + i,j)+=(*Parameter_pt) * (MHess_real(i+raw_ndof, j) + MHess_imag(i, j));                    
+              jacobian(raw_ndof + i,raw_ndof + j)+=(*Parameter_pt)*M_real(i, j);
+              jacobian(raw_ndof + i,2*raw_ndof + j)+=-(*Parameter_pt)*M_imag(i, j);
+              jacobian(2*raw_ndof + i,raw_ndof + j)+=(*Parameter_pt)*M_imag(i, j);
+              jacobian(2*raw_ndof + i,2*raw_ndof + j)+=(*Parameter_pt)*M_real(i, j);
+              jacobian(raw_ndof + i, 3 * raw_ndof)+=(M_real(i, j) * real_eigenvector[global_unknown] - M_imag(i, j) * imag_eigenvector[global_unknown]);
+              jacobian(2*raw_ndof + i, 3 * raw_ndof)+=(M_real(i, j) * imag_eigenvector[global_unknown] + M_imag(i, j) * real_eigenvector[global_unknown]);
+            }
+            else
+            {
+              residuals[raw_ndof + i] +=(*Parameter_pt) *M_real(i, j) * real_eigenvector[global_unknown];        
+              jacobian(raw_ndof + i,j)+=(*Parameter_pt) * (MHess_real(i, j) );        
+              jacobian(raw_ndof + i,raw_ndof + j)+=(*Parameter_pt)*M_real(i, j);
+              jacobian(raw_ndof + i, 2 * raw_ndof)+=M_real(i, j) * real_eigenvector[global_unknown];        
+            }
+          }
+        }
       }
     }
-
-    //=======Correct jacobian according to boundary conditions dependent on m=======//
 
     // Get total number of dofs in the element
     unsigned ndof = elem_pt->ndof();
@@ -2439,7 +2731,7 @@ namespace pyoomph
       if (base_dofs_forced_zero.count(global_eqn))
       {
         // Correct jacobian value
-        for (unsigned j = 0; j < ndof; j++)
+        for (unsigned j = 0; j < augmented_ndof; j++)
         {
           jacobian(i, j) = 0.0;
         }
@@ -2452,19 +2744,87 @@ namespace pyoomph
       if (eigen_dofs_forced_zero.count(global_eqn))
       {
         // Correct jacobian value
-        for (unsigned j = 0; j < ndof; j++)
+        for (unsigned j = 0; j < augmented_ndof; j++)
         {
           jacobian(raw_ndof + i, j) = 0.0;
-          jacobian(2 * raw_ndof + i, j) = 0.0;
+          if (has_imaginary_part) jacobian(2 * raw_ndof + i, j) = 0.0;
         }
         jacobian(raw_ndof + i, raw_ndof + i) = 1.0;
-        jacobian(2 * raw_ndof + i, 2 * raw_ndof + i) = 1.0;
+        if (has_imaginary_part) jacobian(2 * raw_ndof + i, 2 * raw_ndof + i) = 1.0;
         if (ana_hessian)
         {
-          residuals[raw_ndof + i] = residuals[2 * raw_ndof + i] = 0.0;
+          residuals[raw_ndof + i] =0.0;
+          if (has_imaginary_part)  residuals[2 * raw_ndof + i] = 0.0;
         }
       }
     }
+
+    // DEBUG ANA    
+    /*
+    if (false)
+    {
+      oomph::DenseMatrix<double> J_FD(augmented_ndof,augmented_ndof,0.0);
+      for (unsigned i = 0; i < augmented_ndof; i++)
+      {
+          
+          //std::cout << " GETTTING DOF " << eqn_number(elem_pt,i)<< std::endl <<std::flush;
+          unsigned global_eqn=eqn_number(elem_pt,i);        
+          double *unknown_pt = Problem_pt->GetDofPtr()[global_eqn];
+          double FD_step=1e-8;
+          double init = *unknown_pt;
+          *unknown_pt += FD_step;
+
+          oomph::Vector<double> newres_p(augmented_ndof,0.0);
+          get_residuals(elem_pt, newres_p);
+          // Reset
+          *unknown_pt = init;
+          for (unsigned m = 0; m < augmented_ndof ; m++)
+          {
+            J_FD(m, i) = (newres_p[m] - residuals[m]) / FD_step;
+          }              
+      }
+
+          for (unsigned i = 0; i < raw_ndof; i++)
+          {
+            // Get global equation number to assess whether a boundary condition applies to it
+            unsigned long global_eqn = eqn_number(elem_pt, i);
+            // Assess whether a boundary condition applies to dof
+            if (base_dofs_forced_zero.count(global_eqn))
+            {
+              // Correct jacobian value
+              for (unsigned j = 0; j < augmented_ndof; j++)
+              {
+                J_FD(i, j) = 0.0;
+              }
+              J_FD(i, i) = 1.0;
+            }
+            if (eigen_dofs_forced_zero.count(global_eqn))
+            {
+              // Correct jacobian value
+              for (unsigned j = 0; j < augmented_ndof; j++)
+              {
+                J_FD(raw_ndof + i, j) = 0.0;
+                if (has_imaginary_part) J_FD(2 * raw_ndof + i, j) = 0.0;
+              }
+              J_FD(raw_ndof + i, raw_ndof + i) = 1.0;
+              if (has_imaginary_part) J_FD(2 * raw_ndof + i, 2 * raw_ndof + i) = 1.0;
+            }
+          }
+
+          for (unsigned i = 0; i < augmented_ndof ; i++)
+          {
+            unsigned long global_eqn = eqn_number(elem_pt, i);
+          for (unsigned m = 0; m < augmented_ndof ; m++)
+          {
+            double delta=jacobian(m, i)-J_FD(m,i);
+            if (std::fabs(delta)>0.1)
+            {
+              std::cout << "DIFFERENCE IN " << m << " " << i << ": " << delta << " ANA " << jacobian(m,i) << " FD " << J_FD(m,i) << " NDOF " << augmented_ndof << " NRAWDOF " << raw_ndof << " MPIN0 " << base_dofs_forced_zero.count(eqn_number(elem_pt,m)) << " " << eigen_dofs_forced_zero.count(eqn_number(elem_pt,m)) << " IPIN0 "  << base_dofs_forced_zero.count(global_eqn) << " " << eigen_dofs_forced_zero.count(global_eqn) << " GLOBM " << eqn_number(elem_pt,m) << " GLOBI " << global_eqn << std::endl;
+            }
+          }
+          }              
+    }
+    */
 
     // DEBUG ANA
     /*
@@ -2503,6 +2863,9 @@ namespace pyoomph
   void AzimuthalSymmetryBreakingHandler::get_dresiduals_dparameter(oomph::GeneralisedElement *const &elem_pt, double *const &parameter_pt,
                                                                    oomph::Vector<double> &dres_dparam)
   {
+    
+    bool lambda_tracking=(Parameter_pt==Problem_pt->get_lambda_tracking_real());
+    //if (parameter_pt==Parameter_pt) throw_runtime_error("Strange that this function is called with respect to the same parameter");
     // Need to get raw residuals and jacobian
     unsigned raw_ndof = elem_pt->ndof();
     //    if (parameter_pt!=Parameter_pt)   std::cout << "PARAM DERIV " << parameter_pt << " " <<  Parameter_pt << std::endl;
@@ -2516,33 +2879,88 @@ namespace pyoomph
 
     // Get the dresiduals, djacobian and dmass_matrix for base, real and imaginary jacobians
     set_assembled_residual(elem_pt, 1);
-    elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt, dres_real_dparam, djac_real_dparam, dM_real_dparam);
-    set_assembled_residual(elem_pt, 2);
-    elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt, dres_imag_dparam, djac_imag_dparam, dM_imag_dparam);
+    if (lambda_tracking && parameter_pt==Parameter_pt)
+    {
+      elem_pt->get_jacobian_and_mass_matrix(dres_real_dparam, djac_real_dparam, dM_real_dparam);
+    }
+    else
+    {
+      elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt, dres_real_dparam, djac_real_dparam, dM_real_dparam);
+    }
+    if (has_imaginary_part)
+    {
+      set_assembled_residual(elem_pt, 2);
+      if (lambda_tracking && parameter_pt==Parameter_pt)
+      {
+        elem_pt->get_jacobian_and_mass_matrix(dres_imag_dparam, djac_imag_dparam, dM_imag_dparam);        
+      }
+      else
+      {
+        elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt, dres_imag_dparam, djac_imag_dparam, dM_imag_dparam);
+      }
+    }
     set_assembled_residual(elem_pt, 0);
-    elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt, dres_dparam, djac_real_dparam, dM_real_dparam);
+    if (lambda_tracking && parameter_pt==Parameter_pt)
+    {
+    }
+    else
+    {
+      elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt, dres_dparam, djac_real_dparam, dM_real_dparam);
+    }
 
     // Initialise the pen-ultimate residual, which does not
     // depend on the parameter
-    dres_dparam[3 * raw_ndof] = 0.0;
-    dres_dparam[3 * raw_ndof + 1] = 0.0;
+    dres_dparam[(has_imaginary_part ? 3 : 2) * raw_ndof] = 0.0;
+    if (has_imaginary_part)  dres_dparam[3 * raw_ndof + 1] = 0.0;
 
     // Now multiply to fill in the residuals
     for (unsigned i = 0; i < raw_ndof; i++)
     {
       dres_dparam[raw_ndof + i] = 0.0;
-      dres_dparam[2 * raw_ndof + i] = 0.0;
+      if (has_imaginary_part) dres_dparam[2 * raw_ndof + i] = 0.0;
       for (unsigned j = 0; j < raw_ndof; j++)
       {
         unsigned global_unknown = elem_pt->eqn_number(j);
         // Real part
-        dres_dparam[raw_ndof + i] +=
-            djac_real_dparam(i, j) * real_eigenvector[global_unknown] - djac_imag_dparam(i, j) * imag_eigenvector[global_unknown] +
-            Omega * (dM_real_dparam(i, j) * imag_eigenvector[global_unknown] + dM_imag_dparam(i, j) * real_eigenvector[global_unknown]);
-        // Imaginary part
-        dres_dparam[2 * raw_ndof + i] +=
-            djac_real_dparam(i, j) * imag_eigenvector[global_unknown] + djac_imag_dparam(i, j) * real_eigenvector[global_unknown] -
-            Omega * (dM_real_dparam(i, j) * real_eigenvector[global_unknown] - dM_imag_dparam(i, j) * imag_eigenvector[global_unknown]);
+        if (has_imaginary_part)
+        {
+          if (lambda_tracking && parameter_pt==Parameter_pt)
+          {
+              dres_dparam[raw_ndof + i] += (dM_real_dparam(i, j) * real_eigenvector[global_unknown] - dM_imag_dparam(i, j) * imag_eigenvector[global_unknown]);        
+              dres_dparam[2 * raw_ndof + i] += (dM_real_dparam(i, j) * imag_eigenvector[global_unknown] + dM_imag_dparam(i, j) * real_eigenvector[global_unknown]);    
+          }
+          else
+          {
+            dres_dparam[raw_ndof + i] +=
+                djac_real_dparam(i, j) * real_eigenvector[global_unknown] - djac_imag_dparam(i, j) * imag_eigenvector[global_unknown] -
+                Omega * (dM_real_dparam(i, j) * imag_eigenvector[global_unknown] + dM_imag_dparam(i, j) * real_eigenvector[global_unknown]);
+            // Imaginary part
+            dres_dparam[2 * raw_ndof + i] +=
+                djac_real_dparam(i, j) * imag_eigenvector[global_unknown] + djac_imag_dparam(i, j) * real_eigenvector[global_unknown] +                
+                Omega * (dM_real_dparam(i, j) * real_eigenvector[global_unknown] - dM_imag_dparam(i, j) * imag_eigenvector[global_unknown]);
+            if (lambda_tracking)
+            {
+              dres_dparam[raw_ndof + i] += (*Parameter_pt) * (dM_real_dparam(i, j) * real_eigenvector[global_unknown] - dM_imag_dparam(i, j) * imag_eigenvector[global_unknown]);        
+              dres_dparam[2 * raw_ndof + i] += (*Parameter_pt) * (dM_real_dparam(i, j) * imag_eigenvector[global_unknown] + dM_imag_dparam(i, j) * real_eigenvector[global_unknown]);    
+            }
+          }
+                    
+        }
+        else
+        {
+          if (lambda_tracking && parameter_pt==Parameter_pt)
+          {
+            dres_dparam[raw_ndof + i] += dM_real_dparam(i, j) * real_eigenvector[global_unknown];
+          }
+          else
+          {
+            dres_dparam[raw_ndof + i] +=djac_real_dparam(i, j) * real_eigenvector[global_unknown];
+            if (lambda_tracking)
+            {
+              dres_dparam[raw_ndof + i] += (*Parameter_pt) * dM_real_dparam(i, j) * real_eigenvector[global_unknown];
+            }
+          }
+        }
       }
     }
   }
@@ -2559,18 +2977,28 @@ namespace pyoomph
   void AzimuthalSymmetryBreakingHandler::get_eigenfunction(oomph::Vector<oomph::DoubleVector> &eigenfunction)
   {
     // There is a real and imaginary part of the eigen vector
-    eigenfunction.resize(2); // So we must return two real vectors (Re and Im)
+    eigenfunction.resize((has_imaginary_part ? 2 : 1)); // So we must return two real vectors (Re and Im)
     // build a distribution for the storage of the eigenvector parts
     LinearAlgebraDistribution dist(Problem_pt->communicator_pt(), Ndof, false); // The eigenvectors have Ndof entries, i.e. the number of dofs of the original problem
     // Rebuild the vector
     eigenfunction[0].build(&dist, 0.0);
-    eigenfunction[1].build(&dist, 0.0);
+    if (has_imaginary_part) eigenfunction[1].build(&dist, 0.0);
     // Set the value to be the null vector
     for (unsigned n = 0; n < Ndof; n++)
     {
       eigenfunction[0][n] = real_eigenvector[n];
-      eigenfunction[1][n] = imag_eigenvector[n];
+      if (has_imaginary_part) eigenfunction[1][n] = imag_eigenvector[n];
     }
+  }
+
+   void AzimuthalSymmetryBreakingHandler::set_eigenweight(double ew)
+  {
+    for (unsigned n = 0; n < Ndof; n++)
+    {
+      real_eigenvector[n] *= ew / eigenweight;
+      imag_eigenvector[n] *= ew / eigenweight;
+    }
+    eigenweight = ew;
   }
 
   // Pyoomph has different residual contributions. The original residual along with its jacobian and the real and imag part of the azimuthal Jacobian and mass matrix. We get the indices of these contributions in beforehand.
@@ -2599,6 +3027,7 @@ namespace pyoomph
       codes[i]->get_func_table()->current_res_jac = orig_residual; // Reset it
 
       // And store it in the mapping
+      //std::cout << "MAPPING " << codes[i]->get_file_name() << " " << orig_residual << " " << real_azimuthal << " " << imag_azimuthal << std::endl;
       residual_contribution_indices[codes[i]] = AzimuthalSymmetryBreakingResidualContributionList(codes[i], orig_residual, real_azimuthal, imag_azimuthal);
     }
   }

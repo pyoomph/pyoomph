@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -209,7 +209,7 @@ def mkl_set_num_threads(num_threads:int):
 
 class pardisoSolver(object):
     
-    def __init__(self, matA:Any, mtype:int=11, verbose:bool=False):
+    def __init__(self, matA:Any, mtype:int=11, verbose:bool=False,iparm_override:Dict[int,int]={}):
             #mode  11 : real, nonsymmetric
             #mode  13 : complex,  nonsymmetric
 
@@ -274,7 +274,10 @@ class pardisoSolver(object):
         else:
             self.iparm[1] = 3  
         self.iparm[23] = 1  
-        self.iparm[34] = 1  
+        self.iparm[34] = 1
+          
+        for k,v in iparm_override.items():
+            self.iparm[k-1]=v
 
         self.last_mem_used_in_kb:Optional[int]=None
 
@@ -310,12 +313,14 @@ class pardisoSolver(object):
         self.clear()
 
     def factor(self):
+        #print("PARDISO FACTOR")
         out = self.run_pardiso(phase=12) #type:ignore
     
     def refactor(self):
         out = self.run_pardiso(phase=23) #type:ignore
 
     def solve(self, rhs:Union[NPFloatArray,NPComplexArray])->Union[NPFloatArray,NPComplexArray]:
+        #print("PARDISO SOLVE")
         x = self.run_pardiso(phase=33, rhs=rhs)
         return x
 
@@ -323,6 +328,8 @@ class pardisoSolver(object):
         
         if rhs is None:
             nrhs = 0
+            if np is None and phase==-1:
+                return
             x = np.zeros(1) #type:ignore
             rhs = np.zeros(1) #type:ignore
         else:
@@ -356,6 +363,9 @@ class pardisoSolver(object):
                 MKL_rhs,  # b
                 MKL_x,  # x
                 byref(c_int(ERR)))  # error
+        
+        if ERR!=0:
+            print("ERROR IN PARDISO",ERR)
 
         if self._MKL_iparm[14]!=0 or self._MKL_iparm[15]!=0 or self._MKL_iparm[16]!=0:
             self.last_mem_used_in_kb=max(self._MKL_iparm[14],self._MKL_iparm[15]+self._MKL_iparm[16])
@@ -372,10 +382,12 @@ from scipy.sparse import  csr_matrix #type:ignore
 class PardisoSolver(GenericLinearSystemSolver):
     idname = "pardiso"
 
-    def __init__(self, problem:"Problem"):
+    def __init__(self, problem:"Problem",verbose:bool=False):
         super().__init__(problem)
         self._current_pardiso = None
         self.try_to_reuse_solver=False
+        self.verbose=verbose
+        self.iparm_override:Dict[int,int]={}
 
     def set_num_threads(self,nthreads:Optional[int]):
         if nthreads is None or nthreads==0:
@@ -409,30 +421,54 @@ class PardisoSolver(GenericLinearSystemSolver):
             A = self.get_jacobian_matrix(n,values, rowind, colptr)  # That is not optimal, of course
             mode = 11
             if self.try_to_reuse_solver:
+                self._lastA=A
                 if self._current_pardiso is None:    
-                    self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                    self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                     print("CREATED NEW PARDISO AND FACTOR")
                     self._current_pardiso.factor()
                 else:
                     if not self._current_pardiso.update_matrix_values(A):
                         self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
-                        self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                        self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                         print("CREATED NEW PARDISO AND FACTOR")
-                        self._current_pardiso.factor()
-                    else:
-                        print("REUSE PARDISO AND REFACTOR")
-                        self._current_pardiso.iparm[3] = 63
-                        self._current_pardiso.refactor()
-                        self._current_pardiso.iparm[3] = 0
+                        self._current_pardiso.factor()                    
+                        
+                   
             else:
                 if self._current_pardiso:
                     self._current_pardiso.clear()  # TODO: Only if matrix is entirely changed                
-                self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=False)
+                self._current_pardiso = pardisoSolver(A, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
                 self._current_pardiso.factor()
+                if self.verbose:
+                    print("PARDISO FACTOR IPARM",self._current_pardiso.iparm)                
         elif op_flag == 2:
             self.setup_solver()
             assert self._current_pardiso is not None
-            sol = self._current_pardiso.solve(self.get_b(n,b))
+            if self.try_to_reuse_solver:
+                maxiters=30
+                self._current_pardiso.iparm[7]=maxiters
+                #self._current_pardiso.iparm[8]=1
+                
+                self._current_pardiso.iparm[3] = 63
+                bv=self.get_b(n,b)
+                sol=self._current_pardiso.solve(bv)
+                #self._current_pardiso.iparm[3] = 0
+                err=numpy.amax(numpy.absolute(self._lastA*sol-bv))
+                if self._current_pardiso.iparm[6]==maxiters or err>1e-10:
+                    print("MUST RECOMPUTE FACTORIZATION","ITER",self._current_pardiso.iparm[6],"ERR",err)
+                    if self._current_pardiso:
+                        self._current_pardiso.clear() 
+                    mode=11
+                    self._current_pardiso = pardisoSolver(self._lastA, mtype=mode, verbose=self.verbose,iparm_override=self.iparm_override)
+                    self._current_pardiso.factor()
+                    sol=self._current_pardiso.solve(bv)
+                else:
+                    print("REUSE PARDISO AND REFACTOR DONE, ERROR",err,"IN ",self._current_pardiso.iparm[6],"ITERATIONS")
+                b[:]=sol[:]
+            else:
+                sol = self._current_pardiso.solve(self.get_b(n,b))
+            if self.verbose:
+                print("PARDISO SOLVE IPARM",self._current_pardiso.iparm)
             b[:] = sol[:]
         else:
             raise RuntimeError("Cannot handle Pardiso mode " + str(op_flag) + " yet")

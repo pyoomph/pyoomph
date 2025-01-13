@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/functional.h>
+#include <pybind11/complex.h>
 
 namespace py = pybind11;
 
@@ -359,6 +360,37 @@ void PyReg_Expressions(py::module &m)
 		.def(py::self /= int())
 		.def(py::self /= double())
 
+		.def("__add__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh + (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__sub__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh - (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__mul__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh * (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__truediv__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh / (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__iadd__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh + (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__isub__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh - (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__imul__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh * (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+		.def("__itruediv__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return lh / (rh.real()+GiNaC::I*rh.imag()); }, py::is_operator())
+
+		.def("__radd__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())+lh; }, py::is_operator())
+		.def("__rsub__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())-lh; }, py::is_operator())
+		.def("__rmul__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())*lh; }, py::is_operator())
+		.def("__rtruediv__", [](const GiNaC::ex &lh, const std::complex<double> &rh)
+			 { return (rh.real()+GiNaC::I*rh.imag())/lh; }, py::is_operator())
+		
+
+		
+
+
+
 		.def("__add__", [](const GiNaC::ex &lh, const GiNaC::GiNaCGlobalParameterWrapper &rh)
 			 { return lh + rh; }, py::is_operator())
 		.def("__sub__", [](const GiNaC::ex &lh, const GiNaC::GiNaCGlobalParameterWrapper &rh)
@@ -472,6 +504,17 @@ void PyReg_Expressions(py::module &m)
 			     std::ostringstream oss; oss<<"Cannot convert " << self << " to double";
 			     throw_runtime_error(oss.str());
 			   } })
+		.def("__complex__", [](const GiNaC::ex &self)
+			 { try 
+			   {
+			     std::complex<double> res=pyoomph::expressions::eval_to_complex(self);
+			     return res; 
+			   }
+			   catch (const std::exception &e) 
+			   {
+			     std::ostringstream oss; oss<<"Cannot convert " << self << " to complex";
+			     throw_runtime_error(oss.str());
+			   } })
 		.def("__int__", [](const GiNaC::ex &self)
 			 { 
 		GiNaC::ex v = GiNaC::evalf(self);
@@ -565,6 +608,8 @@ void PyReg_Expressions(py::module &m)
 		  { return 0 + pyoomph::expressions::get_real_part(arg); });
 	m.def("GiNaC_get_imag_part", [](const GiNaC::ex &arg) -> GiNaC::ex
 		  { return 0 + pyoomph::expressions::get_imag_part(arg); });
+	m.def("GiNaC_split_subexpressions_in_real_and_imaginary_parts",[](const GiNaC::ex &arg) -> GiNaC::ex
+		  { return 0 + pyoomph::expressions::split_subexpressions_in_real_and_imaginary_parts(arg); });
 	m.def(
 		"GiNaC_sin", [](const GiNaC::ex &arg)
 		{ return 0 + GiNaC::sin(arg); },
@@ -637,7 +682,7 @@ void PyReg_Expressions(py::module &m)
 		"GiNaC_signum", [](const GiNaC::ex &arg)
 		{ return 0 + pyoomph::expressions::signum(arg); },
 		"Calculates the signum of the argument. Note: It will differentiate to 0, even at x=0");
-
+	
 	m.def("GiNaC_is_a_matrix", [](const GiNaC::ex &arg)
 		  {GiNaC::ex evm=arg.evalm(); return GiNaC::is_a<GiNaC::matrix>(evm); });
 
@@ -897,7 +942,20 @@ void PyReg_Expressions(py::module &m)
 		"GiNaC_trace", [](const GiNaC::ex &arg1)
 		{ return 0 + pyoomph::expressions::trace(arg1); },
 		"Calculates the trace of a matrix");
+	m.def(
+		"GiNaC_determinant", [](const GiNaC::ex &arg,const GiNaC::ex &n)
+		{ return 0 + pyoomph::expressions::determinant(arg,n); },
+		"Calculates the determinant of an n x n matrix");
+	m.def(
+		"GiNaC_inverse_matrix", [](const GiNaC::ex &arg,const GiNaC::ex &n,const GiNaC::ex & flags)
+		{ return 0 + pyoomph::expressions::inverse_matrix(arg,n,flags); },
+		"Calculates the inverse of an n x n matrix");
 
+	m.def(
+		"GiNaC_minimize_functional_derivative", [](const GiNaC::ex &F,const std::vector<GiNaC::ex> &only_wrto,const GiNaC::ex &flags,const GiNaC::ex &coordsys)		
+		{ return 0 + pyoomph::expressions::minimize_functional_derivative(F,GiNaC::lst(only_wrto.begin(),only_wrto.end()),flags,coordsys); },		
+		"Calculates weak formulation of the variation of the functional with integrant F");		
+	
 	m.def(
 		"GiNaC_testfunction", [](const std::string &id, pyoomph::FiniteElementCode *code, std::vector<std::string> tags)
 		{

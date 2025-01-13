@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -361,7 +361,9 @@ void PyReg_CodeGen(py::module &m)
         .def("_get_nodal_delta", &pyoomph::FiniteElementCode::get_nodal_delta, py::return_value_policy::reference)
         .def("_get_normal_component", &pyoomph::FiniteElementCode::get_normal_component, py::return_value_policy::reference)
         .def("set_ignore_residual_assembly", &pyoomph::FiniteElementCode::set_ignore_residual_assembly)
-        .def("_get_normal_component_eigenexpansion", &pyoomph::FiniteElementCode::get_normal_component_eigenexpansion, py::return_value_policy::reference)        
+        .def("set_derive_jacobian_by_expansion_mode", &pyoomph::FiniteElementCode::set_derive_jacobian_by_expansion_mode)
+        .def("set_derive_hessian_by_expansion_mode", &pyoomph::FiniteElementCode::set_derive_hessian_by_expansion_mode)        
+        .def("set_ignore_dpsi_coord_diffs_in_jacobian", &pyoomph::FiniteElementCode::set_ignore_dpsi_coord_diffs_in_jacobian)
         .def("_set_temporal_error", &pyoomph::FiniteElementCode::set_temporal_error)
         .def("_set_discontinuous_refinement_exponent", &pyoomph::FiniteElementCode::set_discontinuous_refinement_exponent)
         .def("get_time", [](pyoomph::FiniteElementCode &self)
@@ -388,7 +390,7 @@ void PyReg_CodeGen(py::module &m)
         .def_readwrite("stop_on_jacobian_difference", &pyoomph::FiniteElementCode::stop_on_jacobian_difference);
 
     m.def(
-        "__currently_generated_element", []()
+        "_currently_generated_element", []()
         { return pyoomph::__current_code; },
         py::return_value_policy::reference);
 

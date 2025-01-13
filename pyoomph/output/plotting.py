@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -83,6 +83,9 @@ class BasePlotter:
         #: The mode to plot eigenvectors, e.g. ``"abs"`` for the absolute value, ``"real"`` for the real part, etc.
         self.eigenmode:"MeshDataEigenModes"=eigenmode
         
+        self._eigenanimation_m:Optional[int]=None
+        self._eigenanimation_lambda:Optional[complex]=None
+        
     def add_additional_problem(self,problem:"Problem",problem_name:str,output_dir:Optional[str]=None):
         self._named_problems[problem_name]=problem        
         if not problem.is_initialised():
@@ -98,12 +101,16 @@ class BasePlotter:
         """
         When plotting eigenfunctions, it will return the eigenvalue of the current eigenvector. When plotting normal solutions, it is ``None``.
         """
+        if self._eigenanimation_lambda is not None:
+            return self._eigenanimation_lambda
         if self.eigenvector is None:
             return None
         else:
             return self.get_problem(problem_name)._last_eigenvalues[self.eigenvector] #type:ignore
         
     def get_azimuthal_eigenmode(self,problem_name:str="")->Optional[int]:
+        if self._eigenanimation_m is not None:
+            return self._eigenanimation_m
         if self.eigenvector is None:
             return None
         elif self.get_problem(problem_name)._last_eigenvalues_m is None or self.eigenvector>=len(self.get_problem(problem_name)._last_eigenvalues_m):
@@ -1613,6 +1620,7 @@ class MatplotlibTimeLabel(MatplotlibText):
     unit="auto"
     bbox = dict(boxstyle='round', facecolor='wheat', alpha=1)
     textsize = 18
+    useTeX=False
 
     def pre_process(self):
         super(MatplotlibTimeLabel, self).pre_process()
@@ -1639,13 +1647,20 @@ class MatplotlibTimeLabel(MatplotlibText):
                 unitstr = " ms"
             elif self.unit=="us":
                 unit = 1000*1000
-                unitstr = " us"
+                if self.useTeX:
+                    unitstr = r" \mu s"
+                else:
+                    unitstr = " us"
             elif self.unit=="ns":
                 unit = 1000*1000*1000
                 unitstr = " ns"                
             else:
                 raise RuntimeError("TODO "+str(self.unit))
-        self.text=self.format.format(unit*self.plotter.get_problem().get_current_time(as_float=True))+unitstr #type:ignore
+        if self.useTeX:
+            self.text=self.format.format(unit*self.plotter.get_problem().get_current_time(as_float=True))+r"$\ \mathrm{"+unitstr+r"}$" #type:ignore
+        else:
+            self.text=self.format.format(unit*self.plotter.get_problem().get_current_time(as_float=True))+unitstr #type:ignore
+        
 
 @MatplotLibPart.register()
 class MatplotLibScaleBar(MatplotLibOverlayBase):
@@ -1657,6 +1672,7 @@ class MatplotLibScaleBar(MatplotLibOverlayBase):
     textsize = 14
     text_yoffset=0
     orientation="horizontal"
+    invisible=False
 
     def _fit_length(self,scale:float):
         maxrange = self.maxlength / scale
@@ -1675,6 +1691,8 @@ class MatplotLibScaleBar(MatplotLibOverlayBase):
         return reallength,reallength*scale
 
     def add_to_plot(self):
+        if self.invisible:
+            return
         assert self.plotter.xmin is not None and self.plotter.xmax is not None
         assert self.plotter.ymin is not None and self.plotter.ymax is not None
         reallength,figlength=self._fit_length(1/(self.plotter.xmax-self.plotter.xmin) if self.orientation!="vertical" else 1/(self.plotter.ymax-self.plotter.ymin))
@@ -2176,9 +2194,10 @@ class MatplotlibPlotter(BasePlotter):
         eigenmode: If eigenvector is set, this is the mode to plot ( ``"abs"``, ``"real"``, ``"imag"`` )
         add_eigen_to_mesh_positions: If eigenvector is set and we have a moving mesh, we can select whether we add the base mesh positions to the eigenvector of the mesh positions
         position_eigen_scale: If eigenvector is set and we have a moving mesh, we can scale the eigenvector to be added to the actual mesh positions by this factor
+        eigenscale: If eigenvector is set, we can scale the eigenvector by this factor (this includes also the mesh positions)
         
     """
-    def __init__(self,problem:"Problem",filetrunk:str="plot_{:05d}",fileext:Union[str,List[str]]="png",eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",add_eigen_to_mesh_positions:bool=True,position_eigen_scale:float=1):
+    def __init__(self,problem:Optional["Problem"]=None,filetrunk:str="plot_{:05d}",fileext:Union[str,List[str]]="png",eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",add_eigen_to_mesh_positions:bool=True,position_eigen_scale:float=1,eigenscale:float=1):
         super(MatplotlibPlotter, self).__init__(problem,eigenvector=eigenvector,eigenmode=eigenmode)
         self.xmin:Optional[float]=None
         self.xmax:Optional[float]=None
@@ -2206,6 +2225,11 @@ class MatplotlibPlotter(BasePlotter):
         self._has_invalid_triangulation:bool=False
         self.add_eigen_to_mesh_positions=add_eigen_to_mesh_positions
         self.position_eigen_scale=position_eigen_scale
+        self.eigenscale=eigenscale
+        self._output_dir="_plots"
+        self._eigenfactor_right=None # Optional complex values to scale the eigenvector for the eigendynamics animation
+        self._eigenfactor_left=None 
+        self._eigenvector_for_animation=None
 
     
     def useLaTeXFont(self):
@@ -2245,7 +2269,7 @@ class MatplotlibPlotter(BasePlotter):
         if self._has_invalid_triangulation:
             return
         if fname is None:
-            pdir=os.path.join(self._problem.get_output_directory(),"_plots")
+            pdir=os.path.join(self._problem.get_output_directory(),self._output_dir)
             os.makedirs(pdir,exist_ok=True)
             file_exts=self.file_ext
             if not isinstance(file_exts,(list,tuple,set)):
@@ -2273,8 +2297,17 @@ class MatplotlibPlotter(BasePlotter):
 
 
 
-    def _get_mesh_data(self,msh:Union[str,AnySpatialMesh],problem_name:str=""):
-        return self.get_problem(problem_name=problem_name).get_cached_mesh_data(msh,nondimensional=False,tesselate_tri=True,eigenvector=self.eigenvector,eigenmode=self.eigenmode,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
+    def _get_mesh_data(self,msh:Union[str,AnySpatialMesh],problem_name:str="",ignore_eigenfactors:bool=False,mirror_x:bool=False):
+        if ignore_eigenfactors or (self._eigenfactor_right is None or self._eigenfactor_left is None or self._eigenvector_for_animation is None):
+            return self.get_problem(problem_name=problem_name).get_cached_mesh_data(msh,nondimensional=False,tesselate_tri=True,eigenvector=self.eigenvector,eigenmode=self.eigenmode,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
+        else:
+            self.get_problem(problem_name=problem_name).invalidate_cached_mesh_data()
+            olddofs,_=self.get_problem(problem_name=problem_name).get_current_dofs()
+            ef=self._eigenfactor_left if mirror_x else self._eigenfactor_right
+            self.get_problem(problem_name=problem_name).set_current_dofs(olddofs+numpy.real(ef*self._eigenvector_for_animation))
+            res=self.get_problem(problem_name=problem_name).get_cached_mesh_data(msh,nondimensional=False,tesselate_tri=True,eigenvector=self.eigenvector,eigenmode=self.eigenmode,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
+            self.get_problem(problem_name=problem_name).set_current_dofs(olddofs)
+            return res
 
 
     def _gen_transform(self,transform:Optional[Union[str,PlotTransform]]=None):
@@ -2473,7 +2506,7 @@ class MatplotlibPlotter(BasePlotter):
         msh=self.get_problem(problem_name=problem_name).get_mesh(mshname,return_None_if_not_found=True)
         if msh is None:
             return False
-        cached = self._get_mesh_data(msh,problem_name=problem_name)
+        cached = self._get_mesh_data(msh,problem_name=problem_name,ignore_eigenfactors=True)
         if not field in cached.nodal_field_inds.keys():
             # Check if it is a vector field
             beqs=msh._eqtree.get_code_gen().get_equations()
@@ -2495,7 +2528,7 @@ class MatplotlibPlotter(BasePlotter):
         msh=self._problem.get_mesh(mshname,return_None_if_not_found=True)
         if msh is None:
             return False
-        cached = self._get_mesh_data(msh,problem_name=problem_name)        
+        cached = self._get_mesh_data(msh,problem_name=problem_name,ignore_eigenfactors=True)        
         if not field in cached.nodal_field_inds.keys():
             # Check if it is a vector field
             beqs=msh._eqtree.get_code_gen().get_equations()
@@ -2576,7 +2609,7 @@ class MatplotlibPlotter(BasePlotter):
             if msh is None:
                 raise ValueError("Cannot find the mesh "+mshname+" in the problem to plot "+str(field))
             dim=msh.get_dimension()
-            cached=self._get_mesh_data(msh,problem_name=problem_name)
+            cached=self._get_mesh_data(msh,problem_name=problem_name,ignore_eigenfactors=True)
             if mode is None:
                 if field is None:
                     if dim==2:
@@ -2625,7 +2658,10 @@ class MatplotlibPlotter(BasePlotter):
         part=cls(self)
         part.set_kwargs(allkwargs)
         if isinstance(part,MatplotLibPartWithMeshData):
-            part.set_mesh_data(self._get_mesh_data(msh,problem_name=problem_name),field,transformG) #type:ignore
+            mirror_x=False
+            if transformG is not None:
+                mirror_x=transformG.get_mirror()[0]
+            part.set_mesh_data(self._get_mesh_data(msh,problem_name=problem_name,mirror_x=mirror_x),field,transformG) #type:ignore
         elif isinstance(part,MatplotLibTracers):
             part.set_tracer_data(field,msh,transformG) #type:ignore
         elif isinstance(part,MatplotLibImage):
@@ -2724,6 +2760,7 @@ class MatplotlibPlotter(BasePlotter):
             # Enforce the image size to match it
             dx=self.xmax-self.xmin
             dy=self.ymax-self.ymin
+            #print("DX and DY",dx,dy,self.xmax,self.xmin,self.xmax-self.xmin)
             RX=self.image_size[0]/dx
             RY = self.image_size[1] / dy
 

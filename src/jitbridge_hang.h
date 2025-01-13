@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -105,13 +105,12 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
   if (HANGINFO[LINDEX].nummaster)                                                                                   \
   {                                                                                                                 \
     nummaster = HANGINFO[LINDEX].nummaster;                                                                         \
-    _res_contrib = CONTRIB;                                                                                         \
   }                                                                                                                 \
   else                                                                                                              \
   {                                                                                                                 \
     nummaster = 1;                                                                                                  \
-    _res_contrib = CONTRIB;                                                                                         \
   }                                                                                                                 \
+  _res_contrib = CONTRIB;                                                                                       \
   for (int m = 0; m < nummaster; m++)                                                                               \
   {                                                                                                                 \
     if (HANGINFO[LINDEX].nummaster)                                                                                 \
@@ -139,13 +138,12 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
   if (HANGINFO[LINDEX].nummaster)                                       \
   {                                                                     \
     nummaster2 = HANGINFO[LINDEX].nummaster;                            \
-    _J_contrib = CONTRIB;                                               \
   }                                                                     \
   else                                                                  \
   {                                                                     \
     nummaster2 = 1;                                                     \
-    _J_contrib = CONTRIB;                                               \
   }                                                                     \
+  _J_contrib = CONTRIB;                                               \
   for (int m2 = 0; m2 < nummaster2; m2++)                               \
   {                                                                     \
     if (HANGINFO[LINDEX].nummaster)                                     \
@@ -246,13 +244,12 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
   if (HANGINFO[LINDEX].nummaster)                                                            \
   {                                                                                          \
     nummaster3 = HANGINFO[LINDEX].nummaster;                                                 \
-    _H_contrib = CONTRIB;                                                                    \
   }                                                                                          \
   else                                                                                       \
   {                                                                                          \
     nummaster3 = 1;                                                                          \
-    _H_contrib = CONTRIB;                                                                    \
   }                                                                                          \
+  _H_contrib = CONTRIB;                                                                      \
   for (int m3 = 0; m3 < nummaster3; m3++)                                                    \
   {                                                                                          \
     if (HANGINFO[LINDEX].nummaster)                                                          \

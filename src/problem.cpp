@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -179,7 +179,8 @@ namespace pyoomph
 		for (unsigned int i = 0; i < functable->num_res_jacs; i++)
 		{
 			std::string n = functable->res_jac_names[i];
-			if (n == name)
+			//std::cout << this->get_file_name() << " " << i << " : " << n << " PRT " << functable->ResidualAndJacobian[i] << std::endl;
+			if (n == name && functable->ResidualAndJacobian[i])
 			{
 				res_jac_index = i;
 				break;
@@ -545,7 +546,7 @@ namespace pyoomph
 		// if (this->compiler) delete this->compiler;
 		if (logfile)
 		{
-		  if (pyoomph::get_logging_stream()==logfile) pyoomph:set_logging_stream(NULL);
+		  if (pyoomph::get_logging_stream()==logfile) pyoomph::set_logging_stream(NULL);
 		  delete logfile;
 		  logfile=NULL;
 		  
@@ -597,18 +598,19 @@ namespace pyoomph
 
 	*/
 
-	void Problem::_set_solved_residual(std::string name)
+	bool Problem::_set_solved_residual(std::string name,bool raise_error)
 	{
 		unsigned numfound = 0;
 		for (unsigned int i = 0; i < bulk_element_codes.size(); i++)
 		{
 			numfound += bulk_element_codes[i]->_set_solved_residual(name);
 		}
-		if (!numfound)
+		if (!numfound && raise_error)
 		{
 			throw_runtime_error("Cannot activate the residual-Jacobian pair named '" + name + "', since it is defined in no equations at all");
 		}
 		this->_solved_residual = name;
+		return numfound;
 	}
 
 	double &Problem::global_parameter(const std::string &n)
@@ -921,7 +923,38 @@ namespace pyoomph
 		return res;
 	}
 
-	void Problem::activate_my_fold_tracking(double *const &parameter_pt, const oomph::DoubleVector &eigenvector, const bool &block_solve)
+	std::vector<double> Problem::get_arclength_dof_current_vector()
+	{
+		std::vector<double> res(Dof_current.size());
+		for (unsigned i = 0; i < res.size(); i++)
+			res[i] = dof_current(i);
+		return res;
+	}
+
+    void Problem::update_dof_vectors_for_continuation(const std::vector<double> &ddof, const std::vector<double> &curr)
+    {
+		if (ddof.size() != curr.size()) throw_runtime_error("Mismatch in size of ddof and curr");
+		unsigned ndof_local = Dof_distribution_pt->nrow_local();
+		if (ddof.size() != ndof_local)
+		{
+			throw_runtime_error("Mismatch in size of ddof and current dof vectors");
+		}
+		if (Dof_derivative.size() != ndof_local)
+		{
+			Dof_derivative.resize(ndof_local, 0.0);
+		}
+		if (Dof_current.size() != ndof_local)
+		{
+			Dof_current.resize(ndof_local, 0.0);
+		}
+		for (unsigned i = 0; i < ndof_local; i++)
+		{
+			Dof_derivative[i] = ddof[i];
+			Dof_current[i] = curr[i];
+		}
+    }
+
+    void Problem::activate_my_fold_tracking(double *const &parameter_pt, const oomph::DoubleVector &eigenvector, const bool &block_solve)
 	{
 		reset_assembly_handler_to_default();
 		this->assembly_handler_pt() = new MyFoldHandler(this, parameter_pt, eigenvector);
@@ -976,7 +1009,6 @@ namespace pyoomph
 	void Problem::activate_my_azimuthal_tracking(double *const &parameter_pt, const double &omega, const oomph::DoubleVector &null_real, const oomph::DoubleVector &null_imag, std::map<std::string, std::string> special_residual_forms)
 	{
 		reset_assembly_handler_to_default();
-		AzimuthalSymmetryBreakingHandler *azi = new AzimuthalSymmetryBreakingHandler(this, parameter_pt, null_real, null_imag, omega);
 		if (!special_residual_forms.count("azimuthal_real_eigen"))
 		{
 			throw_runtime_error("You have not specified a azimuthal_real_eigen as special residual");
@@ -985,6 +1017,9 @@ namespace pyoomph
 		{
 			throw_runtime_error("You have not specified a azimuthal_imag_eigen as special residual");
 		}
+		bool has_imag=special_residual_forms["azimuthal_imag_eigen"]!="<NONE>";
+		AzimuthalSymmetryBreakingHandler *azi = new AzimuthalSymmetryBreakingHandler(this, parameter_pt, null_real, null_imag, omega,has_imag);
+
 		azi->setup_solved_azimuthal_contributions(special_residual_forms["azimuthal_real_eigen"], special_residual_forms["azimuthal_imag_eigen"]);
 		this->assembly_handler_pt() = azi;
 	}
@@ -1082,10 +1117,19 @@ namespace pyoomph
 			this->deactivate_bifurcation_tracking();
 			return;
 		}
-		if (!global_params_by_name.count(param))
-			throw_runtime_error("Cannot track a bifuraciton in the global parameter " + param + ", since it is not present in the problem");
-		auto *p = global_params_by_name[param];
-		double *valptr = &(p->value());
+		double *valptr;
+		if (param!="<LAMBDA_TRACKING>")
+		{
+			if (!global_params_by_name.count(param))
+				throw_runtime_error("Cannot track a bifuraciton in the global parameter " + param + ", since it is not present in the problem");
+			auto *p = global_params_by_name[param];
+			valptr = &(p->value());
+		}
+		else
+		{
+			valptr=&this->lambda_tracking_real;
+		}
+		
 		//		this->set_analytic_dparameter(valptr);
 		oomph::DoubleVector ev1(this->dof_distribution_pt());
 		for (unsigned i = 0; i < std::min((size_t)eigenv1.size(), (size_t)this->ndof()); i++)
@@ -1116,6 +1160,11 @@ namespace pyoomph
 			bifurcation_tracking_mode = "azimuthal";
 			this->activate_my_azimuthal_tracking(valptr, omega, ev1, ev2, special_residual_forms);
 		}
+		else if (typus == "cartesian_normal_mode")
+		{
+			bifurcation_tracking_mode = "cartesian_normal_mode";
+			this->activate_my_azimuthal_tracking(valptr, omega, ev1, ev2, special_residual_forms);
+		}		
 		else if (typus == "pitchfork")
 		{
 			bifurcation_tracking_mode = "pitchfork";
@@ -1126,7 +1175,7 @@ namespace pyoomph
 			throw_runtime_error("Cannot track unknown bifurcation type: " + typus);
 	}
 
-	void Problem::set_current_pinned_values(const std::vector<double> &inp, bool with_pos)
+	void Problem::set_current_pinned_values(const std::vector<double> &inp, bool with_pos,unsigned t)
 	{
 		unsigned int pos = 0;
 		unsigned mpos = inp.size();
@@ -1140,7 +1189,7 @@ namespace pyoomph
 				{
 					if (n->is_pinned(iv))
 					{
-						n->set_value(iv, inp[pos++]);
+						n->set_value(t,iv, inp[pos++]);
 						if (pos > mpos)
 							throw_runtime_error("Mismatch in value vector size: " + std::to_string(mpos) + " given, but reached index " + std::to_string(pos));
 					}
@@ -1150,7 +1199,7 @@ namespace pyoomph
 					for (unsigned int iv = 0; iv < n->ndim(); iv++)
 					{
 						if (dynamic_cast<pyoomph::Node *>(n)->variable_position_pt()->is_pinned(iv))
-							dynamic_cast<pyoomph::Node *>(n)->variable_position_pt()->set_value(iv, inp[pos++]);
+							dynamic_cast<pyoomph::Node *>(n)->variable_position_pt()->set_value(t,iv, inp[pos++]);
 					}
 				}
 			}
@@ -1164,7 +1213,7 @@ namespace pyoomph
 					{
 						if (id->is_pinned(iv))
 						{
-							id->set_value(iv, inp[pos++]);
+							id->set_value(t,iv, inp[pos++]);
 							if (pos > mpos)
 								throw_runtime_error("Mismatch in value vector size: " + std::to_string(mpos) + " given, but reached index " + std::to_string(pos));
 						}

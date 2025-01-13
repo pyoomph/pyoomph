@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
 # ========================================================================
  
 from ..meshes.mesh import InterfaceMesh, AnyMesh
-from .. import GlobalLagrangeMultiplier, WeakContribution
+from .. import GlobalLagrangeMultiplier, WeakContribution, IntegralConstraint
 from ..generic import Equations,InterfaceEquations,ODEEquations
 from .generic import get_interface_field_connection_space
 from ..expressions import *  # Import grad et al
@@ -109,7 +109,7 @@ class PseudoElasticMesh(BaseMovingMeshEquations):
             spatial_error_factor (Optional[float]): The spatial error factor. Default is None.
             coordinate_space (Optional[str]): The coordinate space. Default is None.
             constrain_bulk_to_C1 (bool): If True, the bulk position space is constrained to C1. Default is False.
-            coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is None.
+            coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is cartesian.
     """
     def __init__(self, E:ExpressionOrNum=1*scale_factor("spatial")**2, nu:ExpressionOrNum=rational_num(3,10), spatial_error_factor:Optional[float]=None,coordinate_space:Optional[str]=None,constrain_bulk_to_C1:bool=False,coordsys:Optional[BaseCoordinateSystem]=cartesian):
         super(PseudoElasticMesh, self).__init__(coordinate_space=coordinate_space,constrain_bulk_to_C1=constrain_bulk_to_C1,coordsys=coordsys)
@@ -176,6 +176,124 @@ class LaplaceSmoothedMesh(BaseMovingMeshEquations):
             tens=grad(displ,coordsys=coordsys,lagrangian=True)
         self.add_residual(self.factor*Weak(tens, grad(x_test,coordsys=coordsys, lagrangian=True),coordinate_system=coordsys) )
 
+
+class SingleDirectionLaplaceSmoothedMesh(LaplaceSmoothedMesh):
+    def __init__(self, direction:Union[int,Literal["x","y","z"]], factor: Expression | int | float = scale_factor("spatial") ** 2, constrain_bulk_to_C1: bool = False, coordinate_space: str | None = None, coordsys: BaseCoordinateSystem | None = cartesian):
+        super().__init__(factor, constrain_bulk_to_C1, coordinate_space, coordsys, symmetrize=False)
+        self.direction=direction
+        if isinstance(direction,str):
+            self.direction={"x":0,"y":1,"z":2}[direction]
+    
+    def define_residuals(self):
+        dirn=["x","y","z"][self.direction]
+        x,x_test = var_and_test("mesh_"+dirn)
+        X = var("lagrangian_"+dirn)
+        displ = x - X
+        coordsys=self.coordsys        
+        tens=grad(displ,coordsys=coordsys,lagrangian=True)[self.direction]
+        self.add_residual(self.factor*Weak(tens, grad(x_test,coordsys=coordsys, lagrangian=True)[self.direction],coordinate_system=coordsys) )
+        ndim=self.get_mesh().get_code_gen().get_nodal_dimension()
+        for i in range(ndim):
+            if i!=self.direction:
+                self.set_Dirichlet_condition("mesh_"+["x","y","z"][i],True)
+
+
+
+class HyperelasticSmoothedMesh(BaseMovingMeshEquations):
+    """Hyperelastic mesh smoothing. The mesh is smoothed by minimizing the energy functional:
+            
+            W = integral( mu/2*(I1-d)+kappa/2*(J-1)**2 dOmega )
+    
+        where I1 is the first invariant of the right Cauchy-Green deformation tensor, J is the determinant of the deformation gradient, mu is the shear modulus, and kappa is the bulk modulus. d is the dimension of the mesh.
+
+    Args:
+        mu (float): The shear modulus. Default is 1.
+        kappa (float): The bulk modulus. Default is 1.
+        coordinate_space (Optional[str]): The coordinate space. Default is None.
+        constrain_bulk_to_C1 (bool): If True, the bulk position space is constrained to C1. Default is False.
+        coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is cartesian.
+    """
+    def __init__(self,mu:float=1,kappa:float=1, coordinate_space: Optional[str] = None, constrain_bulk_to_C1: bool = False, coordsys: Optional[BaseCoordinateSystem] = cartesian,use_subexpressions:bool=False):
+        super().__init__(coordinate_space, constrain_bulk_to_C1, coordsys)
+        self.use_subexpressions=use_subexpressions
+        self.mu=mu
+        self.kappa=kappa
+        
+        
+    def define_residuals(self):
+        x=var("mesh")
+        dxdX=grad(x,lagrangian=True,coordsys=self.coordsys)
+        J=determinant(dxdX)
+        if self.use_subexpressions:
+            J=subexpression(J)
+        I1=trace( matproduct(transpose(dxdX),dxdX) )*J**rational_num(-2,3)        
+        I1min=I1-self.get_nodal_dimension() # or 3?
+        if self.use_subexpressions:
+            I1min=subexpression(I1min)
+        F=self.mu/2*I1min+self.kappa/2*(J-1)**2
+        self.add_functional_minimization(F,dimensional_testfunctions=False,coordinate_system=self.coordsys,lagrangian=True)
+        
+class YeohSmoothedMesh(BaseMovingMeshEquations):
+    """Yeoh mesh smoothing. The mesh is smoothed by minimizing the energy functional:
+                
+                W = integral( 1/2 * (C1*I1min+C2*I1min**2+C3*I1min**3+kappa*(J-1)**2 ) * dOmega )
+        
+            where I1min=I1-d is the first invariant of the right Cauchy-Green deformation tensor minus the dimension d of the mesh, J is the determinant of the deformation gradient, C1, C2, and C3 are the Yeoh constants, and kappa is the bulk modulus.
+
+    Args:
+        kappa (float): The bulk modulus. Default is 1.
+        C1 (float): The Yeoh constant C1. Default is 1.
+        C2 (float): The Yeoh constant C2. Default is 10.
+        C3 (float): The Yeoh constant C3. Default is 0.
+        coordinate_space (Optional[str]): The coordinate space. Default is None.
+        constrain_bulk_to_C1 (bool): If True, the bulk position space is constrained to C1. Default is False.
+        coordsys (Optional[BaseCoordinateSystem]): The coordinate system. Default is cartesian
+        
+    """
+    def __init__(self,kappa:float=1, C1:float=1,C2:float=10,C3:float=0, coordinate_space: Optional[str] = None, constrain_bulk_to_C1: bool = False, coordsys: Optional[BaseCoordinateSystem] = cartesian,use_subexpressions:bool=False):
+        super().__init__(coordinate_space, constrain_bulk_to_C1, coordsys)
+        self.use_subexpressions=use_subexpressions
+        self.C1=C1
+        self.C2=C2
+        self.C3=C3
+        self.kappa=kappa
+        
+        
+    def define_residuals(self):
+        x=var("mesh")
+        dxdX=grad(x,lagrangian=True,coordsys=self.coordsys)
+        J=determinant(dxdX)
+        if self.use_subexpressions:
+            J=subexpression(J)
+        I1=trace( matproduct(transpose(dxdX),dxdX) )*J**rational_num(-2,3)
+        I1min=I1-self.get_nodal_dimension()
+        F=(self.C1*I1min+self.C2*I1min**2+self.C3*I1min**3+self.kappa*(J-1)**2)/2                                
+        self.add_functional_minimization(meter*F,dxdX,dimensional_testfunctions=False,coordinate_system=self.coordsys,lagrangian=True)
+        
+
+
+
+class PinMeshCoordinates(Equations):
+    def __init__(self,*directions:Union[int,Literal["x","y","z"]]):
+        super(PinMeshCoordinates, self).__init__()
+        if len(directions)>0:
+            self.directions=set()        
+            for d in directions:
+                if isinstance(d,str):
+                    self.directions.add({"x":0,"y":1,"z":2}[d])
+                else:
+                    self.directions.add(d)
+        else:
+            self.directions=None
+    
+    def define_residuals(self):
+        if self.directions is None:
+            for d in range(self.get_mesh().get_code_gen().get_nodal_dimension()):
+                self.set_Dirichlet_condition("mesh_"+["x","y","z"][d],True)
+        else:
+            for d in self.directions:
+                self.set_Dirichlet_condition("mesh_"+["x","y","z"][d],True)
+        
 
 class SetLagrangianToEulerianAfterSolve(Equations):
     """
@@ -350,3 +468,14 @@ class VolumeEnforcingBoundary(Equations):
 
         self.add_residual(norm*weak(dot(x,n),testfunction(self.storage_var),dimensional_dx=True))
         self.add_residual(norm/dVfactor*weak(self.storage_var,dot(xtest_n,n),dimensional_dx=False))
+
+
+class EnforceVolumeByPressure(IntegralConstraint):
+    def __init__(self,volume:ExpressionOrNum,*,ode_storage_domain: Optional[str] = None, only_for_stationary_solve: bool = False, set_zero_on_normal_mode_eigensolve: bool = True, scaling_factor:Union[str,ExpressionNumOrNone]=None):
+        if scaling_factor is None:
+            scaling_factor=1
+        super().__init__(dimensional_dx=True,ode_storage_domain=ode_storage_domain, only_for_stationary_solve = only_for_stationary_solve, set_zero_on_normal_mode_eigensolve= set_zero_on_normal_mode_eigensolve, scaling_factor=scaling_factor,pressure=volume)        
+        
+    def get_constraint(self,field:str,u:Expression):
+        return 1
+        

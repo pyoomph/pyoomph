@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -90,7 +90,7 @@ class PinnedContactLine(GenericContactLineModel):
         vl, vl_test = var_and_test(dyncl.velocity_enforcing_name)
         u_test=testfunction("velocity")
         if self.enforcing_condition is None:
-            pos_velo_constraint = dot(partial_t(X, scheme="BDF1"), dyncl.wall_tangent)
+            pos_velo_constraint = dot(mesh_velocity(scheme="BDF1"), dyncl.wall_tangent)
         else:
             pos_velo_constraint=self.enforcing_condition
         dyncl.add_residual(weak(pos_velo_constraint , vl_test))
@@ -224,7 +224,7 @@ class UnpinnedContactLine(GenericContactLineModel):
         else:
             # Degrade automatically to BDF1 when pinning mode has changes
             must_degrade=heaviside(absolute(upind-evaluate_in_past(upind))-0.5)
-            dXdt=must_degrade*partial_t(X, scheme="BDF1")+(1-must_degrade)*partial_t(X, scheme="BDF2")
+            dXdt=must_degrade*mesh_velocity(scheme="BDF1")+(1-must_degrade)*partial_t(X, scheme="BDF2")
             actual_cl_velo = dot(dXdt, dyncl.wall_tangent)
             desired_cl_velo=upind*self.get_unpinned_motion_velocity_expression(dyncl)
             dyncl.add_residual(weak(actual_cl_velo-desired_cl_velo, vl_test))
@@ -751,7 +751,7 @@ class DynamicContactLineEquations(InterfaceEquations):
             upro,upro_test=var_and_test(parent.surfactant_advect_velo_name)
             enf_upro,enf_upro_test=var_and_test(self.enforce_proj_interface_velo_for_surfs_name)
             self.add_residual(weak(enf_upro,upro_test))
-            self.add_residual(weak(upro-partial_t(var("mesh")),enf_upro_test))
+            self.add_residual(weak(upro-mesh_velocity(),enf_upro_test))
 
         # Model specifics
         self.model.define_residuals(self)

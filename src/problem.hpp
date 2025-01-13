@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -163,13 +163,15 @@ namespace pyoomph
     unsigned int global_index;
     Problem *problem;
     double Value;
-
+    bool positive=false;
   public:
     GlobalParameterDescriptor(Problem *p, const std::string &n, const unsigned int &gi) : name(n), global_index(gi), problem(p), Value(0.0) {}
     const std::string &get_name() const { return name; }
     const unsigned int &get_global_index() const { return global_index; }
     double &value() { return Value; }
     const double &value() const { return Value; }
+    void restrict_to_positive_values() {positive=true;}
+    bool is_restricted_to_positive_values() const { return positive;}
     void set_analytic_derivative(bool active);
     bool get_analytic_derivative(); 
   };
@@ -213,15 +215,21 @@ namespace pyoomph
     
     void actions_after_change_in_global_parameter(double *const &parameter_pt) override;
     void actions_after_parameter_increase(double *const &parameter_pt) override;    
+
+    double lambda_tracking_real = 0.0; // Real(lambda) for tracking of eigenbranches
   public:
     bool use_custom_residual_jacobian=false;
     bool improved_pitchfork_tracking_on_unstructured_meshes=false;
+
+    double * get_lambda_tracking_real() {return &lambda_tracking_real;}
     
     std::vector<DynamicBulkElementCode *> &get_bulk_element_codes() { return bulk_element_codes; }
     std::string get_bifurcation_tracking_mode() const { return bifurcation_tracking_mode; }
     std::vector<std::complex<double>> get_bifurcation_eigenvector();
     double get_bifurcation_omega();
     std::vector<double> get_arclength_dof_derivative_vector();
+    std::vector<double> get_arclength_dof_current_vector();
+    void update_dof_vectors_for_continuation(const std::vector<double> & ddof, const std::vector<double> & curr);
     void set_dof_direction_arclength(std::vector<double> ddir);
     void adapt(unsigned &n_refined, unsigned &n_unrefined) override
     {
@@ -271,9 +279,10 @@ namespace pyoomph
     virtual std::tuple<std::vector<double>, std::vector<bool>> get_current_dofs();
     virtual std::vector<double> get_history_dofs(unsigned t);
     virtual std::vector<double> get_current_pinned_values(bool with_pos);
+    
     virtual void set_current_dofs(const std::vector<double> &inp);
     virtual void set_history_dofs(unsigned t, const std::vector<double> &inp);
-    virtual void set_current_pinned_values(const std::vector<double> &inp,bool with_pos);
+    virtual void set_current_pinned_values(const std::vector<double> &inp,bool with_pos,unsigned t=0);
     virtual bool &always_take_one_newton_step() { return Always_take_one_newton_step; }
     virtual bool get_Keep_temporal_error_below_tolerance() { return Keep_temporal_error_below_tolerance; }
     virtual void set_Keep_temporal_error_below_tolerance(bool s) { Keep_temporal_error_below_tolerance = s; }
@@ -322,7 +331,7 @@ namespace pyoomph
     oomph::Vector<oomph::Vector<unsigned>> &GetSparcseAssembleWithArraysPA() { return this->Sparse_assemble_with_arrays_previous_allocation; }
     
     virtual void quiet(bool _quiet);
-    virtual void _set_solved_residual(std::string name);
+    virtual bool _set_solved_residual(std::string name, bool raise_error=true);
     virtual void _replace_RJM_by_param_deriv(std::string name,bool active);
     virtual std::string _get_solved_residual() { return _solved_residual; }
     virtual bool is_quiet() const { return _is_quiet; }

@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ The authors may be contacted at c.diddens@utwente.nl and d.rocha@utwente.nl
 /*********************************
  Older versions of GiNaC do not have all methods implemented in the structure class. This file is a workaround to make it work with older versions of GiNaC.
  I.e. this is based of the structure.h file from the GiNaC source code.
+ Also, it is ensured that all structures are assumed to be real-valued.
 
  See https://www.ginac.de/ginac.git/?p=ginac.git;a=blob_plain;f=ginac/structure.h;hb=HEAD for the original file of GiNaC
 **********************************/
@@ -78,7 +79,18 @@ namespace GiNaC
 		unsigned precedence() const override { return 70; }
 
 		// info
-		bool info(unsigned inf) const override { return false; }
+		bool info(unsigned inf) const override 
+		{ 
+			switch (inf)
+			{
+				case info_flags::real:
+					return true;
+					break;			
+				default:
+					break;
+			}
+			return basic::info(inf); 
+		}
 
 		// operand access
 		size_t nops() const override { return 0; }

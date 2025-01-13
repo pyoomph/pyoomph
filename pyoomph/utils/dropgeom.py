@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -51,8 +51,9 @@ class DropletGeometry:
         curv_radius: The curvature radius of the droplet
         ambiguous_low_contact_angle: If you set base_radius and curv_radius, you must specify if the contact angle is below or above 90°
         evalf: If True, the result will be evaluated to a float. If False, the result will be kept as an expression
+        rivulet_instead: If True, the droplet is assumed to be a rivulet, i.e. it is just a 2d cross section of a 3d droplet. The volume is then the area of this cross section.
     """
-    def __init__(self,*,volume:ExpressionNumOrNone=None,base_radius:ExpressionNumOrNone=None,contact_angle:ExpressionNumOrNone=None,apex_height:ExpressionNumOrNone=None,curv_radius:ExpressionNumOrNone=None,ambiguous_low_contact_angle:Optional[bool]=None,evalf:bool=True):
+    def __init__(self,*,volume:ExpressionNumOrNone=None,base_radius:ExpressionNumOrNone=None,contact_angle:ExpressionNumOrNone=None,apex_height:ExpressionNumOrNone=None,curv_radius:ExpressionNumOrNone=None,ambiguous_low_contact_angle:Optional[bool]=None,evalf:bool=True,rivulet_instead:bool=False):
         #: The contact angle of the droplet
         self.contact_angle:ExpressionNumOrNone=None #type:ignore
         #: The volume of the droplet
@@ -67,6 +68,8 @@ class DropletGeometry:
         settings:Dict[str,ExpressionNumOrNone]= {}
         self._sampled_gravity_shape:Optional[Tuple[NPFloatArray,ExpressionOrNum]]=None
         self._sampled_gravity_shape_reference_pressure:ExpressionOrNum=None
+        
+        self.rivulet_instead=rivulet_instead
 
         def setprop(name:str,val:ExpressionNumOrNone)->int:
             settings[name]=val
@@ -108,7 +111,10 @@ class DropletGeometry:
                 #print("v0")
                 #h0 = 1.0 / pi * square_root((3.0 * v0 + square_root(pi ** 2 * r0 ** 6 + 9 * v0 ** 2) ) * pi ** 2,3) - r0 ** 2 * pi / square_root((3.0 * v0 + square_root(pi ** 2 * r0 ** 6 + 9 * v0 ** 2)) * pi ** 2,3)
                 #print("H01",float(h0/meter))
-                h0 = 1.0 / pi * ((3 * v0 + (pi ** 2 * r0 ** 6 + 9 * v0 ** 2) ** rational_num(1, 2)) * pi ** 2) ** rational_num(1,3) - r0 ** 2 * pi / ((3 * v0 + (pi ** 2 * r0 ** 6 + 9 * v0 ** 2) ** rational_num(1, 2)) * pi ** 2) ** rational_num(1, 3)
+                if self.rivulet_instead:
+                    raise RuntimeError("Not yet implemented. Calculate the height of a rivulet from base radius and volume[area]")
+                else:
+                    h0 = 1.0 / pi * ((3 * v0 + (pi ** 2 * r0 ** 6 + 9 * v0 ** 2) ** rational_num(1, 2)) * pi ** 2) ** rational_num(1,3) - r0 ** 2 * pi / ((3 * v0 + (pi ** 2 * r0 ** 6 + 9 * v0 ** 2) ** rational_num(1, 2)) * pi ** 2) ** rational_num(1, 3)
                 #print("H02",float(h0/meter))
             elif ca is not None:
                 if float(ca) <= float(0.5 * pi):
@@ -126,7 +132,10 @@ class DropletGeometry:
                 raise RuntimeError("base_radius > curv_radius")
         elif h0 is not None:
             if v0 is not None:
-                r0=square_root(3.0)*square_root((6*(v0/h0) - float(pi)*h0**2))/(3*square_root(float(pi)))
+                if self.rivulet_instead:
+                    raise RuntimeError("Not yet implemented. Calculate the base radius of a rivulet from height and volume[area]")
+                else:
+                    r0=square_root(3.0)*square_root((6*(v0/h0) - float(pi)*h0**2))/(3*square_root(float(pi)))
             elif ca is not None:
                 if float(ca) <= float(pi/2):
                     r0 = h0 / ((1 - cos(ca)) / absolute(sin(ca)))
@@ -135,12 +144,20 @@ class DropletGeometry:
             elif rc is not None:
                 r0 = square_root(rc ** 2 - (rc - h0) ** 2) 
 
-        elif v0 is not None:
+        elif v0 is not None:            
             if ca is not None:
-                h0 = square_root(v0 * 3.0 / pi / (3.0 / (1.0 - cos(ca)) - 1.0),3)
-                r0 = square_root((v0 * 6.0 / pi / h0 - h0 * h0) / 3.0)
+                if self.rivulet_instead:
+                    h_by_c=(1-(cos(ca)))/(2*sin(ca))
+                    theta=2*ca
+                    a=v0                    
+                    c=8*square_root(2)*square_root(a)*h_by_c*square_root(1/(16*h_by_c**4*theta + 32*h_by_c**3 + 8*h_by_c**2*theta - 8*h_by_c + theta))
+                    r0=c/2
+                    h0=h_by_c*c                                        
+                else:
+                    h0 = square_root(v0 * 3.0 / pi / (3.0 / (1.0 - cos(ca)) - 1.0),3)
+                    r0 = square_root((v0 * 6.0 / pi / h0 - h0 * h0) / 3.0)
             elif rc is not None:
-                raise RuntimeError("Not yet implemented")
+                raise RuntimeError("Not yet implemented. Calculations based on volume and curvature radius")
         elif ca is not None:
             if rc is not None:
                 r0 = rc * sin(ca)
@@ -149,7 +166,13 @@ class DropletGeometry:
         if (r0 is None) or (h0 is None):
             raise RuntimeError("Not sufficiently specified droplet geometry")
 
-        self.volume = pi * h0 / 6.0 * (3.0 * r0 ** 2 + h0 ** 2) if self.volume is None else self.volume
+        if self.rivulet_instead:
+            #raise RuntimeError("Check the result below!")
+            #self.volume = ((r0**2+h0**2)**2*acos((r0**2-h0**2)/(r0**2+h0**2))-r0*(r0**2-h0**2))/(2*h0)
+            c=2*r0
+            self.volume=((c**2+4*h0**2)/(8*h0))**2*acos((c**2-4*h0**2)/(c**2+4*h0**2))-c/(16*h0)*(c**2-4*h0**2)
+        else:
+            self.volume = pi * h0 / 6.0 * (3.0 * r0 ** 2 + h0 ** 2) if self.volume is None else self.volume
         self.curv_radius = (r0 ** 2 + h0 ** 2) / (2.0 * h0) if self.curv_radius is None else self.curv_radius
         if float(h0/r0) > 1:
             self.contact_angle = pi - asin((r0 / self.curv_radius)) if self.contact_angle is None else self.contact_angle
@@ -208,6 +231,8 @@ class DropletGeometry:
     # Relaxes the shape by gravity
     # returns an array of r and z positions and a scale factor to multiply the results with to get the right scaling
     def sample_gravity_shape(self,surface_tension:ExpressionOrNum,delta_rho_times_g:ExpressionOrNum,output_dir:str,fixations:Optional[YoungLaplaceFixationsType]=None,update_params:bool=True,N:int=200,output_text:bool=True,compiler:Any=None,ignore_command_line:bool=False,globally_convergent_newton:bool=False)->Tuple[NPFloatArray,ExpressionOrNum]:
+        if self.rivulet_instead:
+            raise RuntimeError("Not yet implemented")
         with YoungLaplaceDropletShape(self,sigma=surface_tension,rho_g_ez=delta_rho_times_g,fixations=fixations,N=N) as problem:
             problem.logfile_name=None # Do not change the log file here
             problem.set_output_directory(output_dir)
@@ -328,6 +353,7 @@ class YoungLaplaceDropletShape(Problem):
         self.drop_geom=drop_geom
         self.sigma = sigma
         self.rho_g_ez = rho_g_ez
+        self.volume_factor=self.define_global_parameter(volume_factor=1) # To find the critical volume if desired
 
         # Fixations are the two parameters (base_radius, apex_height, volume, (microscopic) contact_angle) that are kept constant
         # if not explicitly set, it will take over the ones you set in the constructor if the DropletGeometry object passed to drop_geom
@@ -390,7 +416,7 @@ class YoungLaplaceDropletShape(Problem):
 
         dest_contact_angle=geom.contact_angle
         dest_base_radius=geom.base_radius
-        dest_volume=geom.volume
+        dest_volume=geom.volume*self.volume_factor
         dest_apex_height=geom.apex_height
         if isinstance(self.fixations,dict):
             dest_contact_angle=self.fixations.get("contact_angle",dest_contact_angle)

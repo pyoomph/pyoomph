@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -52,10 +52,20 @@ class PETSCSolver(GenericLinearSystemSolver):
     def __init__(self, problem:"Problem"):
         super().__init__(problem)
         self._do_not_set_any_args:bool=False
+        self.petsc_mat=None
+        self.ksp=None
+        self.x=None
 
     #		opts=PETSc.Options().getAll()
     #		if "add_zero_diagonal" in opts.keys():
     #			problem.set_diagonal_zero_entries(True)
+    
+    def use_mumps(self):
+        _SetDefaultPetscOption("mat_mumps_icntl_6",5)
+        _SetDefaultPetscOption("ksp_type","preonly")
+        _SetDefaultPetscOption("pc_type","lu")
+        _SetDefaultPetscOption("pc_factor_mat_solver_type","mumps")
+        return self    
 
     def set_default_petsc_option(self,name:str,val:Any=None,force:bool=False)->None:
         _SetDefaultPetscOption(name,val, force) #type:ignore
@@ -85,6 +95,17 @@ class PETSCSolver(GenericLinearSystemSolver):
 
     def solve_serial(self,op_flag:int,n:int,nnz:int,nrhs:int,values:NPFloatArray,rowind:NPIntArray,colptr:NPIntArray,b:NPFloatArray,ldb:int,transpose:int)->int:
         if op_flag == 1:
+            if self.petsc_mat is not None:
+                self.petsc_mat.destroy()
+                self.petsc_mat=None
+            if self.ksp is not None:
+                self.ksp.destroy() #type:ignore
+                self.ksp=None
+            if self.x is not None:
+                self.x.destroy() #type:ignore
+                self.x=None
+                
+            #self.petsc_mat.destroy() #type:ignore
             self.petsc_mat = PETSc.Mat().createAIJ(size=(n, n), csr=(colptr, rowind, values)) #type:ignore
             self.x = PETSc.Vec().createSeq(n) #type:ignore
         elif op_flag == 2:
@@ -94,11 +115,10 @@ class PETSCSolver(GenericLinearSystemSolver):
             xv = self.x.getArray() #type:ignore
             b[:] = xv[:] #type:ignore
 
-            print('Converged in', self.ksp.getIterationNumber(), 'iterations.') #type:ignore
+            #print('Converged in', self.ksp.getIterationNumber(), 'iterations.') #type:ignore
 
-            self.petsc_mat.destroy() #type:ignore
-            self.ksp.destroy() #type:ignore
-            self.x.destroy() #type:ignore
+            
+            
             bv.destroy() #type:ignore
         else:
             raise RuntimeError("Cannot handle Petsc mode " + str(op_flag) + " yet")
@@ -135,6 +155,10 @@ class PETSCSolver(GenericLinearSystemSolver):
 
 def _SetDefaultPetscOption(key:str, val:Any,force:bool=False):
     if force or (not PETSc.Options().hasName(key)): #type:ignore
+        if isinstance(val, complex):
+            print("GOT COMPLEX",val)
+            val=str(val.real)+("+" if val.imag>=0 else "")+str(val.imag)+"i"
+            print("CASTED TO",val)
         PETSc.Options().setValue(key, val) #type:ignore
 
 
@@ -144,17 +168,30 @@ class SlepcEigenSolver(GenericEigenSolver):
 
     def __init__(self, problem:"Problem"):
         super().__init__(problem)
+        self.spectral_transformation:Optional[str]="sinvert"
+        self.store_basis:bool=False
+        self._last_basis:Optional[Union[NPComplexArray,NPFloatArray]]=None
+        
+    def supports_target(self):
+        return True
+        
+    def get_last_basis(self)->Optional[Union[NPComplexArray,NPFloatArray]]:
+        return self._last_basis
 
     def further_setup(self,E): #type:ignore
         pass
+    
+    def set_default_option(self,name:str,val:Any=None,force:bool=False)->None:
+        _SetDefaultPetscOption(name,val, force)
     
     def use_mumps(self):
         _SetDefaultPetscOption("mat_mumps_icntl_6",5)
         _SetDefaultPetscOption("st_ksp_type","preonly")
         _SetDefaultPetscOption("st_pc_type","lu")
         _SetDefaultPetscOption("st_pc_factor_mat_solver_type","mumps")
+        return self
 
-    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
+    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
         if which!="LM":
             raise RuntimeError("Implement which="+str(which))
         if OPpart is not None:
@@ -187,54 +224,62 @@ class SlepcEigenSolver(GenericEigenSolver):
         ##--petsc -st_pc_type lu -st_pc_factor_mat_solver_type umfpack
         # print(dir(PETSc.Options.hasName))
         # exit()
-        _SetDefaultPetscOption("st_ksp_type", "preonly")
-        _SetDefaultPetscOption("st_type", "sinvert")
-        _SetDefaultPetscOption("eps_type", "arnoldi")
+        
+        _SetDefaultPetscOption("eps_type", "krylovschur") # krylovschur
+        target_set=target is not None
+        if target is None:
+            if shift is not None:
+                target=shift
 
-        #_SetDefaultPetscOption("eps_target_magnitude", 1)
-        if target:
-            _SetDefaultPetscOption("eps_target_magnitude",0)
-        else:
-            _SetDefaultPetscOption("eps_target_real", 0)
-        if shift is not None:            
-            _SetDefaultPetscOption("st_shift", shift)
+        
+        if self.spectral_transformation:
+            _SetDefaultPetscOption("st_ksp_type", "preonly")
+            _SetDefaultPetscOption("st_type", self.spectral_transformation)
+                            
         E = SLEPc.EPS()  #type:ignore
         E.create() #type:ignore
         if target is not None:
-            if abs(numpy.real(target))<1e-20:
-                if abs(numpy.imag(target))<1e-20:
-                    trg="0.0"
-                elif numpy.imag(target)>0:
-                    trg="0.0+"+str(numpy.imag(target))+"i"
-                else:
-                    trg="0.0-"+str(numpy.imag(target))+"i"
-            elif abs(numpy.imag(target))<1e-20:
-                trg=str(numpy.real(target))
-            else:
-                if numpy.imag(target)>0:
-                    trg=str(numpy.real(target))+"+"+str(numpy.imag(target))+"i"
-                else:
-                    trg=str(numpy.imag(target))+"-"+str(numpy.imag(target))+"i"
-            print(trg)
-            _SetDefaultPetscOption("eps_target",trg)
+            E.setTarget(target)
+            E.setWhichEigenpairs(SLEPc.EPS.Which.TARGET_MAGNITUDE) #type:ignore
+        else:
+            E.setTarget(0)
+            E.setWhichEigenpairs(SLEPc.EPS.Which.TARGET_REAL) #type:ignore
+            
+            
+        
             
             #trgt=PETSc.toScalar(target)
             #print(trgt)
             #E.setTarget(trgt)
         E.setOperators(J, M) #type:ignore
         E.setProblemType(SLEPc.EPS.ProblemType.GNHEP) #type:ignore
-        if v0 is not None:
-            _v0=PETSc.Vec().createWithArray(v0)
-            E.setInitialSpace(_v0)
+        
         #E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
+        #ncv=max(2 * neval + 1, 5 + neval)
         ncv=max(2 * neval + 1, 5 + neval)
         mdp=ncv #TODO: Can be smaller for higher
         E.setDimensions(neval,ncv,mdp) #type:ignore
+        
+        if v0 is not None:
+            if len(v0.shape)==1:
+                _v0=PETSc.Vec().createWithArray(v0)
+                E.setInitialSpace(_v0)
+                _v0.destroy()
+            else:
+                ispace=[]
+                for i in range(min(v0.shape[0],ncv)):
+                    ispace.append(PETSc.Vec().createWithArray(v0[i,:]))
+                E.setInitialSpace(ispace)
+                for _v0 in ispace:
+                    _v0.destroy()
+        
         #print(dir(E))
         #exit()
         # E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
         E.setFromOptions() #type:ignore
 
+        if self.spectral_transformation and shift:
+            E.getST().setShift(shift)
         self.further_setup(E) #type:ignore
         E.solve() #type:ignore
 
@@ -299,7 +344,10 @@ class SlepcEigenSolver(GenericEigenSolver):
         evals = numpy.array(evals) #type:ignore
         if sort:
             if sort==True:
-                srt = numpy.argsort(-evals)[0:min(neval, len(evals))] #type:ignore
+                if target_set:
+                    srt = numpy.argsort(numpy.abs(evals-target))[0:min(neval, len(evals))]
+                else:
+                    srt = numpy.argsort(-evals)[0:min(neval, len(evals))] #type:ignore
             else:
                 srt = numpy.argsort(numpy.array([sort(x) for x in evals]))[0:min(neval, len(evals))] #type:ignore
             #print("SORTING",evals,srt)
@@ -307,8 +355,22 @@ class SlepcEigenSolver(GenericEigenSolver):
             evects = numpy.array(evects)[srt] #type:ignore
         else:
             evects = numpy.array(evects) #type:ignore
+            
+        if self.store_basis:
+            self._last_basis=[]
+            basis=E.getBV()
+            nbasis=basis.getSizes()[1]        
+            for i in range(nbasis):
+                bv=basis.createVec()
+                basis.copyVec(i,bv)
+                self._last_basis.append(bv.getArray())
+                bv.destroy()
+            self._last_basis=numpy.array(self._last_basis)
+        else:
+            self._last_basis=None
+            
         E.destroy() #type:ignore
-        return numpy.array(evals), numpy.array(evects) #type:ignore
+        return numpy.array(evals), numpy.array(evects),Jin,Min #type:ignore
 
 
 

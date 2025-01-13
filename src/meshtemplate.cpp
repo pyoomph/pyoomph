@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -1586,6 +1586,48 @@ namespace pyoomph
 				this->_add_opposite_interface_connection(connnames[0], connnames[1]);
 			}
 		}
+	}
+
+	std::set<std::string> MeshTemplate::_find_interface_intersections()
+	{
+		std::set<std::string> all_intersects;
+		for (auto *d : bulk_element_collections)
+		{		  
+		  std::vector<int> adjbinds;
+		  for (auto &bname : d->get_adjacent_boundary_names()) adjbinds.push_back(get_boundary_index(bname));
+		  // Now find nodes that are at least on two of these boundaries
+		  for (auto *e : d->get_elements())
+		  {
+			std::vector<nodeindex_t> ninds = e->get_node_indices();
+			for (unsigned int i = 0; i < ninds.size(); i++)
+			{
+				nodeindex_t ni = ninds[i];
+				if (this->nodes[ni]->on_boundaries.size()>=2)
+				{
+					std::set<int> intersect;
+					std::set_intersection(this->nodes[ni]->on_boundaries.begin(), this->nodes[ni]->on_boundaries.end(),adjbinds.begin(), adjbinds.end(),std::inserter(intersect, intersect.begin()));					
+					if (intersect.size()>=2)
+					{
+						std::vector<int> intersectv(intersect.begin(), intersect.end());
+						std::sort(intersectv.begin(), intersectv.end());
+						std::vector<std::vector<int>> permutations;
+						std::sort(intersectv.begin(), intersectv.end());						
+						do {
+							permutations.push_back(std::vector<int>(intersectv.begin(), intersectv.end()));
+						} while (std::next_permutation(intersectv.begin(), intersectv.end()));
+						for (auto & p : permutations)
+						{
+							std::string intername=d->name;
+							for (auto &b : p) intername+="/"+boundary_names[b];
+							all_intersects.insert(intername);
+						}
+						
+					}					
+				}
+		  	}
+		  }
+		}
+		return all_intersects;
 	}
 
 	BulkElementBase *MeshTemplate::factory_element(MeshTemplateElement *el, MeshTemplateElementCollection *coll)

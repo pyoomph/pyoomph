@@ -6,7 +6,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -182,6 +182,7 @@ class EigenMatrixManipulatorBase:
 					for ni in range(e.nnode()):
 						n=e.node_pt(ni)
 						eqn=n.variable_position_pt().eqn_number(coord_dir_index)
+
 						if eqn>=0:
 							res.add(eqn)
 				else:
@@ -261,6 +262,31 @@ class EigenMatrixSetDofsToZero(EigenMatrixManipulatorBase):
 		return A
 
 	def apply_on_J_and_M(self,solver:"GenericEigenSolver",J:DefaultMatrixType,M:DefaultMatrixType) -> Tuple[DefaultMatrixType, DefaultMatrixType]:
+		self.zeromap:Set[int]=set()
+		import _pyoomph
+		for d in self.doflist:
+			if isinstance(d,str):
+				eqs=self.resolve_equations_by_name(d)
+			else:
+				eqs=set([d])
+			if  _pyoomph.get_verbosity_flag() != 0:
+				print("INFO ",d,eqs)
+			self.zeromap=self.zeromap.union(eqs)
+		#print("GOING TO SET TO ZERO",self.zeromap)
+		N=J.shape[0]
+		Adiag=numpy.ones(N)
+		Adiag[numpy.array(sorted(list(self.zeromap)),dtype=numpy.int64)] = 0.0
+		Bdiag=1-Adiag
+		A=scipy.sparse.spdiags(Adiag, [0], N, N).tocsr()
+		B=scipy.sparse.spdiags(Bdiag, [0], N, N).tocsr()
+		J=A@J+B # Set removed rows to delta_ij
+		M=A@M # Set removed rows to zero
+		return J,M
+		
+
+
+	def apply_on_J_and_M___OLD(self,solver:"GenericEigenSolver",J:DefaultMatrixType,M:DefaultMatrixType) -> Tuple[DefaultMatrixType, DefaultMatrixType]:
+		# TODO OLD VERSION: Slow, remove
 		import _pyoomph
 		self.zeromap:Set[int]=set()
 		for d in self.doflist:
@@ -268,12 +294,13 @@ class EigenMatrixSetDofsToZero(EigenMatrixManipulatorBase):
 				eqs=self.resolve_equations_by_name(d)
 			else:
 				eqs=set([d])
-			if _pyoomph.get_verbosity_flag() != 0:
+			if  _pyoomph.get_verbosity_flag() != 0:
 				print("INFO ",d,eqs)
 			self.zeromap=self.zeromap.union(eqs)
 		if len(self.zeromap)>0:
 			#J=self.set_rows_to_identity(J,list(self.zeromap))
 			for k in reversed(sorted(self.zeromap)):
+				#print("SET TO ZERO",k)       
 				self.setcsrrow2id(J,k)
 			#J=self.set_rows_to_identity(J,list(self.zeromap))
 			J.eliminate_zeros()
@@ -292,6 +319,8 @@ class GenericEigenSolver:
 		self.real_contribution:str=""
 		self.imag_contribution:Optional[str]=None
 
+	def supports_target(self)->bool:
+		return False
 
 	def setup_matrix_contributions(self,real_contribution:str,imag_contribution:Optional[str]=None):
 		self.real_contribution=real_contribution
@@ -311,7 +340,7 @@ class GenericEigenSolver:
 			return subclass
 		return decorator
 
-	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray]:
+	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,DefaultMatrixType,DefaultMatrixType]:
 		raise RuntimeError("Here")
 	
 	@staticmethod
@@ -319,7 +348,22 @@ class GenericEigenSolver:
 		if name in GenericEigenSolver._registered_solvers.keys():
 			return GenericEigenSolver._registered_solvers[name](problem)
 		else:
-			raise RuntimeError("Unknown Eigen solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys())))
+			libname=name
+			if libname=="slepc":
+				libname="petsc"
+			try:
+				import importlib
+				importlib.import_module("pyoomph.solvers."+libname)
+				if name in GenericEigenSolver._registered_solvers.keys():
+					return GenericEigenSolver._registered_solvers[name](problem)
+				else:
+					raise RuntimeError("Unknown Eigen solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys())))
+			except Exception as e:
+				add_msg_str="When trying to import pyoomph.solvers."+str(name)+", the following error was raised:\n"
+				add_msg_str+=''.join(traceback.format_exception(type(e), value=e, tb=e.__traceback__))
+				raise RuntimeError("Unknown Eigen solver solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys()))+"\n"+add_msg_str)
+
+			#raise RuntimeError("Unknown Eigen solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys())))
 
 	def add_matrix_manipulator(self,manip:EigenMatrixManipulatorBase):
 		self.matrix_manipulators.append(manip)
@@ -330,31 +374,37 @@ class GenericEigenSolver:
 
 	def get_J_M_n_and_type(self)->Tuple[DefaultMatrixType,DefaultMatrixType,int,bool]:
 		from scipy.sparse import csr_matrix #type:ignore
-		self.problem._set_solved_residual(self.real_contribution)
+		if not self.problem._set_solved_residual(self.real_contribution):
+			raise RuntimeError("Cannot set the residual "+self.real_contribution+" for eigen calculation since it has no contribution at all")
 		n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
 		matM=csr_matrix((M_val, M_ci, M_rs), shape=(n, n))	#TODO: Is csr or csc?
 		matJ=csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
 		is_complex=False
-		if self.imag_contribution is not None:
-			self.problem._set_solved_residual(self.imag_contribution)
-			matM=cast(csr_matrix,matM.copy())
-			matJ=cast(csr_matrix,matJ.copy())
-			n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
-			matMi = csr_matrix((M_val, M_ci, M_rs), shape=(n, n))  # TODO: Is csr or csc?
-			matJi = csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
-			if M_nzz>0:
-				matM=cast(csr_matrix,matM+complex(0,1)*matMi)
-				is_complex = True
-			if J_nzz>0:
-				matJ =cast(csr_matrix,matJ+ complex(0, 1) * matJi)
-				is_complex=True
+		if self.imag_contribution is not None:      
+			if self.problem._set_solved_residual(self.imag_contribution,raise_error=False):					
+				matM=cast(csr_matrix,matM.copy())
+				matJ=cast(csr_matrix,matJ.copy())
+				n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
+				matMi = csr_matrix((M_val, M_ci, M_rs), shape=(n, n))  # TODO: Is csr or csc?
+				matJi = csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
+				if M_nzz>0:
+					matM=cast(csr_matrix,matM+complex(0,1)*matMi)
+					is_complex = True
+				if J_nzz>0:
+					matJ =cast(csr_matrix,matJ+ complex(0, 1) * matJi)
+					is_complex=True
 
 		self.problem._set_solved_residual("")
 
+		#print("Applying Matrix manipulators")
 		for manip in self.matrix_manipulators:
+			#print("APPLY MANIP",manip)
+			#if isinstance(manip,EigenMatrixSetDofsToZero):      
+				#print("APPLY MANIP",manip,manip.doflist)
 			matJ,matM=manip.apply_on_J_and_M(self,matJ,matM)
 
 		if matM.nnz==0: #type:ignore
 			raise RuntimeError("The mass matrix has no entries. This likely means that you do not have any time derivatives in your system")
 
+		print("Matrices assembled. Invoking eigensolver")
 		return matJ,matM,n,is_complex

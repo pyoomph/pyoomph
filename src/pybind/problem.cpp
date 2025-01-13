@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -192,7 +192,10 @@ void PyReg_Problem(py::module &m)
 						   "value", [](GiNaC::GiNaCGlobalParameterWrapper *self)
 						   { return self->get_struct().cme->value(); },
 						   [](GiNaC::GiNaCGlobalParameterWrapper *self, const double &v)
-						   { self->get_struct().cme->value() = v; })
+						   { 
+							if (v<0 && self->get_struct().cme->is_restricted_to_positive_values()) throw_runtime_error("Cannot set the parameter "+self->get_struct().cme->get_name()+" to a negative value of "+std::to_string(v)+" since it is restricted to positive values.");
+							self->get_struct().cme->value() = v; 
+						   })
 		.def_property(
 			"analytical_derivative", [](GiNaC::GiNaCGlobalParameterWrapper *self)
 			{ return self->get_struct().cme->get_analytic_derivative(); },
@@ -202,6 +205,7 @@ void PyReg_Problem(py::module &m)
 			 { return 0 + (*self); })
 		.def("get_name", [](GiNaC::GiNaCGlobalParameterWrapper *self)
 			 { return self->get_struct().cme->get_name(); })
+		.def("restrict_to_positive_values",[](GiNaC::GiNaCGlobalParameterWrapper *self){self->get_struct().cme->restrict_to_positive_values();})
 
 		.def(-py::self)
 
@@ -324,6 +328,7 @@ void PyReg_Problem(py::module &m)
 		.def_property("FD_step", [](pyoomph::MyFoldHandler *h)
 					  { return h->FD_step; }, [](pyoomph::MyFoldHandler *h, double s)
 					  { h->FD_step = s; })
+		.def("set_eigenweight", &pyoomph::MyFoldHandler::set_eigenweight)
 		.def_property("symmetric_FD", [](pyoomph::MyFoldHandler *h)
 					  { return h->symmetric_FD; }, [](pyoomph::MyFoldHandler *h, bool s)
 					  { h->symmetric_FD = s; });
@@ -336,6 +341,7 @@ void PyReg_Problem(py::module &m)
 			 { self->debug_analytical_filling(elem, eps); });
 
 	py::class_<pyoomph::AzimuthalSymmetryBreakingHandler, oomph::AssemblyHandler>(m, "AzimuthalSymmetryBreakingHandler")
+		.def("set_eigenweight", &pyoomph::AzimuthalSymmetryBreakingHandler::set_eigenweight)	
 		.def("set_global_equations_forced_zero", &pyoomph::AzimuthalSymmetryBreakingHandler::set_global_equations_forced_zero);
 
 	py::class_<pyoomph::DynamicBulkElementInstance>(m, "DynamicBulkElementInstance")
@@ -434,6 +440,7 @@ void PyReg_Problem(py::module &m)
 		.def("_arc_length_step", &pyoomph::Problem::arc_length_step)
 		.def("get_arc_length_parameter_derivative", &pyoomph::Problem::get_arc_length_parameter_derivative)
 		.def("_set_arc_length_parameter_derivative", &pyoomph::Problem::set_arc_length_parameter_derivative)
+		.def("_update_dof_vectors_for_continuation", &pyoomph::Problem::update_dof_vectors_for_continuation)
 		.def("get_arc_length_theta_sqr", &pyoomph::Problem::get_arc_length_theta_sqr)
 		.def("_set_arc_length_theta_sqr", &pyoomph::Problem::set_arc_length_theta_sqr)
 		.def("_set_arclength_parameter", &pyoomph::Problem::set_arclength_parameter)
@@ -444,10 +451,13 @@ void PyReg_Problem(py::module &m)
 		.def("get_bifurcation_tracking_mode", &pyoomph::Problem::get_bifurcation_tracking_mode)
 		.def("_get_bifurcation_eigenvector", &pyoomph::Problem::get_bifurcation_eigenvector)
 		.def("_get_bifurcation_omega", &pyoomph::Problem::get_bifurcation_omega)
+		.def("_get_lambda_tracking_real", [](pyoomph::Problem * self) {return *self->get_lambda_tracking_real(); })
+		.def("_set_lambda_tracking_real", [](pyoomph::Problem * self,double lr) {*self->get_lambda_tracking_real()=lr; })
 		.def("reset_arc_length_parameters", &pyoomph::Problem::reset_arc_length_parameters)
 		.def("_set_dof_direction_arclength", &pyoomph::Problem::set_dof_direction_arclength)
 		.def("get_parameter_derivative", &pyoomph::Problem::get_parameter_derivative)
 		.def("get_arclength_dof_derivative_vector", &pyoomph::Problem::get_arclength_dof_derivative_vector)
+		.def("get_arclength_dof_current_vector", &pyoomph::Problem::get_arclength_dof_current_vector)
 		.def("get_global_parameter", [](pyoomph::Problem *self, const std::string &n) -> GiNaC::GiNaCGlobalParameterWrapper
 			 {auto * gpd=self->assert_global_parameter(n); return GiNaC::GiNaCGlobalParameterWrapper(gpd); }, py::return_value_policy::reference, py::arg("parameter_name"), "Return a global parameter. If it does not exist, it will be added and initialized with value 0.")
 		.def("get_global_parameter_names", &pyoomph::Problem::get_global_parameter_names)
@@ -471,8 +481,8 @@ void PyReg_Problem(py::module &m)
 			 { return self->set_current_dofs(inp); })
 		.def("set_history_dofs", [](pyoomph::Problem *self, unsigned t, const std::vector<double> &inp)
 			{ return self->set_history_dofs(t, inp); })
-		.def("set_current_pinned_values", [](pyoomph::Problem *self, const std::vector<double> &inp, bool with_pos)
-			 { return self->set_current_pinned_values(inp, with_pos); })
+		.def("set_current_pinned_values", [](pyoomph::Problem *self, const std::vector<double> &inp, bool with_pos,unsigned t)
+			 { return self->set_current_pinned_values(inp, with_pos,t); },py::arg("inp"),py::arg("with_pos"),py::arg("t")=0)
 		.def("assemble_eigenproblem_matrices", [](pyoomph::Problem *self, double sigma_r)
 			 {
 				 oomph::CRDoubleMatrix *M = NULL, *J = NULL;
@@ -545,7 +555,7 @@ void PyReg_Problem(py::module &m)
 		.def("adapt", [](pyoomph::Problem &self)
 			 {unsigned nref,nunref; self.adapt(nref,nunref); return std::make_tuple(nref,nunref); })
 		.def("_replace_RJM_by_param_deriv", &pyoomph::Problem::_replace_RJM_by_param_deriv)
-		.def("_set_solved_residual", &pyoomph::Problem::_set_solved_residual)
+		.def("_set_solved_residual", &pyoomph::Problem::_set_solved_residual, py::arg("name"),py::arg("raise_error")=true)
 		.def("set_analytic_hessian_products", [](pyoomph::Problem *self, bool active, bool use_symmetry)
 			 { if (active) self->set_analytic_hessian_products();  else self->unset_analytic_hessian_products(); self->set_symmetric_hessian_assembly(use_symmetry); }, py::arg("active"), py::arg("use_symmetry") = false)
 		.def("set_FD_step_used_in_get_hessian_vector_products", &pyoomph::Problem::set_FD_step_used_in_get_hessian_vector_products)

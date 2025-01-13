@@ -10,6 +10,8 @@ In this section, we cover some advanced topic on linear stability analysis, i.e.
    advstab/response.rst
    advstab/movmesh.rst
    advstab/azimuthal.rst
+   advstab/cartesiannormal.rst   
+   advstab/eigenconti.rst
         
 
 

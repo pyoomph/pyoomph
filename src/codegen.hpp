@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -63,6 +63,7 @@ namespace pyoomph
       unsigned history_step=0; // For evaluations in past
       bool no_jacobian = false;
       bool no_hessian = false;
+      bool simple_unity_integral = false;  // If true, dx []=J=sqrt(det(g))] from the element won't be considered
 
       bool is_lagrangian() const { return lagrangian; }
       bool is_derived() const { return derived; }
@@ -129,7 +130,7 @@ namespace pyoomph
       int deriv_direction2;
       bool derived_by_second_index; // indicates that we have derived with respect to l_shape2 in the Hessian. Important for first order derivatives only
    public:
-      bool is_eigenexpansion = false; // Used for symmetry breaking: It gives then dn_i/dX^{0l}_j* X^{ml}_j
+      //bool is_eigenexpansion = false; // Used for symmetry breaking: It gives then dn_i/dX^{0l}_j* X^{ml}_j
       int expansion_mode = 0;         // For mode expansions
       bool no_jacobian = false;
       bool no_hessian = false;
@@ -415,13 +416,14 @@ namespace pyoomph
    {
    protected:
       FiniteElementSpace *space;
-      std::vector<BasisFunction *> basis_deriv_x, lagr_deriv_x;
+      std::vector<BasisFunction *> basis_deriv_x, lagr_deriv_x, local_coord_deriv_x;
 
    public:
       BasisFunction(FiniteElementSpace *_space) : space(_space) {}
       virtual ~BasisFunction();
       virtual BasisFunction *get_diff_x(unsigned direction);
       virtual BasisFunction *get_diff_X(unsigned direction);
+      virtual BasisFunction *get_diff_S(unsigned direction);
       virtual std::string to_string();
       virtual const FiniteElementSpace *get_space() const { return space; }
       virtual std::string get_dx_str() const { return "d0x"; }
@@ -438,6 +440,7 @@ namespace pyoomph
       D1XBasisFunction(FiniteElementSpace *_space, unsigned _direction) : BasisFunction(_space), direction(_direction) {}
       virtual BasisFunction *get_diff_x(unsigned direction);
       virtual BasisFunction *get_diff_X(unsigned direction);
+      virtual BasisFunction *get_diff_S(unsigned direction);
       virtual std::string to_string();
       virtual std::string get_dx_str() const { return "d1x" + std::to_string(direction); }
       virtual std::string get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const;
@@ -451,6 +454,16 @@ namespace pyoomph
       D1XBasisFunctionLagr(FiniteElementSpace *_space, unsigned _direction) : D1XBasisFunction(_space, _direction) {}
       virtual std::string to_string();
       virtual std::string get_dx_str() const { return "d1X" + std::to_string(direction); }
+      virtual std::string get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const;
+      virtual std::string get_c_varname(FiniteElementCode *forcode, std::string test_index);
+   };
+
+   class D1XBasisFunctionLocalCoord : public D1XBasisFunctionLagr
+   {
+   public:
+      D1XBasisFunctionLocalCoord(FiniteElementSpace *_space, unsigned _direction) : D1XBasisFunctionLagr(_space, _direction) {}
+      virtual std::string to_string();
+      virtual std::string get_dx_str() const { return "d1S" + std::to_string(direction); }
       virtual std::string get_shape_string(FiniteElementCode *forcode, std::string nodal_index) const;
       virtual std::string get_c_varname(FiniteElementCode *forcode, std::string test_index);
    };
@@ -632,7 +645,11 @@ namespace pyoomph
 
       std::vector<GiNaC::ex> residual;
       std::set<std::string> ignore_assemble_residuals; // E.g. for azimuthal eigenvalue matrices. Residual is not used => don't assemble
-      SpatialIntegralSymbol dx, dX;
+      //std::map<std::string,std::set<int> > remove_underived_modes; // If in the Jacobian still modes are present that are not derived from interpolated_... to shape_..., they are removed. They can appear in eigenderivatives
+      std::map<std::string,int> derive_jacobian_by_expansion_mode; // Derive the Jacobian by the given expansion mode only
+      std::set<std::string> ignore_dpsi_coord_diffs_in_jacobian_set; // Usually, if we derive df/dx=f^l*dpsi^l/dx on a moving mesh, we also get a contribution how dpsi^l/dx changes with the moving mesh. For eigenexpansions, this might be wrong
+      std::map<std::string,int> derive_hessian_by_expansion_mode; // Derive the Jacobian by the given expansion mode only
+      SpatialIntegralSymbol dx, dX, dx_unity;
       ElementSizeSymbol elemsize_Eulerian, elemsize_Lagrangian, elemsize_Eulerian_Cart, elemsize_Lagrangian_Cart;
       NodalDeltaSymbol nodal_delta;
       std::vector<SpatialIntegralSymbol> dx_derived, dx_derived_lshape2_for_Hessian;
@@ -656,7 +673,7 @@ namespace pyoomph
 
       std::map<std::string, std::map<FiniteElementSpace *, std::map<std::string, bool>>> required_shapes;
       unsigned max_dt_order = 0;
-      std::vector<GiNaC::ex> Z2_fluxes;
+      std::vector<GiNaC::ex> Z2_fluxes,Z2_fluxes_for_eigen;
       std::map<std::string, GiNaC::ex> integral_expressions;
       std::map<std::string, GiNaC::ex> integral_expression_units;
 
@@ -680,7 +697,7 @@ namespace pyoomph
       virtual void write_code_header(std::ostream &os);
       virtual void write_code_info(std::ostream &os);
       virtual void write_code_geometric_jacobian(std::ostream &os);
-      virtual void write_code_get_z2_flux(std::ostream &os);
+      virtual void write_code_get_z2_flux(std::ostream &os,bool for_eigen);
       virtual void check_for_external_ode_dependencies();
       virtual void write_code_multi_ret_call(std::ostream &os, std::string indent, GiNaC::ex for_what, unsigned i, std::set<int> *multi_return_calls_written = NULL, GiNaC::ex *invok = NULL);
       virtual GiNaC::ex write_code_subexpressions(std::ostream &os, std::string indent, GiNaC::ex for_what, const std::set<ShapeExpansion> &required_shapeexps, bool hessian);
@@ -751,7 +768,7 @@ namespace pyoomph
       virtual void mark_shapes_required(std::string func_type, FiniteElementSpace *space, BasisFunction *bf);
       virtual GiNaC::ex get_scaling(std::string name, bool testscale = false) { return 1; }
 
-      virtual void add_Z2_flux(GiNaC::ex flux);
+      virtual void add_Z2_flux(GiNaC::ex flux,bool for_eigen);
       virtual int get_dimension() const { return element_dim; }
       void set_nodal_dimension(unsigned d) { nodal_dim = d; }
       unsigned nodal_dimension() const { return nodal_dim; }
@@ -796,15 +813,21 @@ namespace pyoomph
       virtual void write_generic_RJM(std::ostream &os, std::string funcname, GiNaC::ex resi, bool with_hang);     // Generic Residual/Jacobian/Mass matrix (also for parameter derivatives)
       virtual bool write_generic_Hessian(std::ostream &os, std::string funcname, GiNaC::ex resi, bool with_hang); // Generic Hessian vector product
       virtual void write_code(std::ostream &os);
-      virtual GiNaC::ex get_dx(bool lagrangian);
+      virtual GiNaC::ex get_dx(bool lagrangian,bool unity_only=false);      
       virtual GiNaC::ex get_element_size_symbol(bool lagrangian, bool with_coordsys);
       virtual GiNaC::ex get_integral_dx(bool use_scaling, bool lagrangian, CustomCoordinateSystem *coordsys) { return get_dx(lagrangian); }
       virtual GiNaC::ex get_element_size(bool use_scaling, bool lagrangian, bool with_coordsys, CustomCoordinateSystem *coordsys) { return get_element_size_symbol(lagrangian, with_coordsys); }
       virtual GiNaC::ex get_nodal_delta();
       virtual GiNaC::ex get_normal_component(unsigned i);
-      virtual GiNaC::ex get_normal_component_eigenexpansion(unsigned i); // Used for azimuthal eigenstab only. Gives dn_i/dX^{0l}_j * X^{ml}_j
-      virtual void set_ignore_residual_assembly(std::string residual_name) { ignore_assemble_residuals.insert(residual_name); }
+      //virtual GiNaC::ex get_normal_component_eigenexpansion(unsigned i); // Used for azimuthal eigenstab only. Gives dn_i/dX^{0l}_j * X^{ml}_j
+      virtual void set_derive_jacobian_by_expansion_mode(std::string residual_name,int expansion_mode) { derive_jacobian_by_expansion_mode[residual_name]=expansion_mode; }      
+      virtual void set_derive_hessian_by_expansion_mode(std::string residual_name,int expansion_mode) { derive_hessian_by_expansion_mode[residual_name]=expansion_mode; }            
+      virtual void set_ignore_dpsi_coord_diffs_in_jacobian(std::string residual_name) { ignore_dpsi_coord_diffs_in_jacobian_set.insert(residual_name); }
+      virtual void set_ignore_residual_assembly(std::string residual_name) { ignore_assemble_residuals.insert(residual_name); }   
       virtual bool is_current_residual_assembly_ignored() { return ignore_assemble_residuals.count(residual_names[residual_index]); }
+      virtual int * get_derive_jacobian_by_expansion_mode() { if (!derive_jacobian_by_expansion_mode.count(residual_names[residual_index])) return NULL; else return &(derive_jacobian_by_expansion_mode[residual_names[residual_index]]) ; }      
+      virtual int * get_derive_hessian_by_expansion_mode() { if (!derive_hessian_by_expansion_mode.count(residual_names[residual_index])) return NULL; else return &(derive_hessian_by_expansion_mode[residual_names[residual_index]]) ; }            
+      virtual bool ignore_dpsi_coord_diffs_in_jacobian() { return ignore_dpsi_coord_diffs_in_jacobian_set.count(residual_names[residual_index]); }
 
       virtual int classify_space_type(const FiniteElementSpace *s); // Returns 0 if the space is defined on this element, -1 for bulk element, -2 for other side of interface, >0 for external elements [-1]
       virtual std::string get_owner_prefix(const FiniteElementSpace *sp);

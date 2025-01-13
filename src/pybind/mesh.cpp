@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -156,8 +156,10 @@ void PyReg_Mesh(py::module &m)
 
 	py::class_<pyoomph::MeshTemplateCurvedEntity>(m, "MeshTemplateCurvedEntityBase")
 		.def_static("load_from_strings", &pyoomph::MeshTemplateCurvedEntity::load_from_strings)
-		.def("get_information_string", &pyoomph::MeshTemplateCurvedEntity::get_information_string).
-		doc()="A generic class representing a relation for a curved boundary representation";
+		.def("get_information_string", &pyoomph::MeshTemplateCurvedEntity::get_information_string)
+		.def("get_pos_from_parametric", &pyoomph::MeshTemplateCurvedEntity::parametric_to_position)
+		.def("get_parametric_from_pos", &pyoomph::MeshTemplateCurvedEntity::position_to_parametric)
+		.doc()="A generic class representing a relation for a curved boundary representation";
 
 	py::class_<pyoomph::CurvedEntityCircleArc, pyoomph::MeshTemplateCurvedEntity>(m, "CurvedEntityCircleArc")
 		.def(py::init<const std::vector<double> &, const std::vector<double> &, const std::vector<double> &>());
@@ -197,10 +199,13 @@ void PyReg_Mesh(py::module &m)
 
 	py::class_<pyoomph::Node, oomph::Data>(m, "Node")
 		.def("x", (const double &(pyoomph::Node::*)(const unsigned int &) const) & pyoomph::Node::x)
+		.def("x_at_t", (const double &(pyoomph::Node::*)(const unsigned int &,const unsigned int &) const) & pyoomph::Node::x)
 		.def("x_lagr", (const double &(pyoomph::Node::*)(const unsigned int &) const) & pyoomph::Node::xi)
 		.def("ndim", (unsigned(pyoomph::Node::*)() const) & pyoomph::Node::ndim)
 		.def("set_x", [](pyoomph::Node *n, unsigned const &ind, double const &x)
 			 { n->x(ind) = x; })
+		.def("set_x_at_t", [](pyoomph::Node *n, unsigned const &t,unsigned const &ind, double const &x)
+			 { n->x(t,ind) = x; })
 		.def("set_x_lagr", [](pyoomph::Node *n, unsigned const &ind, double const &x)
 			 { n->xi(ind) = x; })
 		.def("pin_position", (void(pyoomph::Node::*)(const unsigned &)) & pyoomph::Node::pin_position)
@@ -795,6 +800,9 @@ void PyReg_Mesh(py::module &m)
 		.def("activate_duarte_debug", &pyoomph::Mesh::activate_duarte_debug)
 		.def("prepare_zeta_interpolation", [](pyoomph::Mesh *self, pyoomph::Mesh *old_mesh){self->prepare_zeta_interpolation(old_mesh);})
 		.def("remove_boundary_nodes",[](pyoomph::Mesh *self) {self->remove_boundary_nodes();})		
+		.def("remove_boundary_nodes_of_bound",[](pyoomph::Mesh *self,unsigned b) {self->remove_boundary_nodes(b);})		
+		.def("add_interpolated_nodes_at",&pyoomph::Mesh::add_interpolated_nodes_at,py::return_value_policy::reference)
+		.def("add_boundary_node",[](pyoomph::Mesh *self,unsigned bind,pyoomph::Node *n) {self->add_boundary_node(bind,n);})
 		.def("flush_element_storage", [](pyoomph::Mesh *self){self->flush_element_storage();})
 		.def("_set_time_level_for_projection", [](pyoomph::Mesh *self, unsigned time_level){self->set_time_level_for_projection(time_level);})
 		.def("get_field_information", [](pyoomph::Mesh *self)
@@ -1142,6 +1150,7 @@ void PyReg_Mesh(py::module &m)
 		.def("add_nodes_to_boundary", &pyoomph::MeshTemplate::add_nodes_to_boundary,"Adds a list of nodes, i.e. a facet, to a boundary")
 		.def("add_facet_to_curve_entity", &pyoomph::MeshTemplate::add_facet_to_curve_entity,"Adds a facet to a curved boundary so that e.g. additional nodes of refined meshes will be exactly on this curve")
 		.def("_find_opposite_interface_connections", &pyoomph::MeshTemplate::_find_opposite_interface_connections)
+		.def("_find_interface_intersections", &pyoomph::MeshTemplate::_find_interface_intersections)
 		.def("add_periodic_node_pair", &pyoomph::MeshTemplate::add_periodic_node_pair, "n_mst"_a, "n_slv"_a)
 		.def("add_node_unique", &pyoomph::MeshTemplate::add_node_unique, "x"_a, "y"_a = 0.0, "z"_a = 0.0,"Adds a node at the given position. If there is already a node at this position,no new node is created")
 		.def("add_node", &pyoomph::MeshTemplate::add_node, "x"_a, "y"_a = 0.0, "z"_a = 0.0,"Adds a node at the given position. Creates overlapping nodes, if there is already a node at this position.")
@@ -1232,7 +1241,8 @@ void PyReg_Mesh(py::module &m)
 		  { oomph::FiniteElement::Tolerance_for_singular_jacobian = tol; });
 	m.def("set_interpolate_new_interface_dofs", [](bool on)
 		  { pyoomph::InterfaceElementBase::interpolate_new_interface_dofs = on; });
-
+	m.def("set_use_eigen_Z2_error_estimators", [](bool on)
+		  { pyoomph::BulkElementBase::use_eigen_error_estimators = on; });
 
 	py::class_<pyoomph::TracerCollection>(m, "TracerCollection")
 		.def(py::init<std::string>())

@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -50,6 +50,7 @@ void PyReg_TimeStepper(py::module &m)
 			 { return self.is_steady(); })
 		.def("set_weights", [](oomph::TimeStepper &self)
 			 { return self.set_weights(); })
+		.def("ntstorage", &oomph::TimeStepper::ntstorage)
 		.def("nprev_values", &oomph::TimeStepper::nprev_values);
 
 	py::class_<pyoomph::MultiTimeStepper, oomph::TimeStepper>(m, "MultiTimeStepper")

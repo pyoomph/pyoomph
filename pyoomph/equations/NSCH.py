@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -149,15 +149,15 @@ class CompositionNSCHPhaseField(Equations):
             mu_eq_test=mu_test
         
         if self.skew_symmetric_advection:
-            self.add_residual(weak(partial_t(phi,ALE="auto"),phi_eq_test))
+            self.add_residual(weak(partial_t(phi),phi_eq_test))
             self.add_residual(weak(dot(u,grad(phi)),phi_eq_test)/2-weak(u*phi,grad(phi_eq_test))/2) # Note that this induces additional boundary fluxes
             self.add_residual(weak(self.mobility*grad(mu),grad(phi_eq_test)))
         else:
             if self.partial_integrate_advection:
-                self.add_residual(weak(partial_t(phi,ALE="auto"),phi_eq_test)) # Note that this induces additional boundary fluxes
+                self.add_residual(weak(partial_t(phi),phi_eq_test)) # Note that this induces additional boundary fluxes
                 self.add_residual(weak(-u*phi+self.mobility*grad(mu),grad(phi_eq_test)))
             else:
-                self.add_residual(weak(partial_t(phi,ALE="auto")+dot(u,grad(phi)),phi_eq_test))
+                self.add_residual(weak(partial_t(phi)+dot(u,grad(phi)),phi_eq_test))
                 self.add_residual(weak(self.mobility*grad(mu),grad(phi_eq_test)))
 
 

@@ -1,6 +1,6 @@
 /*================================================================================
 pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -270,8 +270,10 @@ namespace pyoomph
                                                // indices are the base equations, not the indices of the eigendegrees!).
                                                // For e.g. m=1, equation of velocity_x at axis is part of base_dofs_forced_zero,
                                                // but not of eigen_dofs_forced_zero
+    double eigenweight=1.0;                                               
   public:
     unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)
+    void set_eigenweight(double ew);
 
     // Setter of the forced zero degrees
     void set_global_equations_forced_zero(const std::set<unsigned> &base, const std::set<unsigned> &eigen)
@@ -286,8 +288,10 @@ namespace pyoomph
 
     double FD_step; // Finite difference step (usually small)
 
+    bool has_imaginary_part; // If the imaginary part of the jacobian or mass matrix is present
+
     // Constructors. We must pass a problem, a parameter to optimize (i.e. to change in order to get Re(eigenvalue)=0) and a guess of the eigenvector and the imaginary part of the eigenvector
-    AzimuthalSymmetryBreakingHandler(Problem *const &problem_pt, double *const &parameter_pt, const oomph::DoubleVector &real_eigen, const oomph::DoubleVector &imag_eigen, const double &Omega_guess);
+    AzimuthalSymmetryBreakingHandler(Problem *const &problem_pt, double *const &parameter_pt, const oomph::DoubleVector &real_eigen, const oomph::DoubleVector &imag_eigen, const double &Omega_guess,bool has_imag);
     // Destructor (used for cleaning up memory)
     ~AzimuthalSymmetryBreakingHandler();
 

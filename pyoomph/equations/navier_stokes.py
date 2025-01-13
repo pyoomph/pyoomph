@@ -5,7 +5,7 @@
 #  @section LICENSE
 # 
 #  pyoomph - a multi-physics finite element framework based on oomph-lib and GiNaC 
-#  Copyright (C) 2021-2024  Christian Diddens & Duarte Rocha
+#  Copyright (C) 2021-2025  Christian Diddens & Duarte Rocha
 # 
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -299,11 +299,11 @@ class StokesEquations(Equations):
         if self.PFEM_options and self.PFEM_options.active:
             if not self.PFEM_options.first_order_system:
                 x, u_test = var_and_test("mesh")
-                u=partial_t(x,scheme=self.momentum_scheme,ALE=False)
+                u=mesh_velocity(scheme=self.momentum_scheme)
                 vectcomps:List[str]=[]
-                for direct in (["x","y","z"])[:self.get_nodal_dimension()]:
+                for i,direct in enumerate((["x","y","z"])[:self.get_nodal_dimension()]):
                     vectcomps.append("velocity_"+direct)
-                    self.define_field_by_substitution("velocity_"+direct,partial_t(var("mesh_"+direct),scheme=self.momentum_scheme),also_on_interface=True)
+                    self.define_field_by_substitution("velocity_"+direct,mesh_velocity(scheme=self.momentum_scheme)[i],also_on_interface=True)
                     self.define_testfunction_by_substitution("velocity_"+direct,testfunction("mesh_"+direct),also_on_interface=True)
                 self.define_testfunction_by_substitution(self.velocity_name,vector(*[testfunction(f)/test_scale_factor(self.velocity_name) for f in vectcomps]),also_on_interface=True)
                 self.define_testfunction_by_substitution("mesh",vector(*[testfunction(f)/test_scale_factor(self.velocity_name) for f in vectcomps]),also_on_interface=True)
@@ -425,8 +425,8 @@ class NavierStokesEquations(StokesEquations):
     In the weak form, the equations are written as:
 
     .. math:: (\\partial_t \\rho, q) + (\\rho \\vec{u}, \\nabla q) = 0
-    .. math:: \\rho (\partial_t \\vec{u}, \\vec{v}) + \\rho (\\vec{u} \\cdot \\nabla \\vec{u}, \\vec{v}) + (-p \\vec{\\vec{I}} + \\mu [\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T}], \\nabla \\vec{v} + (\\nabla \\vec{v})^\\text{T}) - (f,\\vec{v}) 
-    .. math:: - \langle \\vec{n} \\cdot [-p I + \\mu (\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T})], \\vec{v} \\rangle = 0 \\,
+    .. math:: \\rho (\\partial_t \\vec{u}, \\vec{v}) + \\rho (\\vec{u} \\cdot \\nabla \\vec{u}, \\vec{v}) + (-p \\vec{\\vec{I}} + \\mu [\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T}], \\nabla \\vec{v} + (\\nabla \\vec{v})^\\text{T}) - (f,\\vec{v}) 
+    .. math:: - \\langle \\vec{n} \\cdot [-p I + \\mu (\\nabla \\vec{u} + (\\nabla \\vec{u})^\\text{T})], \\vec{v} \\rangle = 0 \\,
 
     where :math:`\\vec{v}` and :math:`q` are test functions of the velocity and pressure, respectively.
 
@@ -476,7 +476,7 @@ class NavierStokesEquations(StokesEquations):
         super().define_residuals()  # add the Stokes part
         if self.PFEM_options and self.PFEM_options.active and self.PFEM_options.first_order_system:
             x, u_test = var_and_test("mesh")
-            u=partial_t(x,scheme=self.momentum_scheme,ALE=False)
+            u=mesh_velocity(scheme=self.momentum_scheme)
         else:
             u, u_test = var_and_test(self.velocity_name)
         if self.wrap_params_in_subexpressions:
@@ -491,10 +491,8 @@ class NavierStokesEquations(StokesEquations):
 #        elif self.PFEM_options and self.PFEM_options.active and self.PFEM_options.direct_position_update:
  #           raise RuntimeError("TODO")
         else:
-            self.add_residual(weak(time_scheme(self.momentum_scheme,rho*material_derivative(u,u, ALE="auto",dt_factor=self.dt_factor,advection_factor=self.nonlinear_factor)), u_test))
-#            print(self.expand_expression_for_debugging(material_derivative(u,u, ALE="auto",dt_factor=self.dt_factor,advection_factor=self.nonlinear_factor)))
-        #self.add_residual(weak(rho*material_derivative(u,u, ALE="auto",dt_factor=self.dt_factor,advection_factor=self.nonlinear_factor), u_test))
-        #self.add_residual(weak(rho*material_derivative(u,u, ALE="auto",dt_factor=self.dt_factor,advection_factor=self.nonlinear_factor), u_test))
+            self.add_residual(weak(time_scheme(self.momentum_scheme,rho*material_derivative(u,u,dt_factor=self.dt_factor,advection_factor=self.nonlinear_factor)), u_test))
+
 
 
 
@@ -560,7 +558,7 @@ class NavierStokesFreeSurface(InterfaceEquations):
     def define_fields(self):
         flow_eqs=self.get_parent_equations(StokesEquations)
         if flow_eqs == []:
-            raise RuntimeError(self.get_parent_domain().get_domain_name())
+            raise RuntimeError("No (Navier-)Stokes defined on domain "+self.get_parent_domain().get_domain_name())
         assert isinstance(flow_eqs,StokesEquations)
         if not flow_eqs.PFEM_options or not flow_eqs.PFEM_options.active or flow_eqs.PFEM_options.first_order_system:                    
             vspace=flow_eqs.get_velocity_space_from_mode(for_interface=True)
@@ -629,7 +627,7 @@ class NavierStokesFreeSurface(InterfaceEquations):
             else:
                 
 
-                kin_bc = dot(partial_t(R) - u, n)
+                kin_bc = dot(mesh_velocity() - u, n)
                 if self.mass_transfer_rate is not None and self.mass_transfer_rate!=0:
                     bulkeqs = self.get_parent_domain().get_equations()
                     nsbulk = bulkeqs.get_equation_of_type(StokesEquations)
@@ -686,11 +684,12 @@ class ConnectVelocityAtInterface(InterfaceEquations):
 
     required_parent_type = StokesEquations
 
-    def __init__(self, lagr_mult_prefix:str="_lagr_velo_conn", mass_transfer_rate:ExpressionOrNum=0,use_highest_space:bool=False):
+    def __init__(self, lagr_mult_prefix:str="_lagr_velo_conn", mass_transfer_rate:ExpressionOrNum=0,use_highest_space:bool=False,normal_velocity_jump:ExpressionOrNum=0):
         super(ConnectVelocityAtInterface, self).__init__()
         self.lagr_mult_prefix = lagr_mult_prefix
         self.mass_transfer_rate = mass_transfer_rate
         self.use_highest_space=use_highest_space
+        self.normal_velocity_jump=normal_velocity_jump
 
     def get_required_fields(self) -> List[str]:
         flow_eqs=self.get_parent_equations(StokesEquations)
@@ -721,6 +720,17 @@ class ConnectVelocityAtInterface(InterfaceEquations):
             space=get_interface_field_connection_space(inside_space,outside_space,self.use_highest_space)
             assert space!=""
             self.define_scalar_field(self.lagr_mult_prefix + f, space)
+            
+        # However, we must remove the m=1 connection for the radial component
+        aziinfo=self.get_azimuthal_r0_info()
+        csys=self.get_coordinate_system()
+        for f in fields:
+            for i in [0,1,2]:
+                if f in aziinfo[i]:
+                    aziinfo[i].add(self.lagr_mult_prefix + f)
+                else:
+                    if self.lagr_mult_prefix + f in aziinfo[i]:
+                        aziinfo[i].remove(self.lagr_mult_prefix + f)
 
     def define_scaling(self):
         fields=self.get_required_fields()
@@ -757,7 +767,7 @@ class ConnectVelocityAtInterface(InterfaceEquations):
             l, l_test = var_and_test(self.lagr_mult_prefix + f)
             inside, inside_test = var_and_test(f)
             outside, outside_test = var_and_test(f, domain=self.get_opposite_side_of_interface())
-            self.add_residual(weak(inside - outside - masstrans * n[i],  l_test ))
+            self.add_residual(weak(inside - outside - masstrans * n[i]+self.normal_velocity_jump*n[i],  l_test ))
             self.add_residual(weak(l, inside_test) )
             self.add_residual(-weak(l , outside_test))
 
@@ -999,7 +1009,7 @@ class NavierStokesAzimuthalComponent(Equations):
 
             # Inertia terms
             # residuals[local_eqn] -= scaled_re_st*r*dudt[2]*testf[l]*W;
-            self.add_residual(-sign * weak(time_scheme(momentum_scheme,rho_dt * partial_t(ut, ALE="auto")), uttest))
+            self.add_residual(-sign * weak(time_scheme(momentum_scheme,rho_dt * partial_t(ut)), uttest))
             # residuals[local_eqn] -= scaled_re*(r*interpolated_u[0]*interpolated_dudx(2,0)+ interpolated_u[0]*interpolated_u[2]+ r*interpolated_u[1]*interpolated_dudx(2,1))*testf[l]*W;
             self.add_residual(-sign * weak(time_scheme(momentum_scheme,rho_adv * (ur * dutdr + ur * ut / r + uz * dutdz*(0 if polar else 1))), uttest))
 

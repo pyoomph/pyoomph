@@ -39,13 +39,13 @@ The implementation of the kinematic boundary condition could read as follows
    		l,eta=var_and_test("_kin_bc") # Lagrange multiplier
    		x,chi=var_and_test("mesh") # unknown mesh coordinates
    		# Let the normal mesh velocity follow the normal fluid velocity
-   		self.add_residual(weak(dot(n,u-partial_t(x)),eta)-weak(l,dot(n,chi)))
+   		self.add_residual(weak(dot(n,u-mesh_velocity()),eta)-weak(l,dot(n,chi)))
 
    	def before_assigning_equations_postorder(self, mesh):
    		# pin the Lagrange multiplier, when the mesh is locally entirely pinned
    		self.pin_redundant_lagrange_multipliers(mesh, "_kin_bc", "mesh") 
 
-Note that we use :py:func:`~pyoomph.expressions.generic.partial_t` without the ``ALE`` argument, i.e. defaulting to ``ALE=False``, to calculate the mesh velocity. This is reasonable, since we want the mesh velocity co-moving with the interface, i.e. directly at the nodes.
+Note that we use :py:func:`~pyoomph.expressions.generic.mesh_velocity` instead of :py:func:`~pyoomph.expressions.generic.partial_t` to calculate the mesh velocity. In fact, :py:func:`~pyoomph.expressions.generic.mesh_velocity` is just ``partial_t(var("mesh"),ALE=False)``. This is reasonable, since we want the mesh velocity co-moving with the interface, i.e. directly at the nodes.
 
 Again, we use :py:meth:`~pyoomph.generic.codegen.InterfaceEquations.pin_redundant_lagrange_multipliers` in the :py:meth:`~pyoomph.generic.codegen.BaseEquations.before_assigning_equations_postorder` method to automatically pin the local Lagrange multiplier, if the mesh position is entirely pinned at any node. If the mesh cannot move, the Lagrange multiplier would otherwise over-constrain the problem.
 
