@@ -174,7 +174,7 @@ class ScipyEigenSolver(GenericEigenSolver):
 			evects=numpy.transpose(evects) #type:ignore
 			evals=cast(NPComplexArray,evals)
 			evects=cast(NPComplexArray,evects)
-			return evals,evects
+			return evals,evects,J,M
 		else:
 			OPInv=self.get_OPInv(M,J,shift)
 			evals,evects=scipy.sparse.linalg.eigs(J,M=M,sigma=shift,return_eigenvectors=True,k=neval,OPinv=OPInv,which=which,OPpart=OPpart,v0=v0,ncv=self.ncv,tol=self.tol) #type:ignore
