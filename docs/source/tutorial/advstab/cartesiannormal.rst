@@ -11,4 +11,5 @@ Main differences are that :math:`k` is real-valued (opposed to the integer-value
    :hidden:
    
    cartesiannormal/turingdispersion.rst
+   cartesiannormal/rivulet.rst   
 

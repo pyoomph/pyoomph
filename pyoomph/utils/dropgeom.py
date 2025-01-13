@@ -147,9 +147,15 @@ class DropletGeometry:
         elif v0 is not None:            
             if ca is not None:
                 if self.rivulet_instead:
-                    raise RuntimeError("Not yet implemented. Calculate the base radius and height of a rivulet from the contact angle and volume[area]")
-                h0 = square_root(v0 * 3.0 / pi / (3.0 / (1.0 - cos(ca)) - 1.0),3)
-                r0 = square_root((v0 * 6.0 / pi / h0 - h0 * h0) / 3.0)
+                    h_by_c=(1-(cos(ca)))/(2*sin(ca))
+                    theta=2*ca
+                    a=v0                    
+                    c=8*square_root(2)*square_root(a)*h_by_c*square_root(1/(16*h_by_c**4*theta + 32*h_by_c**3 + 8*h_by_c**2*theta - 8*h_by_c + theta))
+                    r0=c/2
+                    h0=h_by_c*c                                        
+                else:
+                    h0 = square_root(v0 * 3.0 / pi / (3.0 / (1.0 - cos(ca)) - 1.0),3)
+                    r0 = square_root((v0 * 6.0 / pi / h0 - h0 * h0) / 3.0)
             elif rc is not None:
                 raise RuntimeError("Not yet implemented. Calculations based on volume and curvature radius")
         elif ca is not None:

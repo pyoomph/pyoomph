@@ -509,6 +509,16 @@ class MeshDataCacheCombinedOperator(MeshDataCacheOperatorBase):
         return False
 
 class MeshDataCombineWithEigenfunction(MeshDataCacheOperatorBase):
+    """
+    Can be added as ``operator`` to :py:class:`~pyoomph.output.meshio.MeshFileOutput` to combine the solution with the eigenfunction data. Both will be written to the same file and can be postprocessed in e.g. Paraview.
+
+    Args:
+        eigenindex: Index of the eigenfunction to combine with the solution. Can be a single index or a list of indices.
+        eigen_prefix_real: Prefix for the real part of the eigenfunction data.
+        eigen_prefix_imag: Prefix for the imaginary part of the eigenfunction data.
+        eigen_prefix_merged: Prefix for the merged eigenfunction data.
+        add_eigen_to_mesh_positions: If True, the eigenfunction data will be added to the mesh positions. 
+    """
     def __init__(self,eigenindex:Union[int,Sequence[int]],eigen_prefix_real:str="EigenRe_",eigen_prefix_imag:str="EigenIm_",eigen_prefix_merged:str="Eigen_",add_eigen_to_mesh_positions=False):
         super(MeshDataCombineWithEigenfunction, self).__init__()
         
@@ -623,6 +633,17 @@ class MeshDataCombineWithEigenfunction(MeshDataCacheOperatorBase):
 
 
 class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
+    """
+    Can be added as ``operator`` to :py:class:`~pyoomph.output.meshio.MeshFileOutput` to extrude the mesh in the z-direction. Most useful combined with :py:class:`MeshDataCombineWithEigenfunction` and Cartesian normal mode stability analysis.
+    
+    Args:
+        n_segments: Number of segments in the z-direction.
+        default_length: Default length of the extrusion (when no wave number is available).
+        phase: Phase of the extrusion to start with.
+        apply_k_mode_expansion: If True, the extrusion will consider the exp(i*k*z) factor of the eigenfunction.
+        use_k_for_length: If True, the length of the extrusion will be determined by the wave number (if available, otherwise default_length).
+        numperiods: Number of periods to extrude (in terms of either default_length or 2*pi/k).
+    """
     def __init__(self,n_segments:int=32,default_length=1,phase:float=0.0,apply_k_mode_expansion:bool=True,use_k_for_length:bool=True,numperiods:float=1):
         super(MeshDataCartesianExtrusion, self).__init__()
         self.n_segments=n_segments
@@ -1054,6 +1075,15 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
         
 
 class MeshDataRotationalExtrusion(MeshDataCacheOperatorBase):
+    """
+    Can be added as ``operator`` to :py:class:`~pyoomph.output.meshio.MeshFileOutput` to extrude the mesh along the azimuthal phi-coordinate. Most useful combined with :py:class:`MeshDataCombineWithEigenfunction` and azimuthal normal mode stability analysis.
+
+    Args:
+        n_segments: Number of segments to extrude the mesh to.
+        angle: Angle to extrude the mesh to. If larger than 2*pi, it will be cut off at 2*pi.
+        start_angle: Angle to start the extrusion at.
+        rotate_eigendata_with_mode_m: If True, the eigendata will be rotated with the azimuthal mode number m. This is useful for azimuthal normal mode stability analysis.
+    """
     def __init__(self,n_segments:int=32,angle:float=2*numpy.pi,start_angle:float=0.0,rotate_eigendata_with_mode_m:bool=True):
         super(MeshDataRotationalExtrusion, self).__init__()
         self.n_segments=n_segments
