@@ -3,7 +3,7 @@ Pyoomph Tutorial
 ================
 
 :Author: Christian Diddens & Duarte Rocha
-:Date: 2024-04-20
+:Date: 2025-01-13
 
 
 .. toctree::

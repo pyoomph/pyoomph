@@ -472,6 +472,8 @@ class VolumeEnforcingBoundary(Equations):
 
 class EnforceVolumeByPressure(IntegralConstraint):
     def __init__(self,volume:ExpressionOrNum,*,ode_storage_domain: Optional[str] = None, only_for_stationary_solve: bool = False, set_zero_on_normal_mode_eigensolve: bool = True, scaling_factor:Union[str,ExpressionNumOrNone]=None):
+        if scaling_factor is None:
+            scaling_factor=1
         super().__init__(dimensional_dx=True,ode_storage_domain=ode_storage_domain, only_for_stationary_solve = only_for_stationary_solve, set_zero_on_normal_mode_eigensolve= set_zero_on_normal_mode_eigensolve, scaling_factor=scaling_factor,pressure=volume)        
         
     def get_constraint(self,field:str,u:Expression):

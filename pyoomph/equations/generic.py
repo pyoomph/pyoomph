@@ -168,7 +168,7 @@ class SpatialErrorEstimator(Equations):
     for_which controls whether these error estimators are used for the base solution, potential eigenfunctions or both.
     """
 
-    def __init__(self,for_which:Literal["both","base","eigen"]="both",*fluxes:Union[str,Expression],**kwargs:ExpressionOrNum):
+    def __init__(self,*fluxes:Union[str,Expression],for_which:Literal["both","base","eigen"]="both",**kwargs:ExpressionOrNum):
         super(SpatialErrorEstimator, self).__init__()
         self.fluxes:Dict[Union[str,Expression],ExpressionOrNum]={x:1.0 for x in fluxes}
         for lhs,rhs in kwargs.items():
