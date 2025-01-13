@@ -80,7 +80,7 @@ before-build = [
 "export PYOOMPH_CONFIG_FILE={project}/citools/pyoomph_config_linuxwheel.env",
 "echo SOURCING $PYOOMPH_CONFIG_FILE",
 "source $PYOOMPH_CONFIG_FILE",
-"python -m pip install pybind11",
+"python -m pip install pybind11 setuptools",
 "rm -rf build/"
 ]
 
