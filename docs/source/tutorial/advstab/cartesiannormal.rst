@@ -1,3 +1,5 @@
+.. _cartesiannormalstabana:
+
 Cartesian normal mode stability analysis
 ----------------------------------------
 

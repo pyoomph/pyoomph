@@ -10,3 +10,4 @@ Depending on your operation system (Windows, Mac and Linux are supported), you h
    installation/pypa.rst
    installation/compile.rst
    installation/additional.rst   
+   installation/petscslepc.rst      

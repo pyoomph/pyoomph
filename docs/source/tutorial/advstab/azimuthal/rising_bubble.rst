@@ -105,15 +105,7 @@ Optionally, we can process all calculated eigenvectors. Here, we make sure that 
         return self.rotate_eigenvectors(eigenvectors,"domain/interface/mesh_x",normalize_amplitude=0.2,normalize_dofs=True)
 
 
-The driver code now mainly sets up the problem. In particular, we have to activate again the azimuthal stability analysis. We need a robust complex eigensolver. For that, you have to install a complex variant of the package SLEPc. On Linux, you can do so via e.g.
-
-.. code:: bash
-
-	sudo apt install cmake flex bison
-	git clone -b release https://gitlab.com/petsc/petsc.git petsc
-	cd petsc
-	./configure --with-mpi  --with-petsc4py --download-mumps=yes --download-hypre=yes --download-parmetis=yes --download-ptscotch=yes --download-slepc=yes --download-superlu=yes --download-superlu_dist=yes --download-suitesparse=yes --download-metis=yes --download-scalapack --with-scalar-type=complex
-	# And then follow the given make command. You also might have to add the line at the end of  the make process to your .bashrc
+The driver code now mainly sets up the problem. In particular, we have to activate again the azimuthal stability analysis. We need a robust complex eigensolver. For that, you have to install a complex variant of the package SLEPc (see :numref:`petscslepc`).
 
 
 We then start at some Bond number, relax to the initial state by some transient steps followed by a stationary solve. Then, we create an output file to write the eigenvalues and scan over the Bond number. We solve the eigenproblem using first an initial guess for the eigenvalue (using the ``shift`` and ``target`` kwargs of :py:meth:`~pyoomph.generic.problem.Problem.solve_eigenproblem`). After the first step, we just use the previously calculated eigenvalue as guess for the next Bond number. We can adapt the mesh based on the eigenfunction using :py:meth:`~pyoomph.generic.problem.Problem.refine_eigenfunction`. It will use the :py:class:`~pyoomph.equations.generic.SpatialErrorEstimator` added to the problem to refine with respect to jumps in velocity gradients across the elements. Thereby, strong changes in the eigenfunction are better captured:
