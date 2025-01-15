@@ -11,3 +11,4 @@ Depending on your operation system (Windows, Mac and Linux are supported), you h
    installation/compile.rst
    installation/additional.rst   
    installation/petscslepc.rst      
+   installation/problems.rst

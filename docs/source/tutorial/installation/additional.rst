@@ -15,15 +15,4 @@ Paraview to visualize the output
 
 While pyoomph can be used without any visualization tools, e.g. by plotting the resulting data by hand or using the plotting framework of pyoomph, it is beneficial to install a viewer for VTU/PVD files, which are the default output files. The typical free software to visualize these files is Paraview, which can be downloaded for free at `www.paraview.org <www.paraview.org>`__. You can open all .vtu and .pvd files you find in the output folder of a pyoomph simulation.
 
-Typical problems with the installation
---------------------------------------
 
-I the following, there are some typical errors listed, which may occur after installing and trying pyoomph:
-
-.. container:: tcolorbox
-	
-	**distutils.errors.DistutilsPlatformError: Unable to find vcvarsall.bat**
-			
-	This happens on Windows if you have not installed MS Build Tools (cf. :numref:`secinstallationmsbuild`). Either install it or set the compiler to TinyC, which can be done by calling the method ``set_c_compiler("tcc")`` of your problem instance or by passing the command line argument *--tcc*.
-   
-   
