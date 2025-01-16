@@ -3,6 +3,8 @@ Keyword variables
 
 The following keyword variables are defined and should not be used for any other field, i.e. not defined in an :py:class:`~pyoomph.generic.codegen.Equations` class via e.g. :py:meth:`~pyoomph.generic.codegen.Equations.define_scalar_field`. You can use these keyword variables as usually with :py:func:`~pyoomph.expressions.generic.var` or :py:func:`~pyoomph.expressions.generic.nondim` for the dimensional or nondimensionalized quantity, respectively.
 
+Note that the time-derivative of the ``mesh`` variable only gives the mesh velocity if you use it with ``ALE=False``, i.e. ``partial_t(var("mesh"),ALE=False)``. Therefore, better use :py:func:`~pyoomph.expressions.generic.mesh_velocity` instead and e.g. ``mesh_velocity()[0]`` for the velocity in x-direction.
+
 .. table:: Defined keyword variables to be used with either :py:func:`~pyoomph.expressions.generic.var` or :py:func:`~pyoomph.expressions.generic.nondim`.
 
    +-----------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------+

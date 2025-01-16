@@ -16,7 +16,7 @@ We can easily find all the answers by expressing the shape of base solution only
 	    def define_geometry(self):
 		self.default_resolution=0.1
 		self.mesh_mode="tris"
-		cl_factor=0.1 # Make it finer at the contact line
+		cl_factor=0.5 # Make it finer at the contact line
 		pr=cast(RivuletProblem,self.get_problem())
 		geom=DropletGeometry(volume=pi/2,rivulet_instead=True,contact_angle=pr.theta)
 		p00=self.point(0,0)
@@ -32,7 +32,8 @@ We can easily find all the answers by expressing the shape of base solution only
 
 Note how we use :py:class:`~pyoomph.utils.dropgeom.DropletGeometry` with the kwarg ``rivulet_instead=True`` to convert the volume and the contact angle (which we obtain from the problem defined later on) to the base radius and apex height. Using ``rivulet_instead=True`` actually converts the value shipped by ``volume`` as surface area of the circle segment. In particular, using the volume of :math:`\pi/2`, it gives a radius of curvature of unity for a contact angle :math:`\theta=90^\circ`.
 
-For the problem class, we just define the two parameters (slip length and contact angle) and add all equations to the system:
+For the problem class, we just define the two parameters (slip length and contact angle) and add all equations to the system.
+Since we will have an effectively three-dimensional dimensional problem, it is important again to pass the ``wall_tangent`` to the :py:class:`~pyoomph.equations.navier_stokes.NavierStokesContactAngle`. This is a vector pointing inward to the bulk domain tangentially along the substrate, i.e. orthogonal to the ``wall_normal`` which is just the axially upward pointing normal. In a pure axisymmetric or 2d Cartesian case ``wall_tangent=vector(-1,0)`` is fine, but it is not true once the free surface deforms in a third direction (cf. :numref:`threedimdroplet`). If again :math:`\vec{n}` is the normal of the free surface and :math:`\vec{n}_\mathrm{w}` is the wall normal, we can use the double cross product :math:`\vec{n}_\mathrm{w}\times(\vec{n}_\mathrm{w}\times \vec{n})` to obtain such a (non-normalized) vector. We can use the known bac-cab identity along with :math:`\|\vec{n}_\mathrm{w}\|=1` to calculate it via :math:`\vec{n}_\mathrm{w}(\vec{n}_\mathrm{w}\cdot\vec{n})-\vec{n}` and subsequently normalize the result, which is valid for all contact angles :math:`0<\theta<180^\circ`. 
 
 .. code:: python
 
@@ -40,7 +41,7 @@ For the problem class, we just define the two parameters (slip length and contac
 	    def __init__(self):
 		super().__init__()
 		# Contact angle and slip length
-		self.theta,self.sliplength=self.define_global_parameter(theta=60*degree,sliplength=1) 
+		self.theta,self.sliplength=self.define_global_parameter(theta=90*degree,sliplength=1) 
 		
 	    def define_problem(self):        
 		self+=RivuletMesh() # Add a 2d mesh       
@@ -54,7 +55,11 @@ For the problem class, we just define the two parameters (slip length and contac
 		# Free surface at the interface
 		eqs+=NavierStokesFreeSurface(surface_tension=1)@"interface"        
 		# Impose a contact angle at the contact line
-		eqs+=NavierStokesContactAngle(contact_angle=self.theta)@"interface/substrate"  
+		wall_normal=vector(0,1,0) # The substrate has an upwards normal (to be read as 0*e_r+1*e_z+0*e_phi)
+		ninter=var("normal",domain="..") # The normal at the free surface (one domain up when evaluated at the contact line)
+		wall_tangent=wall_normal*dot(wall_normal,ninter)-ninter # double cross product bac-cab rule (with dot(wall_normal,wall_normal)=1)
+		wall_tangent=wall_tangent/square_root(dot(wall_tangent,wall_tangent)) # Normalize it                
+		eqs+=NavierStokesContactAngle(contact_angle=self.theta,wall_normal=wall_normal,wall_tangent=wall_tangent)@"interface/substrate" 
 		# Symmetry at the axis
 		eqs+=DirichletBC(mesh_x=0,velocity_x=0)@"axis" 
 		# Enforce the volume/area of the liquid by a pressure constraint
@@ -95,7 +100,8 @@ This only sets up the two-dimensional problem. The eigenanalysis with the additi
 
 Again, it just takes the call of :py:meth:`~pyoomph.generic.problem.Problem.setup_for_stability_analysis` with ``additional_cartesian_mode=True`` to activate this feature and shipping ``normal_mode_k=k`` to the call of :py:meth:`~pyoomph.generic.problem.Problem.solve_eigenproblem`.
 
-The eigenvalues are plotted in :numref:`figrivuletbranches`. It is apparent that, indepedently of the slip length, the critical wavenumber is at :math:`k=1` for :math:`\theta=90^\circ`, which is reasonable, since the problem can be essentially mirrored at both axis to get the conventional Rayleigh-Plateu instability (at least for high slip lengths). A smaller slip influences the magnitude of the eigenvalues, which is reasonable, since it damps the motion of the contact line. For other contact angles, it is different: Due to the fixed cross-sectional area of the rivulet, a change in contact angle influences the radius of curvature, therefore the critical wave number shifts. But the way it shifts now also depends on the slip length. In particular, the eigenfunctions show intense tangential flow at the contact line (:numref:`figrivuletplots`), which is strongly influenced by the slip length and hampered even more, the flatter the droplet is. 
+The eigenvalues are plotted in :numref:`figrivuletbranches`. It is apparent that, indepedently of the slip length, the critical wavenumber is at :math:`k=1` for :math:`\theta=90^\circ`, which is reasonable, since the problem can be essentially mirrored at both axis to get the conventional Rayleigh-Plateu instability (at least for high slip lengths). A smaller slip influences the magnitude of the eigenvalues, which is reasonable, since it damps the motion of the contact line. For other contact angles, it is essentially the same, but the cricial wave number shifts. Due to the fixed cross-sectional area of the rivulet, a change in contact angle influences the radius of curvature, therefore the critical wave number shifts. 
+Some plots of the eigendynamics are shown in :numref:`figrivuletplots`, from which the influence of the slip length is clearly apparent.
 
 ..  figure:: rivuletbranches.*
 	:name: figrivuletbranches

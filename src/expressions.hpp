@@ -345,7 +345,7 @@ namespace pyoomph
     DECLARE_FUNCTION_1P(signum)
     DECLARE_FUNCTION_2P(minimum)
     DECLARE_FUNCTION_2P(maximum)
-    DECLARE_FUNCTION_3P(piecewise)
+    DECLARE_FUNCTION_3P(piecewise_geq0)
 
     DECLARE_FUNCTION_1P(ginac_expand)
     DECLARE_FUNCTION_1P(ginac_normal)

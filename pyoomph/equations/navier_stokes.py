@@ -1025,9 +1025,8 @@ class NavierStokesContactAngle(InterfaceEquations):
 
         Args:    
             contact_angle (ExpressionOrNum): Contact angle of the droplet. Defaults to 90 * degree.
-            wall_normal (Expression): Normal vector of the wall. Defaults to vector([0, 1]).
-            wall_tangent (Expression): Tangential vector of the wall. Defaults to vector([-1, 0]).
-            with_respect_to_tangent (bool): If True, the contact angle is defined with respect to the tangent vector. Defaults to True.
+            wall_normal (Expression): Normal vector of the wall (should be normalized). Defaults to vector([0, 1]).
+            wall_tangent: Tangential vector of the wall (should be normalized). If None, it is calculated using the bac-cab rule to point inward to the bulk domain, along the substrate (i.e. orthogonal to the wall normal).            with_respect_to_tangent (bool): If True, the contact angle is defined with respect to the tangent vector. Defaults to vector([-1, 0]).
     """
     
     required_parent_type = NavierStokesFreeSurface
@@ -1037,6 +1036,9 @@ class NavierStokesContactAngle(InterfaceEquations):
         super(NavierStokesContactAngle, self).__init__()
         self.wall_normal = wall_normal
         self.wall_tangent = wall_tangent
+        if self.wall_tangent is None:
+            # bac-cab rule assuming the wall_normal is normalized. Pointing inward to the bulk domain, along the substrate (i.e. orthogonal to the wall normal)
+            self.wall_tangent=self.wall_normal*dot(self.wall_normal,var("normal",domain=".."))-var("normal",domain="..")
         self.contact_angle = contact_angle
         self.with_respect_to_tangent = with_respect_to_tangent
 
