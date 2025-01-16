@@ -397,8 +397,10 @@ def piecewise_geq0(cond:ExpressionOrNum,iftrue:ExpressionOrNum,iffalse:Expressio
 	"""
 	cond=cond if isinstance(cond,_pyoomph.Expression) else _pyoomph.Expression(cond)
 	iftrue=iftrue if isinstance(iftrue,_pyoomph.Expression) else _pyoomph.Expression(iftrue)
-	iffalse=iffalse if isinstance(iffalse,_pyoomph.Expression) else _pyoomph.Expression(iffalse)
-	return heaviside(cond)*(iftrue-iffalse)+iffalse
+	iffalse=iffalse if isinstance(iffalse,_pyoomph.Expression) else _pyoomph.Expression(iffalse)	
+	#print("cond",cond,iftrue,iffalse)
+	return _pyoomph.GiNaC_piecewise_geq0(cond,iftrue,iffalse)
+	#return heaviside(cond)*(iftrue-iffalse)+iffalse
 
 def trace(M:Expression)->Expression:
 	"""

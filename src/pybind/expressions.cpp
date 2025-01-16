@@ -667,6 +667,10 @@ void PyReg_Expressions(py::module &m)
 		{ return 0 + pyoomph::expressions::heaviside(arg); },
 		"Calculates the step function"); // TODO Derivatives of step
 	m.def(
+		"GiNaC_piecewise_geq0", [](const GiNaC::ex &cond, const GiNaC::ex &a,const GiNaC::ex &b)
+		{ return 0 + pyoomph::expressions::piecewise_geq0(cond, a,b); },		
+		"Returns a if cond>=0, else b"); // TODO Derivatives of step		
+	m.def(
 		"GiNaC_minimum", [](const GiNaC::ex &a, const GiNaC::ex &b)
 		{ return 0 + pyoomph::expressions::minimum(a, b); },
 		"Calculates the minimum"); // TODO Derivatives of step

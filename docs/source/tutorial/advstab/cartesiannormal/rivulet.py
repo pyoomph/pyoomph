@@ -7,7 +7,7 @@ class RivuletMesh(GmshTemplate):
     def define_geometry(self):
         self.default_resolution=0.1
         self.mesh_mode="tris"
-        cl_factor=0.1 # Make it finer at the contact line
+        cl_factor=0.5 # Make it finer at the contact line
         pr=cast(RivuletProblem,self.get_problem())
         geom=DropletGeometry(volume=pi/2,rivulet_instead=True,contact_angle=pr.theta)
         p00=self.point(0,0)
@@ -26,7 +26,7 @@ class RivuletProblem(Problem):
     def __init__(self):
         super().__init__()
         # Contact angle and slip length
-        self.theta,self.sliplength=self.define_global_parameter(theta=60*degree,sliplength=1) 
+        self.theta,self.sliplength=self.define_global_parameter(theta=90*degree,sliplength=1) 
         
     def define_problem(self):        
         self+=RivuletMesh() # Add a 2d mesh       
@@ -39,8 +39,13 @@ class RivuletProblem(Problem):
         eqs+=( NavierStokesSlipLength(sliplength=self.sliplength) + DirichletBC(velocity_y=0,mesh_y=0) )@"substrate"        
         # Free surface at the interface
         eqs+=NavierStokesFreeSurface(surface_tension=1)@"interface"        
+        
         # Impose a contact angle at the contact line
-        eqs+=NavierStokesContactAngle(contact_angle=self.theta)@"interface/substrate"  
+        wall_normal=vector(0,1,0) # The substrate has an upwards normal (to be read as 0*e_r+1*e_z+0*e_phi)
+        ninter=var("normal",domain="..") # The normal at the free surface (one domain up when evaluated at the contact line)
+        wall_tangent=wall_normal*dot(wall_normal,ninter)-ninter # double cross product bac-cab rule (with dot(wall_normal,wall_normal)=1)
+        wall_tangent=wall_tangent/square_root(dot(wall_tangent,wall_tangent)) # Normalize it                
+        eqs+=NavierStokesContactAngle(contact_angle=self.theta,wall_normal=wall_normal,wall_tangent=wall_tangent)@"interface/substrate"  
         # Symmetry at the axis
         eqs+=DirichletBC(mesh_x=0,velocity_x=0)@"axis" 
         # Enforce the volume/area of the liquid by a pressure constraint
@@ -62,9 +67,9 @@ problem.save_state("start.dump") # Save the start case at 90°
 
 
 # Scan the contact angle
-for theta_deg in [60,90,120]:
+for theta_deg in [60,90,120]: 
     problem.load_state("start.dump",ignore_outstep=True)
-    problem.go_to_param(theta=theta_deg*degree)        
+    problem.go_to_param(theta=theta_deg*degree,reset_pars=False)        
     # Scan the slip length (either essentially free slip or quite low slip length)
     for sl in [10000,0.01]:        
         problem.go_to_param(sliplength=sl)    

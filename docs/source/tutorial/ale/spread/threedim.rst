@@ -1,3 +1,5 @@
+.. _threedimdroplet:
+
 Full three dimensional implementation with wetting gradients on the substrate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

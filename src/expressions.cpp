@@ -2668,9 +2668,9 @@ namespace pyoomph
 									   .evalf_func(maximum_evalf)
 									   .set_return_type(GiNaC::return_types::commutative))
 
-		static ex piecewise_eval(const ex &cond, const ex &a, const ex &b)
+		static ex piecewise_geq0_eval(const ex &cond, const ex &a, const ex &b)
 		{
-			throw_runtime_error("PIECEWISE does not work right now: Reason: condition -> relational is problematic. It will require to overload all the ==, >=, ... operators in python");
+			/*throw_runtime_error("PIECEWISE does not work right now: Reason: condition -> relational is problematic. It will require to overload all the ==, >=, ... operators in python");
 			if (!GiNaC::is_a<GiNaC::relational>(cond))
 			{
 				throw_runtime_error("piecewise(condition, true_result, false_result) requires the condition to be a relational");
@@ -2678,6 +2678,7 @@ namespace pyoomph
 			GiNaC::relational rel = GiNaC::ex_to<GiNaC::relational>(cond);
 			GiNaC::ex diff = rel.lhs() - rel.rhs();
 			GiNaC::ex_to<GiNaC::numeric>(diff);
+			*/			
 			/*
 			GiNaC::numeric B=GiNaC::ex_to<GiNaC::numeric>(rel.op(1));
 
@@ -2694,30 +2695,45 @@ namespace pyoomph
 				   case info_flags::relation_greater_or_equal:
 					   return o==greater_or_equal;
 			*/
+			if (GiNaC::is_a<GiNaC::numeric>(cond))
+			{
+				//std::cout << "NUMERIC  " << cond << "  " << GiNaC::ex_to<GiNaC::numeric>(cond).is_positive() << std::endl;
+				if (!GiNaC::ex_to<GiNaC::numeric>(cond).is_positive())
+					return b;
+				else
+					return a;
+			}
+			else if (GiNaC::is_a<GiNaC::constant>(cond))
+			{
+				if (!GiNaC::ex_to<GiNaC::numeric>(GiNaC::ex_to<GiNaC::constant>(cond).evalf()).is_positive())
+					return b;
+				else
+					return a;
+			}
 			// TODO: SIMPLIFICATION HERE IF POSSIBLE
-			return piecewise(cond, a, b).hold();
+			return piecewise_geq0(cond, a, b).hold();
 		}
 
-		static void piecewise_csrc_float(const ex &cond, const ex &a, const ex &b, const print_context &c)
+		static void piecewise_geq0_csrc_float(const ex &cond, const ex &a, const ex &b, const print_context &c)
 		{
 			c.s << "(";
 			cond.print(c);
-			c.s << " ? ";
+			c.s << " >=0 ? ";
 			a.print(c);
 			c.s << " : ";
 			b.print(c);
 			c.s << ")";
 		}
 
-		static ex piecewise_expl_derivative(const ex &cond, const ex &a, const ex &b, const symbol &deriv_arg)
+		static ex piecewise_geq0_expl_derivative(const ex &cond, const ex &a, const ex &b, const symbol &deriv_arg)
 		{
-			return piecewise(cond, a.diff(deriv_arg), b.diff(deriv_arg));
+			return piecewise_geq0(cond, a.diff(deriv_arg), b.diff(deriv_arg));
 		}
 
-		REGISTER_FUNCTION(piecewise, eval_func(piecewise_eval)
-										 .print_func<print_csrc_float>(piecewise_csrc_float)
-										 .print_func<print_csrc_double>(piecewise_csrc_float)
-										 .expl_derivative_func(piecewise_expl_derivative)
+		REGISTER_FUNCTION(piecewise_geq0, eval_func(piecewise_geq0_eval)
+										 .print_func<print_csrc_float>(piecewise_geq0_csrc_float)
+										 .print_func<print_csrc_double>(piecewise_geq0_csrc_float)
+										 .expl_derivative_func(piecewise_geq0_expl_derivative)
 										 .set_return_type(GiNaC::return_types::commutative))
 
 		////////////////
