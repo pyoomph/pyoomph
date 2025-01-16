@@ -2772,6 +2772,8 @@ class Problem(_pyoomph.Problem):
         return location,typ
 
     def debug_largest_residual(self, nres:int=4):
+        if not self.is_initialised():
+            self.initialise()
         descr, names = self.get_dof_description()
         #print(names)
         #print(descr)
