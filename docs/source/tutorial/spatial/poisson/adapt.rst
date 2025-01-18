@@ -1,3 +1,5 @@
+.. _secspatialadapt:
+
 Spatial adaptivity
 ~~~~~~~~~~~~~~~~~~
 

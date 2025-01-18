@@ -1,3 +1,5 @@
+.. _secspatialfishmesheye:
+
 Splines, adding holes and locally controlling the mesh resolution
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

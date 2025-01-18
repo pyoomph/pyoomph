@@ -692,7 +692,7 @@ class DynamicContactLineEquations(InterfaceEquations):
         if self.wall_tangent is None:
             # bac-cab rule assuming the wall_normal is normalized. Pointing inward to the bulk domain, along the substrate (i.e. orthogonal to the wall normal)
             self.wall_tangent=self.wall_normal*dot(self.wall_normal,var("normal",domain=".."))-var("normal",domain="..")
-            self.wall_tangent=subexpression(self.wall_tangent/sqrt(dot(self.wall_tangent,self.wall_tangent)))
+            self.wall_tangent=subexpression(self.wall_tangent/square_root(dot(self.wall_tangent,self.wall_tangent)))
         self.unpinned_indicator_name=unpinned_indicator_name
         self.override_dynamics_name:str = override_dynamics_name
         self.velocity_enforcing_name=velocity_enforcing_name

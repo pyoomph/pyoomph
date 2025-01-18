@@ -1029,7 +1029,7 @@ class NavierStokesContactAngle(InterfaceEquations):
             wall_tangent: Tangential vector of the wall (should be normalized). If None, it is calculated using the bac-cab rule to point inward to the bulk domain, along the substrate (i.e. orthogonal to the wall normal).            with_respect_to_tangent (bool): If True, the contact angle is defined with respect to the tangent vector. Defaults to None.
     """
     
-    required_parent_type = NavierStokesFreeSurface
+    #required_parent_type = NavierStokesFreeSurface
 
     def __init__(self, contact_angle:ExpressionOrNum=90 * degree, *, wall_normal:Expression=vector([0, 1]), wall_tangent:Expression=None,
                  with_respect_to_tangent:bool=True):
@@ -1051,11 +1051,34 @@ class NavierStokesContactAngle(InterfaceEquations):
         else:
             m = cos(self.contact_angle) * self.wall_normal + sin(self.contact_angle) * self.wall_tangent
         _, utest = var_and_test("velocity")
-        nseq = self.get_parent_equations()
-        assert isinstance(nseq,NavierStokesFreeSurface)
-        sigma = 0+nseq.surface_tension
-        self.add_local_function("mx",m[0])
-        self.add_local_function("my",m[1])
+        nseq = self.get_parent_equations(of_type=NavierStokesFreeSurface)
+        if isinstance(nseq,list):
+            if len(nseq)==0:
+                nseq=None
+            elif len(nseq)>1:
+                raise RuntimeError("Multiple NavierStokesFreeSurface equations found")
+            else:
+                nseq=nseq[0]                
+        if nseq is None:
+            from ..equations.multi_component import MultiComponentNavierStokesInterface
+            nseq=self.get_parent_equations(of_type=MultiComponentNavierStokesInterface)
+            if isinstance(nseq,list):
+                if len(nseq)==0:
+                    nseq=None
+                elif len(nseq)>1:
+                    raise RuntimeError("Multiple NavierStokesFreeSurface equations found")
+                else:
+                    nseq=nseq[0]
+        if nseq is None:
+            raise RuntimeError("Must be applied on NavierStokesFreeSurface or a MultiComponentNavierStokesInterface")
+        if isinstance(nseq,NavierStokesFreeSurface):
+            sigma = 0+nseq.surface_tension
+        else:
+            # TODO: Use surface tension projection if present
+            sigma = 0+nseq.interface_props.surface_tension
+        
+        #self.add_local_function("mx",m[0])
+        #self.add_local_function("my",m[1])
         self.add_residual( weak(sigma , dot(m, utest)))
 
 class StokesFlowRadialFarField(InterfaceEquations):

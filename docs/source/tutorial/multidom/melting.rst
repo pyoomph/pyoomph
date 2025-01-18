@@ -1,3 +1,5 @@
+.. _secmultidomicecyl:
+
 Melting of an ice cylinder with natural convection
 --------------------------------------------------
 

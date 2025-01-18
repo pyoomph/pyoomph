@@ -536,6 +536,27 @@ class MixtureGasAirEthanolWater(MixtureGasProperties):
         self.set_by_weighted_average("thermal_conductivity")
 
 
+
+@MaterialProperties.register()
+class MixtureGasAirEthanol(MixtureGasProperties):
+    components = {"ethanol", "air"}
+    passive_field = "air"
+
+    def __init__(self, pure_properties: Dict[str, MaterialProperties]):
+        super().__init__(pure_properties)        
+
+        # TODO: Improve: This is the one for air only
+        self.dynamic_viscosity = self.pure_properties["air"].dynamic_viscosity
+
+        # https://dx.doi.org/10.1021/ie50539a046
+        self.set_diffusion_coefficient(
+            "ethanol", 0.135e-04 * meter**2 / second
+        )  ###TODO Temperature dep of this
+
+        self.set_mass_density_from_ideal_gas_law()
+        self.set_by_weighted_average("specific_heat_capacity")
+        self.set_by_weighted_average("thermal_conductivity")
+
 ############## SOLIDS ###################
 
 

@@ -1,3 +1,5 @@
+.. _secdgweakdbc:
+
 Weakly imposing Dirichlet boundary conditions
 ---------------------------------------------
 

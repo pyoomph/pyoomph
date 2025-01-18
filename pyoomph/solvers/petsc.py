@@ -184,11 +184,11 @@ class SlepcEigenSolver(GenericEigenSolver):
     def set_default_option(self,name:str,val:Any=None,force:bool=False)->None:
         _SetDefaultPetscOption(name,val, force)
     
-    def use_mumps(self):
-        _SetDefaultPetscOption("mat_mumps_icntl_6",5)
+    def use_mumps(self):        
         _SetDefaultPetscOption("st_ksp_type","preonly")
         _SetDefaultPetscOption("st_pc_type","lu")
         _SetDefaultPetscOption("st_pc_factor_mat_solver_type","mumps")
+        _SetDefaultPetscOption("st_mat_mumps_icntl_6",5)
         return self
 
     def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
