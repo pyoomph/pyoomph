@@ -1,3 +1,5 @@
+.. _secpdepattformeigs:
+
 Stability via eigenvalues
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 

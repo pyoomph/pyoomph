@@ -1,3 +1,5 @@
+.. _secadvstabrivulets:
+
 Rayleigh-Plateau instability in presence of a substrate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

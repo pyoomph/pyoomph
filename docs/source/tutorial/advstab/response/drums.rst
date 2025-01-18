@@ -1,3 +1,5 @@
+.. _secadvstabdrumresponse:
+
 Drums getting exited by a guitar
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

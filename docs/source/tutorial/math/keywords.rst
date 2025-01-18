@@ -5,7 +5,9 @@ The following keyword variables are defined and should not be used for any other
 
 Note that the time-derivative of the ``mesh`` variable only gives the mesh velocity if you use it with ``ALE=False``, i.e. ``partial_t(var("mesh"),ALE=False)``. Therefore, better use :py:func:`~pyoomph.expressions.generic.mesh_velocity` instead and e.g. ``mesh_velocity()[0]`` for the velocity in x-direction.
 
-.. table:: Defined keyword variables to be used with either :py:func:`~pyoomph.expressions.generic.var` or :py:func:`~pyoomph.expressions.generic.nondim`.
+
+
+.. table:: Defined keyword variables to be used with either :py:func:`~pyoomph.expressions.generic.var` or :py:func:`~pyoomph.expressions.generic.nondim`. All mentioned time derivatives must be understood with the ``ALE=False`` setting.
 
    +-----------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``"time"``                              | Current time                                                                                                                                                        |

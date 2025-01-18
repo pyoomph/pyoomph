@@ -2772,6 +2772,8 @@ class Problem(_pyoomph.Problem):
         return location,typ
 
     def debug_largest_residual(self, nres:int=4):
+        if not self.is_initialised():
+            self.initialise()
         descr, names = self.get_dof_description()
         #print(names)
         #print(descr)
@@ -4977,6 +4979,25 @@ class Problem(_pyoomph.Problem):
         _pyoomph.set_interpolate_new_interface_dofs(True) # Activate the interpolation again, good for spatial adaptivity
         return True
 
+
+    def continue_from_outdir(self,old_out_dir:str,statenumber:int=-1,ignore_outstep:bool=True):
+        """Loads a previous state from another output directory. Make sure the scripts are in all specifications of equations, meshes, parameters, settings etc.
+
+        Args:
+            old_out_dir: Old output directory
+            statenumber: Which state file to load (default: -1, i.e. the last one)
+            ignore_outstep: Do not load the outstep (default: True)
+        """
+        import glob
+        toglob=os.path.join(old_out_dir,"_states","state_"+("{:06d}.dump".format(statenumber) if statenumber>=0 else "*.dump"))
+        globs=glob.glob(toglob)
+        if len(globs)==0:
+            raise RuntimeError(f"No state files found for {toglob}")         
+        contifile=sorted(globs)[statenumber if statenumber<0 else 0]
+        print("Continuing from",contifile)        
+        self.load_state(contifile,ignore_outstep=ignore_outstep)
+        
+        
     def select_dofs(self) -> "_DofSelector":
         return _DofSelector(self)
 

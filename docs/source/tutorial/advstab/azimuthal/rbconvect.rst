@@ -1,3 +1,5 @@
+.. _secadvstabrbconv:
+
 Rayleigh-Benard convection in a cylindrical container
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

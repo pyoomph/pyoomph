@@ -1,3 +1,5 @@
+.. _secODEarclength:
+
 Following a stationary solution along a parameter by pseudo-arc length continuation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
