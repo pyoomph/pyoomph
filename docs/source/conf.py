@@ -38,7 +38,8 @@ extensions = [
     'sphinx.ext.todo',
     "sphinx.ext.autosectionlabel",
     'sphinxcontrib.bibtex',
-    'sphinx_favicon'
+    'sphinx_favicon',
+    'sphinxcontrib.images'
     # 'sphinx.ext.imgmath',
     ]
 
@@ -55,7 +56,7 @@ favicons = [
 if False:
 	extensions+=[    "sphinx_codeautolink"]
 	codeautolink_global_preface="from pyoomph import *"
-	codeautolink_autodoc_inject=True
+	codeautolink_autodoc_inject=False
 	
 # todo_include_todos = True
 

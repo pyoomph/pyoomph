@@ -958,7 +958,7 @@ namespace pyoomph
     unsigned int get_node_index_C1_to_element(const unsigned int &i) const { return i; }
     inline void d2shape_local(const oomph::Vector<double> &s, oomph::Shape &psi, oomph::DShape &dpsids, oomph::DShape &d2psids) const { throw_runtime_error("Implement"); }
 
-    inline void local_coordinate_of_node(const unsigned &j, oomph::Vector<double> &s) const;
+    void local_coordinate_of_node(const unsigned &j, oomph::Vector<double> &s) const;
     bool has_bubble() const { return true; }
     virtual unsigned get_meshio_type_index() const { return 66; } // Just some otherwise unused value here
     int get_num_numpy_elemental_indices(bool tesselate_tri, unsigned &nsubdiv, std::vector<std::vector<std::set<oomph::Node *>>> &add_nodes) const
