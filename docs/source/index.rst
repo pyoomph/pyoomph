@@ -11,7 +11,7 @@ Welcome to pyoomph's documentation!
 
 .. only:: html
 	
-   .. image:: _static/pyoomph_logo_full.png
+   .. image:: _static/pyoomph_logo_full_thumb.png
       :width: 300
       :alt: Pyoomph Logo
       :align: center
@@ -36,147 +36,147 @@ Tutorial
    tutorial.rst
 
 
-.. |tuto_lorenz| thumbnail:: tutorial/temporal/timestepping/plot_lorenz.png
+.. |tuto_lorenz| thumbnail:: tutorial/temporal/timestepping/plot_lorenz_thumb.png
   :width: 270px
   :align: center  
   :class: framed  
   :title: Adaptive timestepping for the Lorenz attractor
 
     
-.. |tuto_odebif| thumbnail:: tutorial/temporal/stability/bifurcs.png
+.. |tuto_odebif| thumbnail:: tutorial/temporal/stability/bifurcs_thumb.png
   :width: 270px
   :align: center
   :class: framed    
   :title: Stability analysis and bifurcation tracking of ODEs
   
-.. |tuto_adaptpoisson| thumbnail:: tutorial/spatial/poisson/poisson2d_adapt.png
+.. |tuto_adaptpoisson| thumbnail:: tutorial/spatial/poisson/poisson2d_adapt_thumb.png
   :width: 140px
   :align: center
   :class: framed
   :title: Spatial adaptivity for a 2d Poisson equation
   
-.. |tuto_stokeslaw| thumbnail:: tutorial/spatial/stokes/stokes_law.png
+.. |tuto_stokeslaw| thumbnail:: tutorial/spatial/stokes/stokes_law_thumb.png
   :width: 290px
   :align: center 
   :class: framed    
   :title: Flow around a sphere (Stokes law)
   
-.. |tuto_stokesdrop| thumbnail:: tutorial/spatial/stokes/stokes_noflux.png
+.. |tuto_stokesdrop| thumbnail:: tutorial/spatial/stokes/stokes_noflux_thumb.png
   :width: 270px
   :align: center 
   :class: framed    
   :title: No normal flow through a curved interface
   
-.. |tuto_fishmesh| thumbnail:: tutorial/spatial/mesh/fishgmsh_eye.png
+.. |tuto_fishmesh| thumbnail:: tutorial/spatial/mesh/fishgmsh_eye_thumb.png
   :width: 180px
   :align: center  
   :class: framed   
   :title: Generation of custom meshes
   
-.. |tuto_waveeq| thumbnail:: tutorial/pde/wave/waveeqdoubleslit.png
+.. |tuto_waveeq| thumbnail:: tutorial/pde/wave/waveeqdoubleslit_thumb.png
   :width: 300px
   :align: center 
   :class: framed    
   :title: Wave equation
   
-.. |tuto_rtinstab| thumbnail:: tutorial/pde/navier/rayleigh_taylor.png
+.. |tuto_rtinstab| thumbnail:: tutorial/pde/navier/rayleigh_taylor_thumb.png
   :width: 200px
   :align: center 
   :class: framed    
   :title: Rayleigh-Taylor instability
   
-.. |tuto_lubric| thumbnail:: tutorial/pde/lubric/lubric_coalescence.png
+.. |tuto_lubric| thumbnail:: tutorial/pde/lubric/lubric_coalescence_thumb.png
   :width: 200px
   :align: center 
   :class: framed    
   :title: Coalescence of droplets via lubrication theory
   
-.. |tuto_pattern| thumbnail:: tutorial/pde/patterns/kse_ics.png
+.. |tuto_pattern| thumbnail:: tutorial/pde/patterns/kse_ics_thumb.png
   :width: 250px
   :align: center 
   :class: framed    
   :title: Pattern formation and stability analysis
 
-.. |tuto_nsfreesurf| thumbnail:: tutorial/ale/free_surface_ns.png
+.. |tuto_nsfreesurf| thumbnail:: tutorial/ale/free_surface_ns_thumb.png
   :width: 300px
   :align: center  
   :class: framed      
   :title: Transient simulation of a free surface
   
-.. |tuto_drop3d| thumbnail:: tutorial/ale/spread/threedim_spread_single.png
+.. |tuto_drop3d| thumbnail:: tutorial/ale/spread/threedim_spread_single_thumb.png
   :width: 150px
   :align: center  
   :class: framed   
   :title: Three-dimensional droplet with varying wettability
   
-.. |tuto_remeshing| thumbnail:: tutorial/ale/remeshing.png
+.. |tuto_remeshing| thumbnail:: tutorial/ale/remeshing_thumb.png
   :width: 200px
   :align: center  
   :class: framed      
   :title: Moving meshes and mesh reconstruction
 
   
-.. |tuto_dropmara| thumbnail:: tutorial/ale/spread/droplet_mara_grav.png
+.. |tuto_dropmara| thumbnail:: tutorial/ale/spread/droplet_mara_grav_thumb.png
   :width: 300px
   :align: center 
   :class: framed    
   :title: Droplet with Marangoni flow and gravity
   
-.. |tuto_icecyl| thumbnail:: tutorial/multidom/icecylinder.png
+.. |tuto_icecyl| thumbnail:: tutorial/multidom/icecylinder_thumb.png
   :width: 270px
   :align: center 
   :class: framed    
   :title: Melting of an ice cylinder
   
-.. |tuto_stokessurf| thumbnail:: tutorial/multidom/falling_droplet.png
+.. |tuto_stokessurf| thumbnail:: tutorial/multidom/falling_droplet_thumb.png
   :width: 260px
   :align: center 
   :class: framed    
   :title: Flow around a sphere with insoluble surfactants
   
-.. |tuto_evap| thumbnail:: tutorial/multidom/dropevap.png
+.. |tuto_evap| thumbnail:: tutorial/multidom/dropevap_thumb.png
   :width: 270px
   :align: center 
   :class: framed    
   :title: Evaporation of a water droplet
   
-.. |tuto_heleshaw| thumbnail:: tutorial/mcflow/heleshaw_half.png
+.. |tuto_heleshaw| thumbnail:: tutorial/mcflow/heleshaw_half_thumb.png
   :width: 210px
   :align: center 
   :class: framed    
   :title: Mixture evaporation from a Hele-Shaw cell
   
-.. |tuto_dg| thumbnail:: tutorial/dg/dg_fvm_d2.png
+.. |tuto_dg| thumbnail:: tutorial/dg/dg_fvm_d2_thumb.png
   :width: 300px
   :align: center 
   :class: framed    
   :title: Discontinuous Galerkin methods
   
-.. |tuto_linresp| thumbnail:: tutorial/advstab/response/pdrdrum.png
+.. |tuto_linresp| thumbnail:: tutorial/advstab/response/pdrdrum_thumb.png
   :width: 260px
   :align: center 
   :class: framed    
   :title: Linear response to periodic driving
   
-.. |tuto_dropdetach| thumbnail:: tutorial/advstab/movmesh/dropstab.png
+.. |tuto_dropdetach| thumbnail:: tutorial/advstab/movmesh/dropstab_thumb.png
   :width: 270px
   :align: center 
   :class: framed    
   :title: Bifurcation tracking of a detaching droplet
   
-.. |tuto_azimuthal| thumbnail:: tutorial/advstab/azimuthal/rb_cyl.png
+.. |tuto_azimuthal| thumbnail:: tutorial/advstab/azimuthal/rb_cyl_thumb.png
   :width: 300px
   :align: center 
   :class: framed    
   :title: Azimuthal stability analysis
 
-.. |tuto_cartnormal| thumbnail:: tutorial/advstab/cartesiannormal/rivuletplots.png
+.. |tuto_cartnormal| thumbnail:: tutorial/advstab/cartesiannormal/rivuletplots_thumb.png
   :width: 300px
   :align: center  
   :class: framed   
   :title: Cartesian normal mode stability analysis
 
-.. |tuto_precice| thumbnail:: tutorial/precice/heat_circle.png
+.. |tuto_precice| thumbnail:: tutorial/precice/heat_circle_thumb.png
   :width: 170px
   :align: center 
   :class: framed    
