@@ -11,7 +11,7 @@ Welcome to pyoomph's documentation!
 
 .. only:: html
 	
-   .. image:: _static/pyoomph_logo_full_thumb.png
+   .. image:: _static/pyoomph_logo_full.png
       :width: 300
       :alt: Pyoomph Logo
       :align: center
