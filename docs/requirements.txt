@@ -1,10 +1,10 @@
-sphinx>=7.1.2
+sphinx==7.3.7
 sphinxcontrib-bibtex>=2.6.2
 sphinx-autodoc-typehints>=2.0.1
 setuptools>=69.5.1
 sphinx-rtd-theme>=2.0.0
 sphinxcontrib-bibtex>=2.6.2
 sphinx_favicon>=1.0.1
-sphinxcontrib-images @ git+https://github.com/sphinx-contrib/images
+sphinxcontrib-images>=0.9.4
 pyoomph
 
