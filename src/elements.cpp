@@ -10202,7 +10202,7 @@ namespace pyoomph
    
    bool BulkElementTri2dC1TB::fill_hang_info_with_equations(const JITFuncSpec_RequiredShapes_FiniteElement_t &required, JITShapeInfo_t *shape_info, int *eqn_remap)
    {
-     bool res=BulkElementTri2dC1::fill_hang_info_with_equations(required,shape_info, eqn_remap);
+     bool res=false;
      for (unsigned int l = 0; l < eleminfo.nnode_C1TB; l++)
 		{
 			if (node_pt(l)->is_hanging())
@@ -10235,7 +10235,7 @@ namespace pyoomph
 			}
 		}
 		
-     return res;
+     return BulkElementTri2dC1::fill_hang_info_with_equations(required,shape_info, eqn_remap) || res;
    }
    
    void BulkElementTri2dC1TB::shape(const oomph::Vector<double> &s, oomph::Shape &psi) const
@@ -10293,6 +10293,7 @@ namespace pyoomph
    
    void BulkElementTri2dC1TB::local_coordinate_of_node(const unsigned &j, oomph::Vector<double> &s) const
    {
+	s.resize(2);
     switch (j)
 	{
 		case 0:
@@ -12626,11 +12627,12 @@ namespace pyoomph
 			if (required->dx_psi_C2TB || required->psi_C2TB || required->dX_psi_C2TB || required->dx_psi_C2 || required->psi_C2 || required->dX_psi_C2 || required->dx_psi_C1 || required->psi_C1TB || required->dx_psi_C1TB || required->dX_psi_C1TB || required->psi_C1 || required->dX_psi_C1 || required->psi_Pos || required->psi_DL || required->dx_psi_DL || required->dX_psi_DL)
 			{
 				// Add required geometric external data to be finite differenced
+				
 				for (unsigned int j = 0; j < from_elem->get_eleminfo()->nnode; j++)
 				{
 					auto *nod_pt = dynamic_cast<pyoomph::Node *>(from_elem->node_pt(j));
 					if (nod_pt->is_hanging())
-					{
+					{						
 						oomph::HangInfo *const hang_pt = nod_pt->hanging_pt();
 						const unsigned nmaster = hang_pt->nmaster();
 						for (unsigned m = 0; m < nmaster; m++)
@@ -12640,7 +12642,9 @@ namespace pyoomph
 						}
 					}
 					else
+					{						
 						this->add_required_ext_data(nod_pt->variable_position_pt(), true);
+					}
 				}
 			}
 		}

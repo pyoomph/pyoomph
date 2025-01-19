@@ -36,130 +36,157 @@ Tutorial
    tutorial.rst
 
 
-.. |tuto_lorenz| image:: tutorial/temporal/timestepping/plot_lorenz.*
-  :height: 12em
-  :align: top  
-  :alt: Adaptive timestepping for the Lorenz attractor
-  
-.. |tuto_odebif| image:: tutorial/temporal/stability/bifurcs.*
-  :height: 12em
-  :align: top  
-  :alt: Stability analysis and bifurcation tracking of ODEs
-  
-.. |tuto_adaptpoisson| image:: tutorial/spatial/poisson/poisson2d_adapt.*
-  :height: 12em
-  :align: top
-  :alt: Spatial adaptivity for a 2d Poisson equation
-  
-.. |tuto_stokeslaw| image:: tutorial/spatial/stokes/stokes_law.*
-  :height: 12em
-  :align: top  
-  :alt: Flow around a sphere (Stokes law)
-  
-.. |tuto_stokesdrop| image:: tutorial/spatial/stokes/stokes_noflux.*
-  :height: 12em
-  :align: top  
-  :alt: No normal flow through a curved interface
-  
-.. |tuto_fishmesh| image:: tutorial/spatial/mesh/fishgmsh_eye.*
-  :height: 12em
-  :align: top  
-  :alt: Generation of custom meshes
-  
-.. |tuto_waveeq| image:: tutorial/pde/wave/waveeqdoubleslit.*
-  :height: 12em
-  :align: top  
-  :alt: Wave equation
-  
-.. |tuto_rtinstab| image:: tutorial/pde/navier/rayleigh_taylor.*
-  :height: 12em
-  :align: top  
-  :alt: Rayleigh-Taylor instability
-  
-.. |tuto_lubric| image:: tutorial/pde/lubric/lubric_coalescence.*
-  :height: 12em
-  :align: top  
-  :alt: Coalescence of droplets via lubrication theory
-  
-.. |tuto_pattern| image:: tutorial/pde/patterns/kse_ics.*
-  :height: 12em
-  :align: top  
-  :alt: Pattern formation and stability analysis
+.. |tuto_lorenz| thumbnail:: tutorial/temporal/timestepping/plot_lorenz.png
+  :width: 270px
+  :align: center  
+  :class: framed  
+  :title: Adaptive timestepping for the Lorenz attractor
 
-.. |tuto_remeshing| image:: tutorial/ale/remeshing.*
-  :width: 100%
-  :align: top  
-  :alt: Moving meshes and mesh reconstruction
+    
+.. |tuto_odebif| thumbnail:: tutorial/temporal/stability/bifurcs.png
+  :width: 270px
+  :align: center
+  :class: framed    
+  :title: Stability analysis and bifurcation tracking of ODEs
+  
+.. |tuto_adaptpoisson| thumbnail:: tutorial/spatial/poisson/poisson2d_adapt.png
+  :width: 140px
+  :align: center
+  :class: framed
+  :title: Spatial adaptivity for a 2d Poisson equation
+  
+.. |tuto_stokeslaw| thumbnail:: tutorial/spatial/stokes/stokes_law.png
+  :width: 290px
+  :align: center 
+  :class: framed    
+  :title: Flow around a sphere (Stokes law)
+  
+.. |tuto_stokesdrop| thumbnail:: tutorial/spatial/stokes/stokes_noflux.png
+  :width: 270px
+  :align: center 
+  :class: framed    
+  :title: No normal flow through a curved interface
+  
+.. |tuto_fishmesh| thumbnail:: tutorial/spatial/mesh/fishgmsh_eye.png
+  :width: 180px
+  :align: center  
+  :class: framed   
+  :title: Generation of custom meshes
+  
+.. |tuto_waveeq| thumbnail:: tutorial/pde/wave/waveeqdoubleslit.png
+  :width: 300px
+  :align: center 
+  :class: framed    
+  :title: Wave equation
+  
+.. |tuto_rtinstab| thumbnail:: tutorial/pde/navier/rayleigh_taylor.png
+  :width: 200px
+  :align: center 
+  :class: framed    
+  :title: Rayleigh-Taylor instability
+  
+.. |tuto_lubric| thumbnail:: tutorial/pde/lubric/lubric_coalescence.png
+  :width: 200px
+  :align: center 
+  :class: framed    
+  :title: Coalescence of droplets via lubrication theory
+  
+.. |tuto_pattern| thumbnail:: tutorial/pde/patterns/kse_ics.png
+  :width: 250px
+  :align: center 
+  :class: framed    
+  :title: Pattern formation and stability analysis
 
-.. |tuto_nsfreesurf| image:: tutorial/ale/free_surface_ns.*
-  :height: 12em
-  :align: top  
-  :alt: Transient simulation of a free surface
+.. |tuto_nsfreesurf| thumbnail:: tutorial/ale/free_surface_ns.png
+  :width: 300px
+  :align: center  
+  :class: framed      
+  :title: Transient simulation of a free surface
   
-.. |tuto_drop3d| image:: tutorial/ale/spread/threedim_spread_single.*
-  :height: 12em
-  :align: top  
-  :alt: Three-dimensional droplet with varying wettability
+.. |tuto_drop3d| thumbnail:: tutorial/ale/spread/threedim_spread_single.png
+  :width: 150px
+  :align: center  
+  :class: framed   
+  :title: Three-dimensional droplet with varying wettability
   
-.. |tuto_dropmara| image:: tutorial/ale/spread/droplet_mara_grav.*
-  :width: 100%
-  :align: top  
-  :alt: Droplet with Marangoni flow and gravity
-  
-.. |tuto_icecyl| image:: tutorial/multidom/icecylinder.*
-  :height: 12em
-  :align: top  
-  :alt: Melting of an ice cylinder
-  
-.. |tuto_stokessurf| image:: tutorial/multidom/falling_droplet.*
-  :height: 12em
-  :align: top  
-  :alt: Flow around a sphere with insoluble surfactants
-  
-.. |tuto_evap| image:: tutorial/multidom/dropevap.*
-  :width: 100%
-  :align: top  
-  :alt: Evaporation of a water droplet
-  
-.. |tuto_heleshaw| image:: tutorial/mcflow/heleshaw_half.*
-  :height: 10em
-  :align: top  
-  :alt: Mixture evaporation from a Hele-Shaw cell
-  
-.. |tuto_dg| image:: tutorial/dg/dg_fvm_d2.*
-  :width: 100%
-  :align: top  
-  :alt: Discontinuous Galerkin methods
-  
-.. |tuto_linresp| image:: tutorial/advstab/response/pdrdrum.*
-  :width: 100%
-  :align: top  
-  :alt: Linear response to periodic driving
-  
-.. |tuto_dropdetach| image:: tutorial/advstab/movmesh/dropstab.*
-  :width: 100%
-  :align: top  
-  :alt: Bifurcation tracking of a detaching droplet
-  
-.. |tuto_azimuthal| image:: tutorial/advstab/azimuthal/rb_cyl.*
-  :width: 100%
-  :align: top  
-  :alt: Azimuthal stability analysis
+.. |tuto_remeshing| thumbnail:: tutorial/ale/remeshing.png
+  :width: 200px
+  :align: center  
+  :class: framed      
+  :title: Moving meshes and mesh reconstruction
 
-.. |tuto_cartnormal| image:: tutorial/advstab/cartesiannormal/rivuletplots.*
-  :width: 100%
-  :align: top  
-  :alt: Cartesian normal mode stability analysis
+  
+.. |tuto_dropmara| thumbnail:: tutorial/ale/spread/droplet_mara_grav.png
+  :width: 300px
+  :align: center 
+  :class: framed    
+  :title: Droplet with Marangoni flow and gravity
+  
+.. |tuto_icecyl| thumbnail:: tutorial/multidom/icecylinder.png
+  :width: 270px
+  :align: center 
+  :class: framed    
+  :title: Melting of an ice cylinder
+  
+.. |tuto_stokessurf| thumbnail:: tutorial/multidom/falling_droplet.png
+  :width: 260px
+  :align: center 
+  :class: framed    
+  :title: Flow around a sphere with insoluble surfactants
+  
+.. |tuto_evap| thumbnail:: tutorial/multidom/dropevap.png
+  :width: 270px
+  :align: center 
+  :class: framed    
+  :title: Evaporation of a water droplet
+  
+.. |tuto_heleshaw| thumbnail:: tutorial/mcflow/heleshaw_half.png
+  :width: 210px
+  :align: center 
+  :class: framed    
+  :title: Mixture evaporation from a Hele-Shaw cell
+  
+.. |tuto_dg| thumbnail:: tutorial/dg/dg_fvm_d2.png
+  :width: 300px
+  :align: center 
+  :class: framed    
+  :title: Discontinuous Galerkin methods
+  
+.. |tuto_linresp| thumbnail:: tutorial/advstab/response/pdrdrum.png
+  :width: 260px
+  :align: center 
+  :class: framed    
+  :title: Linear response to periodic driving
+  
+.. |tuto_dropdetach| thumbnail:: tutorial/advstab/movmesh/dropstab.png
+  :width: 270px
+  :align: center 
+  :class: framed    
+  :title: Bifurcation tracking of a detaching droplet
+  
+.. |tuto_azimuthal| thumbnail:: tutorial/advstab/azimuthal/rb_cyl.png
+  :width: 300px
+  :align: center 
+  :class: framed    
+  :title: Azimuthal stability analysis
 
-.. |tuto_precice| image:: tutorial/precice/heat_circle.*
-  :height: 12em
-  :align: top  
-  :alt: Coupling multiple simulations with preCICE
+.. |tuto_cartnormal| thumbnail:: tutorial/advstab/cartesiannormal/rivuletplots.png
+  :width: 300px
+  :align: center  
+  :class: framed   
+  :title: Cartesian normal mode stability analysis
+
+.. |tuto_precice| thumbnail:: tutorial/precice/heat_circle.png
+  :width: 170px
+  :align: center 
+  :class: framed    
+  :title: Coupling multiple simulations with preCICE
 
 
 .. list-table:: Some representative tutorial cases
 	:widths: 50 50
 	:align: center
+	:class: exampletable
 	
 	* - 	|tuto_lorenz|  
 		
