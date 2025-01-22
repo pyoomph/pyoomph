@@ -1028,8 +1028,8 @@ class Problem(_pyoomph.Problem):
         olddofs,_=self.get_current_dofs()                
         
         phi0=float(phi0)
-        if numouts<1:
-            raise RuntimeError("Number of outputs must be at least 1")
+        if numouts<2:
+            raise RuntimeError("Number of outputs must be at least 2")
         
         if plotter._problem is None:
             plotter._problem=self
