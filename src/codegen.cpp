@@ -736,6 +736,19 @@ namespace pyoomph
 					return 0 + GiNaC::GiNaCShapeExpansion(repl);
 				}
 			}
+			else if (GiNaC::is_a<GiNaC::GiNaCMultiRetCallback>(inp))
+			{
+				const auto &sp = GiNaC::ex_to<GiNaC::GiNaCMultiRetCallback>(inp).get_struct();
+				GiNaC::ex invok = expressions::python_multi_cb_function(sp.invok.op(0), sp.invok.op(1).map(*this), sp.invok.op(2));
+				GiNaC::ex res = GiNaC::GiNaCMultiRetCallback(pyoomph::MultiRetCallback(sp.code, invok.map(*this), sp.retindex, sp.derived_by_arg));
+				invok = GiNaC::ex_to<GiNaC::GiNaCMultiRetCallback>(res).get_struct().invok;
+
+				/*if (code->resolve_multi_return_call(invok) < 0)
+				{
+					code->multi_return_calls.push_back(invok);
+				}*/
+				return res;
+			}
 			else if (GiNaC::is_a<GiNaC::GiNaCTestFunction>(inp))
 			{
 				auto &se = GiNaC::ex_to<GiNaC::GiNaCTestFunction>(inp).get_struct();
@@ -2434,10 +2447,15 @@ namespace pyoomph
 			}
 			else if (GiNaC::is_a<GiNaC::GiNaCMultiRetCallback>(*i))
 			{
+				//std::cout << "GOT MULTIRET CB "  << (*i) << std::endl;
+				
 				GiNaC::GiNaCMultiRetCallback se = GiNaC::ex_to<GiNaC::GiNaCMultiRetCallback>(*i);
+				//std::cout << "GOT MULTIRET CB " << "INVOK "  << (se.get_struct().invok) << std::endl;
+				//std::cout << "GOT MULTIRET CB " << "INVOK OP1 "  << (se.get_struct().invok.op(1)) << std::endl;
 				std::set<ShapeExpansion> sub = get_all_shape_expansions_in(se.get_struct().invok.op(1), merge_no_jacobian, merge_expansion_modes, merge_no_hessian);
 				for (auto &se : sub)
 				{
+					//std::cout << "GOT MULTIRET CB " << "INSERTING "  << GiNaC::GiNaCShapeExpansion(se) << std::endl;
 					res.insert(se);
 				}
 			}
@@ -4481,7 +4499,9 @@ namespace pyoomph
 
 		std::vector<ShapeExpansion> ordered_shapeexps;
 		for (auto &sp : shapeexps)
+		{
 			ordered_shapeexps.push_back(sp);
+		}
 		auto shape_order = [](ShapeExpansion &a, ShapeExpansion &b)
 		{
 		   std::string sa=a.field->get_space()->get_code()->get_domain_name()+"/"+a.field->get_name();
