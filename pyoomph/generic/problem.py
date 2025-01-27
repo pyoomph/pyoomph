@@ -1901,6 +1901,8 @@ class Problem(_pyoomph.Problem):
         self._equation_system._before_newton_solve() 
         for hook in self._hooks:
             hook.actions_before_newton_solve()
+        if self._debug_largest_residual>0:
+            self.debug_largest_residual(self._debug_largest_residual)
 
     def last_newton_step_failed(self):
         last_res=self.get_last_residual_convergence()
