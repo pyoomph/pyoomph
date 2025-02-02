@@ -86,6 +86,7 @@ namespace pyoomph
   {
   public:
     virtual unsigned add_tri_C1( Node* & n1, Node* & n2, Node* & n3);
+    virtual unsigned add_tri_C1TB( Node* & n1, Node* & n2, Node* & n3, Node* & n4);
     
     virtual void setup_interior_boundary_elements(unsigned bindex);
     bool refinement_possible()

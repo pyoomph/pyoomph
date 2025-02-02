@@ -3276,8 +3276,13 @@ namespace pyoomph
       name = "coordinate_y";
     if (name == "mesh_z")
       name = "coordinate_z";
-    auto *el = dynamic_cast<BulkElementBase *>(this->element_pt(0));
-    auto *ft = el->get_code_instance()->get_func_table();
+    DynamicBulkElementInstance *ci=this->codeinst;
+    if (!ci)
+    {	
+    	auto *el = dynamic_cast<BulkElementBase *>(this->element_pt(0));
+    	ci=el->get_code_instance();
+    }
+    auto *ft = ci->get_func_table();
     for (unsigned int i = 0; i < ft->Dirichlet_set_size; i++)
     {
       if (ft->Dirichlet_names[i] && std::string(ft->Dirichlet_names[i]) == name)

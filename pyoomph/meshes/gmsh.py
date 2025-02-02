@@ -330,6 +330,9 @@ class GmshTemplate(MeshTemplate):
         self._mesh:Any = None
         #: The default resolution for the mesh as a nondimensional typical element length scale
         self.default_resolution:Optional[float] = None
+        
+        #: This factor is used to scale all size arguments (including the default resolution) by the given factor. Useful to e.g. increase the mesh resolution by a factor.
+        self.mesh_size_factor:float=1
         #self.default_quads = True
         #self.default_quads = False
         
@@ -399,6 +402,7 @@ class GmshTemplate(MeshTemplate):
     #                size = size / self._problem.get_scaling("spatial")
     #                size = size.float_value()
         size=cast(float,size)
+        size*=self.mesh_size_factor
         if size is not None and self.mesh_mode=="only_quads":
             size*=2
         res = self._geom.add_point([x, y, z], size) #type:ignore

@@ -1189,6 +1189,7 @@ void PyReg_Mesh(py::module &m)
 			 {  oomph::Tree::max_neighbour_finding_tolerance() = tol; })
 		.def("generate_from_template", &pyoomph::TemplatedMeshBase2d::generate_from_template)
 		.def("add_tri_C1",[](pyoomph::TemplatedMeshBase2d *self,pyoomph::Node *n1,pyoomph::Node *n2,pyoomph::Node *n3){self->add_tri_C1(n1,n2,n3);})
+		.def("add_tri_C1TB",[](pyoomph::TemplatedMeshBase2d *self,pyoomph::Node *n1,pyoomph::Node *n2,pyoomph::Node *n3,pyoomph::Node *n4=NULL){self->add_tri_C1TB(n1,n2,n3,n4);})
 		.def("refinement_possible", &pyoomph::TemplatedMeshBase2d::refinement_possible)
 		.def(
 			"refine_uniformly", [](pyoomph::TemplatedMeshBase2d *self, unsigned int num)
