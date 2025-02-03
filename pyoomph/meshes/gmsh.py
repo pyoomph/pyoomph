@@ -402,7 +402,8 @@ class GmshTemplate(MeshTemplate):
     #                size = size / self._problem.get_scaling("spatial")
     #                size = size.float_value()
         size=cast(float,size)
-        size*=self.mesh_size_factor
+        if size is not None:
+            size*=self.mesh_size_factor
         if size is not None and self.mesh_mode=="only_quads":
             size*=2
         res = self._geom.add_point([x, y, z], size) #type:ignore
