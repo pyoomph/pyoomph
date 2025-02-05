@@ -4320,7 +4320,14 @@ namespace pyoomph
     }
     if (!bulkmesh)
     {
-      throw_runtime_error("bulkmesh was not set");
+      std::ostringstream err_info;      
+      err_info<<"Code: "<<code;
+      if (code)
+      {
+        err_info<<", Func table: "<<code->get_func_table();
+        err_info<<", Func table name: "<<code->get_func_table()->domain_name;
+      }
+      throw_runtime_error("bulkmesh was not set, code: "+err_info.str());
     }
 
     bulkmesh->generate_interface_elements(interfacename, this, code);
