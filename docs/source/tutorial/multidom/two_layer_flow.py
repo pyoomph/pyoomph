@@ -29,7 +29,7 @@ from pyoomph.expressions import *
 from pyoomph.equations.navier_stokes import *
 from pyoomph.equations.ALE import *
 
-class EnforceSteadyVelocity(InterfaceEquations):
+class EnforceContinuousVelocity(InterfaceEquations):
 	def define_fields(self):
 		self.define_vector_field("_couple_velo","C2")
 		
@@ -79,7 +79,7 @@ class TwoLayerFlowProblem(Problem):
 		# Free surface, mesh connection and velocity connection
 		l_eqs += NavierStokesFreeSurface(surface_tension=1) @ "interface"  # free surface at the top
 		l_eqs += ConnectMeshAtInterface()@"interface"
-		l_eqs += EnforceSteadyVelocity()@"interface"
+		l_eqs += EnforceContinuousVelocity()@"interface"
 
 		# Deform the initial mesh
 		X, Y = var(["lagrangian_x", "lagrangian_y"])

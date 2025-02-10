@@ -70,6 +70,13 @@ class PETSCSolver(GenericLinearSystemSolver):
     def set_default_petsc_option(self,name:str,val:Any=None,force:bool=False)->None:
         _SetDefaultPetscOption(name,val, force) #type:ignore
 
+    def get_PETSc(self)->Any:
+        """
+        Returns access to PETSc
+        If defining derived classes that need access to PETSc, get PETSc from here, do not import petsc4py again
+        """
+        return PETSc
+
     def setup_solver(self):        
         opts = PETSc.Options().getAll() #type:ignore
         if "add_zero_diagonal" in opts.keys(): #type:ignore
@@ -372,7 +379,19 @@ class SlepcEigenSolver(GenericEigenSolver):
         E.destroy() #type:ignore
         return numpy.array(evals), numpy.array(evects),Jin,Min #type:ignore
 
+    def get_PETSc(self)->Any:
+        """
+        Returns access to PETSc
+        If defining derived classes that need access to PETSc, get PETSc from here, do not import petsc4py again
+        """
+        return PETSc
 
+    def get_SLEPc(self)->Any:
+        """
+        Returns access to SLEPc
+        If defining derived classes that need access to SLEPc, get SLEPc from here, do not import slepc4py again
+        """        
+        return SLEPc
 
 class FieldSplitPETSCSolver(PETSCSolver):
     def __init__(self,problem:"Problem"):
@@ -380,6 +399,12 @@ class FieldSplitPETSCSolver(PETSCSolver):
         self._fieldsplit_map:Optional[NPIntArray]=None
         self._fieldsplit:Optional[List[Tuple[str,Any]]]=None
         self.default_field_split:Optional[int]=None
+        self._fieldsplit_names:Dict[int,str]={}
+        self.preconditioner_matrix_name=None
+        
+    def set_fieldsplit_names(self,**kargs:int)->None:
+        for k,v in kargs.items():
+            self._fieldsplit_names[v]=k
 
     def define_options(self):
         pass
@@ -451,21 +476,27 @@ class FieldSplitPETSCSolver(PETSCSolver):
 
         numfields:int=numpy.amax(self._fieldsplit_map)+1 #type:ignore
         fields = []
+        ownerrange=self.petsc_mat.getOwnershipRange()        
+        globsize=self.petsc_mat.getSize()[0]
+        
         for i in range(numfields):
             IS = PETSc.IS() #type:ignore
             subdofs = numpy.where(self._fieldsplit_map == i)[0] #type:ignore
+            if ownerrange[0]>0 or ownerrange[1]<globsize:
+                subdofs=subdofs[(subdofs < ownerrange[1]) & (subdofs >= ownerrange[0])]                               
+            
             subdofs:NPIntArray  = numpy.array(subdofs, dtype="int32") #type:ignore
+            name = self._fieldsplit_names.get(i,str(i))
             IS.createGeneral(subdofs) #type:ignore
-            name = str(i)
+            
             fields.append((name, IS)) #type:ignore
         pc = self.ksp.getPC() #type:ignore
-        print("FIELDSPlIT ",fields)
         pc.setFieldSplitIS(*fields) #type:ignore
         self._fieldsplit=fields
 
-    def assemble_preconditioner(self,name:str,restrict_on_field_split:Optional[int]=None)->Any:        
-        _, n, _, _, _, J_ci, J_rs = self.problem._assemble_residual_jacobian(name)
-        P = PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(J_rs, J_ci, J_val)) #type:ignore
+    def assemble_preconditioner(self,name:str,restrict_on_field_split:Optional[int]=None)->Any:               
+        _res, n, _M_nzz, nrow_local, M_values_arr, M_colindex_arr, M_row_start_arr=self.problem._assemble_residual_jacobian(name)
+        P=PETSc.Mat().createAIJ(size=((nrow_local, n), (nrow_local, n),), csr=( M_row_start_arr,M_colindex_arr, M_values_arr)) # TODO: Must be destroyed!
         if restrict_on_field_split is not None:
             assert self._fieldsplit is not None
             ps = self._fieldsplit[restrict_on_field_split][1] #type:ignore
@@ -473,7 +504,9 @@ class FieldSplitPETSCSolver(PETSCSolver):
         return P #type:ignore
 
     def define_preconditioner(self):
-        pass
+        if self.preconditioner_matrix_name is not None:
+            P=self.assemble_preconditioner(self.preconditioner_matrix_name)
+            self.ksp.setOperators(self.petsc_mat,P)
 
     def setup_solver(self):
         self.define_options()

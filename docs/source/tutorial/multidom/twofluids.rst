@@ -73,7 +73,7 @@ So the only additional work we have to do is to couple the velocities by a Lagra
    from pyoomph.equations.navier_stokes import *
    from pyoomph.equations.ALE import *
 
-   class EnforceSteadyVelocity(InterfaceEquations):
+   class EnforceContinuousVelocity(InterfaceEquations):
    	def define_fields(self):
    		self.define_vector_field("_couple_velo","C2")
    		
@@ -134,7 +134,7 @@ The equations are assembled and added:
    		# Free surface, mesh connection and velocity connection
    		l_eqs += NavierStokesFreeSurface(surface_tension=1) @ "interface"  # free surface at the top
    		l_eqs += ConnectMeshAtInterface()@"interface"
-   		l_eqs += EnforceSteadyVelocity()@"interface"
+   		l_eqs += EnforceContinuousVelocity()@"interface"
 
    		# Deform the initial mesh
    		X, Y = var(["lagrangian_x", "lagrangian_y"])
@@ -142,7 +142,7 @@ The equations are assembled and added:
    		u_eqs += InitialCondition(mesh_y=Y+ (self.H1+self.H2-Y)*(0.25 * cos(2 * pi * X)))  # small height with a modulation
    		self.add_equations(l_eqs @ "lower" + u_eqs @ "upper")  # adding it to the system
 
-We use the predefined :py:class:`~pyoomph.equations.navier_stokes.NavierStokesFreeSurface` instead of our free surface consisting of ``KinematicBC`` and ``DynamicBC`` developed in :numref:`secALEfreesurfNS`, but it does essentially the same. With the ``EnforceSteadyVelocity``, the velocities are enforced to be continuous, whereas the Lagrange multiplier :math:`\lambda_x` in :math:`x`-direction will be pinned to :math:`0` automatically on the ``"left"`` and ``"right"``, since both inside and outside velocity are prescribed by a :py:class:`~pyoomph.meshes.bcs.DirichletBC`.
+We use the predefined :py:class:`~pyoomph.equations.navier_stokes.NavierStokesFreeSurface` instead of our free surface consisting of ``KinematicBC`` and ``DynamicBC`` developed in :numref:`secALEfreesurfNS`, but it does essentially the same. With the ``EnforceContinuousVelocity``, the velocities are enforced to be continuous, whereas the Lagrange multiplier :math:`\lambda_x` in :math:`x`-direction will be pinned to :math:`0` automatically on the ``"left"`` and ``"right"``, since both inside and outside velocity are prescribed by a :py:class:`~pyoomph.meshes.bcs.DirichletBC`.
 
 The run code reads
 
