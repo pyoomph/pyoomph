@@ -1109,6 +1109,13 @@ namespace pyoomph
 		return res;
 	}
 
+	void Problem::start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T)
+	{
+		reset_assembly_handler_to_default();
+		this->assembly_handler_pt() = new PeriodicOrbitHandler(this, T,history);
+	}
+
+
 	void Problem::start_bifurcation_tracking(const std::string param, const std::string typus, const bool &blocksolve, const std::vector<double> &eigenv1, const std::vector<double> &eigenv2, const double &omega, std::map<std::string, std::string> special_residual_forms)
 	{
 		if (param == "" || typus == "" || typus == "none")

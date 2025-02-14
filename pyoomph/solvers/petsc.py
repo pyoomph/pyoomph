@@ -401,6 +401,11 @@ class FieldSplitPETSCSolver(PETSCSolver):
         self.default_field_split:Optional[int]=None
         self._fieldsplit_names:Dict[int,str]={}
         self.preconditioner_matrix_name=None
+        self._nullspaces=[]
+        
+    def add_constant_nullspace(self,*dofnames):
+        self._nullspaces.append(("constant",dofnames))
+        
         
     def set_fieldsplit_names(self,**kargs:int)->None:
         for k,v in kargs.items():
@@ -427,12 +432,14 @@ class FieldSplitPETSCSolver(PETSCSolver):
                 if tmesh is None:
                     if len(sp)==2 and self.problem._meshdict.get(sp[0], None) is not None:
                         ode=self.problem.get_ode(sp[0])
-                        ode_elem = ode._get_ODE("ODE")                        
+                        #ode_elem = ode._get_ODE("ODE")                        
                         inds=ode.get_code_gen()._code.get_elemental_field_indices()
-                        exit()
-                        print(ode_elem.get_code_instance().get_elemental_field_indices())
-                        exit()
-                        raise RuntimeError("GET ODE")
+                        if sp[-1] in inds.keys():
+                            if not sn in meshblocks.keys():
+                                meshblocks[sn]={}
+                            meshblocks[sn][sp[-1]]=b
+                            allkeys[sn]=True
+                            continue
                     raise RuntimeError("Cannot perform a field split for the unknown field "+n)
                 if not (sn in meshblocks.keys()):
                     meshblocks[sn]={}
@@ -444,9 +451,12 @@ class FieldSplitPETSCSolver(PETSCSolver):
                 wholemesh[n]=b
                 allkeys[n]=True
 
-
+        
         for k in allkeys.keys():
-            mesh=self.problem.get_mesh(k)
+            mesh=self.problem.get_mesh(k,return_None_if_not_found=True)
+            if mesh is None:
+                mesh=self.problem.get_ode(k)
+               
             typesI, names = mesh.describe_global_dofs()
             name_look_up={v:i for i,v in enumerate(names)}
             types:NPIntArray = numpy.array(typesI,dtype=numpy.int32) #type:ignore
@@ -465,6 +475,32 @@ class FieldSplitPETSCSolver(PETSCSolver):
 
 
     def _perform_field_split(self):
+        if len(self._nullspaces)>0:
+            nsvects=[]
+            for ns in self._nullspaces:
+                if ns[0]=="constant":
+                    alldofinds=None
+                    for n in ns[1]:
+                        splt=n.split("/")
+                        mesh=self.problem.get_mesh("/".join(splt[:-1]),return_None_if_not_found=True)
+                        if mesh is None:
+                            mesh=self.problem.get_ode(n)
+                        typesI, names = mesh.describe_global_dofs()
+                        
+                        name_look_up={v:i for i,v in enumerate(names)}
+                        types:NPIntArray = numpy.array(typesI,dtype=numpy.int32)
+                        if alldofinds is None:
+                            alldofinds=types*0
+                        where = numpy.where(types == name_look_up[splt[-1]])[0]
+                        alldofinds[where]=1
+                    nsvects.append(alldofinds)                    
+                else:
+                    raise RuntimeError("Unknown nullspace type "+ns[0])
+                
+            petscvects=[PETSc.Vec().createWithArray(v) for v in nsvects]
+            ns=self.get_PETSc().NullSpace().create(constant=False,vectors=petscvects)
+            self.petsc_mat.setNullSpace(ns) #type:ignore
+            
         if self._fieldsplit_map is None:
             return
         where = numpy.where(self._fieldsplit_map == -1)[0] #type:ignore
@@ -509,9 +545,11 @@ class FieldSplitPETSCSolver(PETSCSolver):
             self.ksp.setOperators(self.petsc_mat,P)
 
     def setup_solver(self):
+        
         self.define_options()
         super().setup_solver()
         self._fieldsplit_map=None
+        self._nullspaces=[]        
         self.define_field_split()
         self._perform_field_split()
         self.define_preconditioner()

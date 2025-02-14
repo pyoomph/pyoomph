@@ -41,6 +41,7 @@ namespace py = pybind11;
 #include "../logging.hpp"
 #ifdef __gnu_linux__
 #include <fenv.h>
+#include "problem.hpp"
 #endif
 
 namespace pyoomph
@@ -445,6 +446,7 @@ void PyReg_Problem(py::module &m)
 		.def("_set_arc_length_theta_sqr", &pyoomph::Problem::set_arc_length_theta_sqr)
 		.def("_set_arclength_parameter", &pyoomph::Problem::set_arclength_parameter)
 		.def("_start_bifurcation_tracking", &pyoomph::Problem::start_bifurcation_tracking)
+		.def("_start_orbit_tracking", &pyoomph::Problem::start_orbit_tracking)
 		.def("_enable_store_local_dof_pt_in_elements", &pyoomph::Problem::enable_store_local_dof_pt_in_elements)
 		.def("after_bifurcation_tracking_step", &pyoomph::Problem::after_bifurcation_tracking_step)
 		.def("get_custom_residuals_jacobian", &pyoomph::Problem::get_custom_residuals_jacobian, py::arg("info"))

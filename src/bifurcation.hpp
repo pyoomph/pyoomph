@@ -336,4 +336,30 @@ namespace pyoomph
     //  void realign_C_vector(); //Reset the C-vector (which enforces the non-triviality of the eigenvector)
   };
 
+
+  // Find a periodic orbit by this
+  class PeriodicOrbitHandler : public oomph::AssemblyHandler
+  {
+    protected:
+      Problem *Problem_pt;                    // Pointer to the problem class
+      unsigned Ndof;                          // Degrees of freedom of the original problem (non-augmented)
+      std::vector<std::vector<double>> Tadd; // Additional time steps
+      std::vector<double> x0; // Start point for the periodic orbit
+      std::vector<double> n0; // Start normal for the periodic orbit
+      double d_plane; // Plane offset for the Poincare section 
+      double T; // Period of the periodic orbit
+      unsigned T_global_eqn,n_element;      
+      oomph::Vector<int> Count;
+    public:
+      unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
+      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd);
+      // Destructor (used for cleaning up memory)
+      ~PeriodicOrbitHandler();
+      unsigned n_tsteps() const {return 1+Tadd.size();}
+      unsigned long eqn_number(oomph::GeneralisedElement *const &elem_pt, const unsigned &ieqn_local);      
+      unsigned ndof(oomph::GeneralisedElement *const &elem_pt);
+      void get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals);
+      void get_jacobian(oomph::GeneralisedElement *const &elem_pt,oomph::Vector<double> &residuals,oomph::DenseMatrix<double> &jacobian);      
+  };
+
 }

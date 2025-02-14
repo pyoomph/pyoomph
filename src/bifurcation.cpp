@@ -3068,4 +3068,230 @@ namespace pyoomph
     return entry.residual_indices[residual_mode] >= 0;
   }
 
+
+
+
+
+  //////// PERIODIC ORBIT TRACKER
+
+  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd) : Problem_pt(problem_pt), T(period)
+  {
+    Ndof = problem_pt->ndof();    
+    n_element = problem_pt->mesh_pt()->nelement();
+    Tadd=tadd;
+    x0.resize(Ndof);
+    n0.resize(Ndof);
+    double nlength=0;
+    for (unsigned int i=0;i<Ndof;i++)
+    {
+        x0[i]=*(problem_pt->GetDofPtr()[i]); // Store the x0 for the  plane equation
+        n0[i]=Tadd.back()[i]-Tadd.front()[i]; // Store the normal vector for the plane equation
+        nlength+=n0[i]*n0[i];
+    }
+    nlength=std::sqrt(nlength);
+    for (unsigned int i=0;i<Ndof;i++)    {    n0[i]/=nlength;    }
+    d_plane=0;
+    for (unsigned int i=0;i<Ndof;i++)    d_plane+=n0[i]*x0[i]; // Distance of the plane to the origin
+
+
+    Count.resize(Ndof, 0);
+
+    // Loop over all the elements in the problem
+    unsigned n_element = problem_pt->mesh_pt()->nelement();
+    for (unsigned e = 0; e < n_element; e++)
+    {
+      GeneralisedElement *elem_pt = problem_pt->mesh_pt()->element_pt(e);
+      // Loop over the local freedoms in an element
+      unsigned n_var = elem_pt->ndof();
+      for (unsigned n = 0; n < n_var; n++)
+      {
+        // Increase the associated global equation number counter
+        ++Count[elem_pt->eqn_number(n)];
+      }
+    }    
+
+
+    for (unsigned int ti=0;ti<Tadd.size();ti++)
+    {      
+      if (Tadd[ti].size()!=Ndof) throw_runtime_error("The size of the additional time vector must be the same as the number of dofs at index "+std::to_string(ti));
+      for (unsigned int i=0;i<Ndof;i++)
+      {
+        problem_pt->GetDofPtr().push_back(&Tadd[ti][i]);    
+      }
+    }
+    T_global_eqn=problem_pt->GetDofPtr().size();
+    
+    problem_pt->GetDofPtr().push_back(&T); 
+    problem_pt->GetDofDistributionPt()->build(problem_pt->communicator_pt(), Ndof * (Tadd.size()+1)+1 , true); 
+    Problem_pt->GetSparcseAssembleWithArraysPA().resize(0);
+  }
+
+  PeriodicOrbitHandler::~PeriodicOrbitHandler()
+  {
+    Problem_pt->GetDofPtr().resize(Ndof);
+    Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(),
+                                              Ndof, false);
+    // Remove all previous sparse storage used during Jacobian assembly
+    Problem_pt->GetSparcseAssembleWithArraysPA().resize(0);
+  }
+  unsigned long PeriodicOrbitHandler::eqn_number(oomph::GeneralisedElement *const &elem_pt, const unsigned &ieqn_local)
+  {
+    unsigned raw_ndof = elem_pt->ndof();
+    unsigned long global_eqn;
+    unsigned nT=this->n_tsteps();  
+    //std::cout << "GETTING GLOB EQ " << ieqn_local << " " << nT << " " << raw_ndof << std::endl;  
+    if (ieqn_local < nT*raw_ndof)
+    {
+      unsigned tindex=ieqn_local/raw_ndof;
+      unsigned local_eqn=ieqn_local%raw_ndof;
+      global_eqn = Ndof*tindex+elem_pt->eqn_number(local_eqn);
+    }
+    else
+    {
+      global_eqn = T_global_eqn;
+    }    
+    //std::cout << " GIVES " << global_eqn << std::endl;  
+    return global_eqn;
+  }
+  
+ 
+
+  unsigned PeriodicOrbitHandler::ndof(oomph::GeneralisedElement *const &elem_pt)
+  {
+      unsigned nT=this->n_tsteps();    
+      return elem_pt->ndof()*nT +1; 
+  }
+
+  void PeriodicOrbitHandler::get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals)  
+  {
+      residuals.initialise(0.0);
+      unsigned raw_ndof = elem_pt->ndof();
+
+      DenseMatrix<double> jacobian(raw_ndof), M(raw_ndof);            
+      Vector<double> current_res(raw_ndof);
+      
+      Vector<double> dof_backup(raw_ndof);
+      Vector<double> previous_dofs(raw_ndof);
+      Vector<double> next_dofs(raw_ndof);
+      Vector<double> ddof_ds(raw_ndof);
+      oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        unsigned glob_eq=elem_pt->eqn_number(i);
+        dof_backup[i]=*(alldofs[glob_eq]);
+        previous_dofs[i]=Tadd[this->n_tsteps()-2][glob_eq];
+      }            
+
+      for (unsigned int ti=0;ti<this->n_tsteps();ti++)
+      {
+        
+        // Get the tangent at the current time step
+        // First get the next time step
+        if (ti<this->n_tsteps()-1)
+        {
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {
+            unsigned glob_eq=elem_pt->eqn_number(i);
+            next_dofs[i]=Tadd[ti][glob_eq];
+          }
+        }
+        else
+        {
+          next_dofs=dof_backup;
+        }
+        //std::cout << "AT " << ti << " PreviousDofs: " << previous_dofs[0] << "\t" << previous_dofs[1]  << std::endl;        
+        //std::cout << "AT " << ti << " Next Dofs: " << next_dofs[0] << "\t" << next_dofs[1]  << std::endl;
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+          ddof_ds[i]=(next_dofs[i]-previous_dofs[i])/(2*T)*this->n_tsteps();
+        }
+        //std::cout << "AT " << ti << " Dofs DS: " << ddof_ds[0] << "\t" << ddof_ds[1]  << std::endl;
+        
+
+
+
+        // Set the current dofs (at history)
+        if (ti>0)
+        {
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {
+            unsigned glob_eq=elem_pt->eqn_number(i);
+            *(alldofs[glob_eq])=Tadd[ti-1][glob_eq];
+            previous_dofs[i]=*(alldofs[glob_eq]); // Also update the previous dofs here
+          }
+        }
+        else
+        {
+          previous_dofs=dof_backup;
+        }
+
+        current_res.initialise(0.0);
+        M.initialise(0.0);
+        jacobian.initialise(0.0);  
+        elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);
+
+        if (ti==0)
+        {
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {
+            unsigned glob_eq=elem_pt->eqn_number(i);
+            *(alldofs[glob_eq])=dof_backup[i];            
+          }
+        }
+        
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          residuals[ti*raw_ndof + i] = current_res[i];
+          // Assuming identity mass matrix
+          for (unsigned j=0;j<raw_ndof;j++)          
+          {
+            residuals[ti*raw_ndof+i]+=M(i,j)*ddof_ds[j];
+          }
+
+        }
+      }
+
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        unsigned glob_eq=elem_pt->eqn_number(i);
+        *(this->Problem_pt->GetDofPtr()[glob_eq])=dof_backup[i];
+      }
+
+      double plane_eq=-d_plane;
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        unsigned glob_eq=elem_pt->eqn_number(i);
+        double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
+        plane_eq+=x*n0[glob_eq]/Count[glob_eq];
+      }
+
+      // Get the plane equation
+      residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+      //elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);    
+  }
+
+  void PeriodicOrbitHandler::get_jacobian(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
+  {
+    residuals.initialise(0.0);
+    this->get_residuals(elem_pt, residuals);
+    unsigned raw_ndof=elem_pt->ndof();
+    unsigned tot_ndof=raw_ndof*this->n_tsteps()+1;
+    oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+    for (unsigned int i=0;i<tot_ndof;i++)
+    {
+      unsigned glob_eq=this->eqn_number(elem_pt,i);
+      //std::cout << "GLOB EQN " << glob_eq << " of " << tot_ndof << std::endl;
+      double backup=*(alldofs[glob_eq]);
+      double eps=1e-8;
+      *(alldofs[glob_eq])=backup+eps;
+      oomph::Vector<double> res_p(raw_ndof*this->n_tsteps(),0.0);
+      this->get_residuals(elem_pt, res_p);
+      for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
+      {
+        jacobian(j,i)=(res_p[j]-residuals[j])/eps;
+      }
+      *(alldofs[glob_eq])=backup;
+
+    }
+  }
 }

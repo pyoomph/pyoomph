@@ -524,6 +524,11 @@ class BifurcationGUI:
             self.locate_bifurcation()
             self.save_all()
             self.update_plot()
+            
+        elif event.key=="p":
+            self.locate_bifurcation(pitchfork=True)
+            self.save_all()
+            self.update_plot()            
 
         print('you pressed', event.key, event.xdata, event.ydata)
         
@@ -879,10 +884,10 @@ class BifurcationGUI:
         return ds
 
 
-    def locate_bifurcation(self):
-        self.update_plot("BIFURCATION FINDING")
+    def locate_bifurcation(self,pitchfork:bool=False):
+        self.update_plot("BIFURCATION FINDING"+(" (PITCHFORK)" if pitchfork else ""))
         self.problem.solve_eigenproblem(self.neigen)
-        self.problem.activate_bifurcation_tracking(self._paramname)
+        self.problem.activate_bifurcation_tracking(self._paramname,"pitchfork" if pitchfork else None)
         self.problem.solve(max_newton_iterations=20)
         self._add_current_state()
         self.problem.deactivate_bifurcation_tracking()

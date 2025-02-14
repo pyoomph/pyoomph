@@ -3070,6 +3070,21 @@ class WeakContribution(BaseEquations):
         self.add_residual(weak(self.a,self.b,dimensional_dx=self.dimensional_dx,lagrangian=self.lagrangian,coordinate_system=self.coordinate_system),destination=self.destination)
 
 
+class ResidualContribution(BaseEquations):
+    """
+    A class to add an arbitrary residual contribution to the equations. This is useful to add additional terms to the equations that are not covered by the standard weak formulation. Essentially, it just adds ``r`` to the residuals.
+
+    Args:
+        r: The residual to add (can be e.g. a :py:func:`~pyoomph.expressions.generic.weak` contribution).        
+        destination: The residual destination of the weak contribution. Can be used to define multiple residuals.
+    """
+    def __init__(self,r:Union["ExpressionOrNum",str],destination:Optional[str]=None):
+        super(ResidualContribution, self).__init__()        
+        self.destination=destination
+        self.r=r
+
+    def define_residuals(self):
+        self.add_residual(self.r,destination=self.destination)
 
 class ForceZeroOnEigenSolve(BaseEquations):
     def __init__(self,default:Iterable[str],*,for_nonzero_angular:Optional[Iterable[str]]=None):
