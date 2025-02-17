@@ -1836,6 +1836,7 @@ namespace pyoomph
 					{
 						GiNaC::ex mass_part_se = (*__SE_to_struct_hessian)(masspart2);
 						for_code->subexpressions = __SE_to_struct_hessian->subexpressions;
+						for_code->mark_nonconstant_mass_matrix(); // If we have a Hessian contribution, then we clearly have a changing mass matrix
 						os << indent << "           ADD_TO_MASS_HESSIAN_" << (hanging_eqns ? "HANG" : "NOHANG") << "_" << (hang ? "HANG" : "NOHANG") << "_" << (hang2 ? "HANG" : "NOHANG") << "(";
 						print_simplest_form(mass_part_se, os, csrc_opts);
 						os << ")" << std::endl;
@@ -1998,6 +1999,7 @@ namespace pyoomph
 				os << indent << "    ADD_TO_MASS_MATRIX_" << (hanging_eqns ? "HANG" : "NOHANG") << "_" << (hang ? "HANG" : "NOHANG") << "(";
 				//		    mass_part.evalf().print(GiNaC::print_csrc_FEM(os,&csrc_opts));
 				//          GiNaC::factor(GiNaC::normal(GiNaC::expand(GiNaC::expand(mass_part).evalf()))).print(GiNaC::print_csrc_FEM(os,&csrc_opts));
+				//std::cout << mass_part << std::endl;
 				print_simplest_form(mass_part, os, csrc_opts);
 				os << ")" << std::endl;
 			}
@@ -2359,7 +2361,7 @@ namespace pyoomph
 
 	FiniteElementCode::FiniteElementCode() : residual_index(0), residual_names({""}), equations(NULL), bulk_code(NULL), opposite_interface_code(NULL), residual(std::vector<GiNaC::ex>{0}), dx(this, false), dX(this, true),dx_unity(this, false), elemsize_Eulerian(this, false, true), elemsize_Lagrangian(this, true, true), elemsize_Eulerian_Cart(this, false, false), elemsize_Lagrangian_Cart(this, true, false), nodal_delta(this), stage(0), nodal_dim(0), lagr_dim(0), coordinate_sys(&__no_coordinate_system), _x(GiNaC::indexed(GiNaC::potential_real_symbol("interpolated_x"), GiNaC::idx(0, 3))),
 											 _y(GiNaC::indexed(GiNaC::potential_real_symbol("interpolated_x"), GiNaC::idx(1, 3))), _z(GiNaC::indexed(GiNaC::potential_real_symbol("interpolated_x"))), integration_order(0), IC_names({""}), element_dim(-1), analytical_jacobian(true), analytical_position_jacobian(true), debug_jacobian_epsilon(0.0), with_adaptivity(true),
-											 coordinates_as_dofs(false), generate_hessian(false), assemble_hessian_by_symmetry(true), coordinate_space(""), stop_on_jacobian_difference(false), latex_printer(NULL)
+											 coordinates_as_dofs(false), generate_hessian(false), assemble_hessian_by_symmetry(true), coordinate_space(""), stop_on_jacobian_difference(false), latex_printer(NULL), has_constant_mass_matrix_for_sure(std::vector<bool>{false})
 	{
 		dx_unity.simple_unity_integral=true;
 		spaces.push_back(new PositionFiniteElementSpace(this, "Pos"));
@@ -2414,6 +2416,7 @@ namespace pyoomph
 		}
 		residual_index = residual_names.size();
 		residual_names.push_back(name);
+		has_constant_mass_matrix_for_sure.push_back(false);
 		residual.push_back(0);
 	}
 
@@ -4669,6 +4672,7 @@ namespace pyoomph
 
 				if (generate_hessian)
 				{
+					has_constant_mass_matrix_for_sure[resind]=true; // Might change during writing the Hessian
 					has_hessian_contribution[resind] = write_generic_Hessian(os, "HessianVectorProduct" + std::to_string(resind), residual[resind], true);
 					os << std::endl;
 				}
@@ -6625,6 +6629,8 @@ namespace pyoomph
 		init << " functable->res_jac_names=(char**)calloc(functable->num_res_jacs,sizeof(char*));" << std::endl;
 		init << " functable->missing_residual_assembly=(bool*)calloc(functable->num_res_jacs,sizeof(bool));" << std::endl;
 		cleanup << " pyoomph_tested_free(functable->missing_residual_assembly); functable->missing_residual_assembly=PYOOMPH_NULL; " << std::endl;
+		init << " functable->has_constant_mass_matrix_for_sure=(bool*)calloc(functable->num_res_jacs,sizeof(bool));" << std::endl;
+		cleanup << " pyoomph_tested_free(functable->has_constant_mass_matrix_for_sure); functable->has_constant_mass_matrix_for_sure=PYOOMPH_NULL; " << std::endl;
 
 		for (unsigned int resiind = 0; resiind < residual.size(); resiind++)
 		{
@@ -6655,7 +6661,7 @@ namespace pyoomph
 					this->write_required_shapes(init, "  ", "Hessian[" + std::to_string(resiind) + "]");
 			}
 			init << " functable->missing_residual_assembly[" << resiind << "] = " << (ignore_assemble_residuals.count(residual_names[resiind]) ? "true" : "false") << ";" << std::endl;
-		   				
+			init << " functable->has_constant_mass_matrix_for_sure[" << resiind << "] = " << (has_constant_mass_matrix_for_sure[resiind] ? "true" : "false") << ";" << std::endl;	
 		}
 		cleanup << " pyoomph_tested_free(functable->res_jac_names); functable->res_jac_names=PYOOMPH_NULL; " << std::endl;	
 

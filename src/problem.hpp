@@ -322,7 +322,7 @@ namespace pyoomph
     void set_arc_length_theta_sqr(double thetasqr) {Theta_squared=thetasqr;}
     double get_arc_length_theta_sqr() {return Theta_squared;}    
     void start_bifurcation_tracking(const std::string param, const std::string typus, const bool &blocksolve, const std::vector<double> &eigenv1, const std::vector<double> &eigenv2, const double &omega, std::map<std::string, std::string> special_residual_forms);
-    void start_orbit_tracking(const std::vector<std::vector<double>> &history,const double &T);
+    void start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots);
     void after_bifurcation_tracking_step();
     double &global_parameter(const std::string &n);
 

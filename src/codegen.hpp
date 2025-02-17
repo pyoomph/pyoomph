@@ -688,6 +688,7 @@ namespace pyoomph
       std::vector<bool> extra_steady_routine = {false};     // Time steppings involving explicit dependence of the previous DoFs, e.g. MPT, TPZ etc, require an additional routine for steady solving
       std::vector<bool> has_hessian_contribution = {false}; // Which of the residuals have hessian contributions
       std::vector<std::string> IC_names;                    // Names of the initial conditions
+      std::vector<bool> has_constant_mass_matrix_for_sure;
       virtual void write_code_initial_condition(std::ostream &os, unsigned int index, std::string name);
       virtual void write_code_Dirichlet_condition(std::ostream &os);
       virtual void write_code_integral_or_local_expressions(std::ostream &os, std::map<std::string, GiNaC::ex> &exprs, std::map<std::string, GiNaC::ex> &units, std::string funcname, std::string reqname, bool integrate);
@@ -705,6 +706,7 @@ namespace pyoomph
       virtual GiNaC::ex extract_spatial_integral_part(const GiNaC::ex &inp, bool eulerian, bool lagrangian);
 
    public:
+      virtual void mark_nonconstant_mass_matrix() {has_constant_mass_matrix_for_sure[residual_index]=false;}
       virtual void set_reference_point_for_IC_and_DBC(double x, double y, double z, double t, double nx, double ny, double nz)
       {
          reference_pos_for_IC_and_DBC[0] = x;

@@ -34,6 +34,8 @@ This file is strongly based  on the oomph-lib library (see thirdparty/oomph-lib/
 
 #include "elements.hpp"
 
+#include "periodic_bspline.hpp"
+
 using namespace oomph;
 
 namespace pyoomph
@@ -3074,7 +3076,7 @@ namespace pyoomph
 
   //////// PERIODIC ORBIT TRACKER
 
-  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd) : Problem_pt(problem_pt), T(period)
+  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots) : Problem_pt(problem_pt), T(period)
   {
     Ndof = problem_pt->ndof();    
     n_element = problem_pt->mesh_pt()->nelement();
@@ -3124,6 +3126,95 @@ namespace pyoomph
     problem_pt->GetDofPtr().push_back(&T); 
     problem_pt->GetDofDistributionPt()->build(problem_pt->communicator_pt(), Ndof * (Tadd.size()+1)+1 , true); 
     Problem_pt->GetSparcseAssembleWithArraysPA().resize(0);
+
+    
+    
+    if (knots.empty())
+    {
+      knots.resize(Tadd.size()+2);
+      for (unsigned int i=0;i<knots.size();i++)
+      {
+        knots[i]=i/(knots.size()-1.0);
+      }
+    }
+    else
+    {
+      if (knots.size()!=Tadd.size()+2) throw_runtime_error("The number of knots must be the same as the number of time steps");
+      if (std::fabs(knots.front())>1e-10 || std::fabs(knots.back())-1>1e-10) throw_runtime_error("The first and last knot must be 0 and 1");
+    }
+    if (bspline_order>=1)
+    {
+      this->basis = new PeriodicBSplineBasis(knots, bspline_order,gl_order);
+    }
+    this->s_knots=knots;
+    this->s_knots.front()=0.0;
+    this->s_knots.back()=1.0;
+
+    /// Setup the finite difference information here
+    if (bspline_order<0)
+    {
+      this->FD_ds_order=1; 
+      this->FD_ds_weights.resize(this->s_knots.size()-1);
+      this->FD_ds_inds.resize(this->s_knots.size()-1);
+      
+
+      for (unsigned int i=0;i<this->FD_ds_weights.size();i++)
+      {
+        if (bspline_order==-1)
+        {
+          // Central difference first order accurate
+          this->FD_ds_weights[i].resize(2);
+          this->FD_ds_inds[i].resize(2);
+          double si=get_knot_value(i);
+          double sip1=get_knot_value(i+1);
+          double sim1=get_knot_value(i-1);
+          this->FD_ds_weights[i][0]=-1.0/(sip1-sim1);
+          this->FD_ds_weights[i][1]=1.0/(sip1-sim1);
+          this->FD_ds_inds[i][0]=(i>0 ? i-1 : this->s_knots.size()-2);
+          this->FD_ds_inds[i][1]=(i+1)%(this->s_knots.size()-1);
+        }
+        else if (bspline_order==-2)
+        {
+          // Backward difference second order
+          this->FD_ds_weights[i].resize(3);
+          this->FD_ds_inds[i].resize(3);
+          double si=get_knot_value(i);
+          double sim1=get_knot_value(i-1);
+          double sim2=get_knot_value(i-2);
+          double dt = si-sim1;
+          double dtprev = sim1-sim2;              
+          this->FD_ds_weights[i][0]=1.0 / dt + 1.0 / (dt + dtprev);
+          this->FD_ds_weights[i][1]=-(dt + dtprev) / (dt * dtprev);
+          this->FD_ds_weights[i][2]=dt / ((dt + dtprev) * dtprev);
+          this->FD_ds_inds[i][0]=i;
+          this->FD_ds_inds[i][1]=get_periodic_knot_index(i-1);
+          this->FD_ds_inds[i][2]=get_periodic_knot_index(i-2);
+        }
+        else
+        {
+          throw_runtime_error("Unknown finite difference mode: "+std::to_string(bspline_order));
+        }        
+      }
+    }
+
+    std::cout << "Created PeriodicOrbitHandler with " << bspline_order  << "  BASIS " << basis << std::endl;
+
+  }
+
+  double PeriodicOrbitHandler::get_knot_value(int i)
+  {
+    double L=this->s_knots.back()-this->s_knots.front();
+    double offs=0.0;
+    while (i<0) { i+=this->s_knots.size()-1; offs-=L; }
+    while (i>=this->s_knots.size()-1) { i-=this->s_knots.size()-1; offs+=L; }
+    return this->s_knots[i]+offs;
+  }
+
+  unsigned PeriodicOrbitHandler::get_periodic_knot_index(int i)
+  {    
+    while (i<0) { i+=this->s_knots.size()-1; }
+    while (i>=this->s_knots.size()-1) { i-=this->s_knots.size()-1;  }
+    return i;
   }
 
   PeriodicOrbitHandler::~PeriodicOrbitHandler()
@@ -3133,6 +3224,7 @@ namespace pyoomph
                                               Ndof, false);
     // Remove all previous sparse storage used during Jacobian assembly
     Problem_pt->GetSparcseAssembleWithArraysPA().resize(0);
+    if (basis) delete this->basis; this->basis=NULL;
   }
   unsigned long PeriodicOrbitHandler::eqn_number(oomph::GeneralisedElement *const &elem_pt, const unsigned &ieqn_local)
   {
@@ -3171,90 +3263,144 @@ namespace pyoomph
       Vector<double> current_res(raw_ndof);
       
       Vector<double> dof_backup(raw_ndof);
-      Vector<double> previous_dofs(raw_ndof);
-      Vector<double> next_dofs(raw_ndof);
-      Vector<double> ddof_ds(raw_ndof);
+      
+      
+      Vector<unsigned> glob_eqs(raw_ndof);
       oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
       for (unsigned int i=0;i<raw_ndof;i++)
       {
-        unsigned glob_eq=elem_pt->eqn_number(i);
-        dof_backup[i]=*(alldofs[glob_eq]);
-        previous_dofs[i]=Tadd[this->n_tsteps()-2][glob_eq];
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          dof_backup[i]=*(alldofs[glob_eq]);          
+          glob_eqs[i]=glob_eq;
       }            
 
-      for (unsigned int ti=0;ti<this->n_tsteps();ti++)
-      {
-        
-        // Get the tangent at the current time step
-        // First get the next time step
-        if (ti<this->n_tsteps()-1)
-        {
-          for (unsigned int i=0;i<raw_ndof;i++)
+
+     ////////////// Finite differences in time //////////////
+      if (!this->basis)
+      {                                            
+        for (unsigned int ti=0;ti<this->n_tsteps();ti++)
+        {          
+          Vector<double> ddof_ds(raw_ndof,0.0);          
+          for (unsigned int ii=0;ii<this->FD_ds_inds[ti].size();ii++)
           {
-            unsigned glob_eq=elem_pt->eqn_number(i);
-            next_dofs[i]=Tadd[ti][glob_eq];
-          }
-        }
-        else
-        {
-          next_dofs=dof_backup;
-        }
-        //std::cout << "AT " << ti << " PreviousDofs: " << previous_dofs[0] << "\t" << previous_dofs[1]  << std::endl;        
-        //std::cout << "AT " << ti << " Next Dofs: " << next_dofs[0] << "\t" << next_dofs[1]  << std::endl;
-        for (unsigned int i=0;i<raw_ndof;i++)
-        {
-          ddof_ds[i]=(next_dofs[i]-previous_dofs[i])/(2*T)*this->n_tsteps();
-        }
-        //std::cout << "AT " << ti << " Dofs DS: " << ddof_ds[0] << "\t" << ddof_ds[1]  << std::endl;
-        
+            unsigned index=this->FD_ds_inds[ti][ii];
+            if (index>0)
+            {
+              index--;
+              for (unsigned int i=0;i<raw_ndof;i++)
+              {              
+                ddof_ds[i]+=this->FD_ds_weights[ti][ii]*Tadd[index][i];
+              }
+            }
+            else
+            {
+              for (unsigned int i=0;i<raw_ndof;i++)
+              {              
+                ddof_ds[i]+=this->FD_ds_weights[ti][ii]*dof_backup[i];
+              }
 
-
-
-        // Set the current dofs (at history)
-        if (ti>0)
-        {
-          for (unsigned int i=0;i<raw_ndof;i++)
-          {
-            unsigned glob_eq=elem_pt->eqn_number(i);
-            *(alldofs[glob_eq])=Tadd[ti-1][glob_eq];
-            previous_dofs[i]=*(alldofs[glob_eq]); // Also update the previous dofs here
-          }
-        }
-        else
-        {
-          previous_dofs=dof_backup;
-        }
-
-        current_res.initialise(0.0);
-        M.initialise(0.0);
-        jacobian.initialise(0.0);  
-        elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);
-
-        if (ti==0)
-        {
-          for (unsigned int i=0;i<raw_ndof;i++)
-          {
-            unsigned glob_eq=elem_pt->eqn_number(i);
-            *(alldofs[glob_eq])=dof_backup[i];            
-          }
-        }
-        
-        for (unsigned i = 0; i < raw_ndof; i++)
-        {
-          residuals[ti*raw_ndof + i] = current_res[i];
-          // Assuming identity mass matrix
-          for (unsigned j=0;j<raw_ndof;j++)          
-          {
-            residuals[ti*raw_ndof+i]+=M(i,j)*ddof_ds[j];
+            }
           }
 
+          // Setup the dofs          
+          if (ti>0)
+          {
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {
+              unsigned glob_eq=glob_eqs[i];
+              *(alldofs[glob_eq])=Tadd[ti-1][glob_eq];              
+            }
+          }            
+          current_res.initialise(0.0);
+          M.initialise(0.0);
+          jacobian.initialise(0.0);  
+          elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);                      
+          for (unsigned i = 0; i < raw_ndof; i++)
+          {
+            residuals[ti*raw_ndof + i] = current_res[i];              
+            for (unsigned j=0;j<raw_ndof;j++)          
+            {
+              residuals[ti*raw_ndof+i]+=M(i,j)*ddof_ds[j]/T;
+            }
+
+          }          
         }
       }
 
+      ////////////// NEW WAY //////////////
+      else
+      {
+        for (unsigned int ie=0;ie<this->basis->get_num_elements();ie++)
+        {
+          std::vector<double> w;
+          std::vector<unsigned> indices;
+          std::vector<std::vector<double>> psi_s;
+          std::vector<std::vector<double>> dpsi_ds;
+          unsigned nGL=this->basis->get_integration_info(ie,w,indices,psi_s,dpsi_ds);
+          for (unsigned iGL=0;iGL<nGL;iGL++)
+          {
+            std::vector<double> Ulocal(raw_ndof,0.0);
+            std::vector<double> dUdsLocal(raw_ndof,0.0);
+            for (unsigned int psi_index=0;psi_index<indices.size();psi_index++)
+            {
+              std::vector<double> U_at_index(raw_ndof,0.0);
+              if (indices[psi_index]==0) U_at_index=dof_backup;
+              else 
+              {
+                for (unsigned int i=0;i<raw_ndof;i++)
+                {
+                  U_at_index[i]=Tadd[indices[psi_index]-1][glob_eqs[i]];
+                }
+              }
+              // I guess this can be optimized and filled in a rotary buffer
+              for (unsigned int i=0;i<raw_ndof;i++)
+              {
+                Ulocal[i]+=psi_s[iGL][psi_index]*U_at_index[i];
+                dUdsLocal[i]+=dpsi_ds[iGL][psi_index]*U_at_index[i];
+              }
+            }
+
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {
+              unsigned glob_eq=elem_pt->eqn_number(i);
+              *(alldofs[glob_eqs[i]])=Ulocal[i]; // Set the unknowns
+            }
+
+            current_res.initialise(0.0);
+            M.initialise(0.0);
+            jacobian.initialise(0.0);  
+            elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);
+
+
+
+            for (unsigned int l=0;l<indices.size();l++)
+            {
+              unsigned ti=indices[l];
+              for (unsigned i = 0; i < raw_ndof; i++)
+              {
+                residuals[ti*raw_ndof + i] += current_res[i]*psi_s[iGL][l]*w[iGL];            
+                for (unsigned j=0;j<raw_ndof;j++)          
+                {
+                  //residuals[ti*raw_ndof+i]+=M(i,j)*dUdsLocal[j]/T*psi_s[iGL][l]*w[iGL];
+                  //residuals[ti*raw_ndof+i]-=M(i,j)*Ulocal[j]/T*dpsi_ds[iGL][l]*w[iGL];
+                  residuals[ti*raw_ndof+i]+=M(i,j)*0.5*(dUdsLocal[j]*psi_s[iGL][l]-Ulocal[j]*dpsi_ds[iGL][l])*w[iGL]/T;
+                  
+                }
+              }
+            }
+
+          }
+        }
+
+
+      }
+
+      ////////////// END //////////////
+
+
       for (unsigned int i=0;i<raw_ndof;i++)
       {
-        unsigned glob_eq=elem_pt->eqn_number(i);
-        *(this->Problem_pt->GetDofPtr()[glob_eq])=dof_backup[i];
+        *(this->Problem_pt->GetDofPtr()[glob_eqs[i]])=dof_backup[i];
       }
 
       double plane_eq=-d_plane;
@@ -3270,8 +3416,127 @@ namespace pyoomph
       //elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);    
   }
 
+  void PeriodicOrbitHandler::get_jacobian_time_fd_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
+  {
+      //std::cout << "FD MODE STARTED " << std::endl;
+      if (!Problem_pt->are_hessian_products_calculated_analytically())
+      {
+        throw_runtime_error("Cannot track periodic orbits without having analytical Hessian. Use Problem.setup_for_stability_analysis(analytic_hessian=True) before.");
+      }
+      residuals.initialise(0.0);
+      jacobian.initialise(0.0);
+      pyoomph::BulkElementBase * pyoomph_elem_pt=dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
+      auto *ft=pyoomph_elem_pt->get_code_instance()->get_func_table();
+      if (ft->current_res_jac<0) { throw_runtime_error("The current residual is not set in the element. Not sure whether this can happen"); }
+      bool has_constant_mass_matrix=ft->has_constant_mass_matrix_for_sure[ft->current_res_jac];
+      if (!has_constant_mass_matrix)
+      {
+        throw_runtime_error("The mass matrix must be constant for the time being for periodic orbits.");
+      }
+      unsigned raw_ndof = elem_pt->ndof();
+      DenseMatrix<double> J(raw_ndof), M(raw_ndof);            
+      Vector<double> current_res(raw_ndof);      
+      Vector<double> dof_backup(raw_ndof);            
+      Vector<unsigned> glob_eqs(raw_ndof);
+      oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          dof_backup[i]=*(alldofs[glob_eq]);          
+          glob_eqs[i]=glob_eq;
+      }            
+
+      Vector<double> ddof_ds(raw_ndof,0.0);          
+      for (unsigned int ti=0;ti<this->n_tsteps();ti++)
+      {          
+          ddof_ds.initialise(0.0);
+          for (unsigned int ii=0;ii<this->FD_ds_inds[ti].size();ii++)
+          {
+            unsigned index=this->FD_ds_inds[ti][ii];
+            if (index>0)
+            {
+              index--;
+              for (unsigned int i=0;i<raw_ndof;i++)
+              {              
+                ddof_ds[i]+=this->FD_ds_weights[ti][ii]*Tadd[index][i];
+              }
+            }
+            else
+            {
+              for (unsigned int i=0;i<raw_ndof;i++)
+              {              
+                ddof_ds[i]+=this->FD_ds_weights[ti][ii]*dof_backup[i];
+              }
+
+            }
+          }
+
+          // Setup the dofs          
+          if (ti>0)
+          {
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {
+              unsigned glob_eq=glob_eqs[i];
+              *(alldofs[glob_eq])=Tadd[ti-1][glob_eq];              
+            }
+          }            
+          current_res.initialise(0.0);
+          M.initialise(0.0);
+          J.initialise(0.0);  
+          elem_pt->get_jacobian_and_mass_matrix(current_res, J, M);                      
+          for (unsigned i = 0; i < raw_ndof; i++)
+          {
+            residuals[ti*raw_ndof + i] = current_res[i];
+            
+            for (unsigned j=0;j<raw_ndof;j++)          
+            {
+              jacobian(ti*raw_ndof+i,ti*raw_ndof+j)+=J(i,j); // Purely diagonal jacobian blocks here
+              residuals[ti*raw_ndof+i]+=M(i,j)*ddof_ds[j]/T;
+              // Now fill the jacobian (TODO: Assuming constant M here for the time being)
+              for (unsigned int ii=0;ii<this->FD_ds_inds[ti].size();ii++)
+              {
+                unsigned index=this->FD_ds_inds[ti][ii];
+                jacobian(ti*raw_ndof+i,index*raw_ndof+j)+=M(i,j)*this->FD_ds_weights[ti][ii]/T;
+              }
+              // and add the derivative with respect to T
+              jacobian(ti*raw_ndof+i,raw_ndof*this->n_tsteps())+=-M(i,j)*ddof_ds[j]/(T*T);
+
+            }
+
+          }          
+      }
+
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        *(this->Problem_pt->GetDofPtr()[glob_eqs[i]])=dof_backup[i];
+      }
+
+      double plane_eq=-d_plane;
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        unsigned glob_eq=glob_eqs[i];
+        double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
+        plane_eq+=x*n0[glob_eq]/Count[glob_eq];
+      }
+
+      // Get the plane equation
+      residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        unsigned glob_eq=glob_eqs[i];
+        jacobian(raw_ndof*this->n_tsteps(),i)=n0[glob_eq]/Count[glob_eq];
+      }
+  }
+
   void PeriodicOrbitHandler::get_jacobian(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
   {
+    if (!basis)
+    {
+      this->get_jacobian_time_fd_mode(elem_pt,residuals,jacobian);
+      return;
+    }
+
+
     residuals.initialise(0.0);
     this->get_residuals(elem_pt, residuals);
     unsigned raw_ndof=elem_pt->ndof();
@@ -3284,7 +3549,7 @@ namespace pyoomph
       double backup=*(alldofs[glob_eq]);
       double eps=1e-8;
       *(alldofs[glob_eq])=backup+eps;
-      oomph::Vector<double> res_p(raw_ndof*this->n_tsteps(),0.0);
+      oomph::Vector<double> res_p(raw_ndof*this->n_tsteps()+1,0.0);
       this->get_residuals(elem_pt, res_p);
       for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
       {
@@ -3292,6 +3557,107 @@ namespace pyoomph
       }
       *(alldofs[glob_eq])=backup;
 
+    }
+
+
+    if (!basis)
+    {
+      oomph::DenseMatrix<double> ana_J(raw_ndof*this->n_tsteps()+1,raw_ndof*this->n_tsteps()+1,0.0);
+      oomph::Vector<double> ana_res(raw_ndof*this->n_tsteps()+1,0.0);
+      this->get_jacobian_time_fd_mode(elem_pt,ana_res,ana_J);
+      for (unsigned int i=0;i<raw_ndof*this->n_tsteps();i++)
+      {
+        for (unsigned int j=0;j<raw_ndof*this->n_tsteps();j++)
+        {
+          if (std::fabs(ana_J(i,j)-jacobian(i,j))>1e-6)
+          {
+            std::cout << "JACOBIAN MISMATCH " << i << " " << j << " " << ana_J(i,j) << " " << jacobian(i,j) << std::endl;
+            std::cout << " raw_ndof " <<  raw_ndof<< " n_tsteps " << this->n_tsteps() << std::endl;
+          }
+        }
+      }
+      
+      return;
+    }
+  }
+
+  void PeriodicOrbitHandler::backup_dofs()
+  {
+    oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+    backed_up_dofs.resize(Ndof);
+    for (unsigned int i=0;i<Ndof;i++)
+    {
+      backed_up_dofs[i]=*(alldofs[i]);
+    }
+  }
+  void PeriodicOrbitHandler::restore_dofs()
+  {
+    if (backed_up_dofs.size()!=Ndof) throw_runtime_error("The dofs have not been backed up");
+    oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+    for (unsigned int i=0;i<Ndof;i++)
+    {
+      *(alldofs[i])=backed_up_dofs[i];
+    }
+    backed_up_dofs.resize(0); // Clear the backup
+  }
+  void PeriodicOrbitHandler::set_dofs_to_interpolated_values(const double &s)
+  {
+    if (backed_up_dofs.size()!=Ndof) throw_runtime_error("The dofs have not been backed up");
+    double clamped_s=s-floor(s);
+    oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+    unsigned start=0;
+    while (s_knots[start+1]<clamped_s) start++;
+    if (!basis)
+    {
+      double lambda=(clamped_s-s_knots[start])/(s_knots[start+1]-s_knots[start]);
+      if (start==0)
+      {
+        for (unsigned int i=0;i<Ndof;i++)
+        {
+          *(alldofs[i])=(1-lambda)*backed_up_dofs[i]+Tadd[start][i]*lambda;
+        }
+      }
+      else if (start>=Tadd.size())
+      {
+        for (unsigned int i=0;i<Ndof;i++)
+        {
+          *(alldofs[i])=lambda*backed_up_dofs[i]+Tadd.back()[i]*(1-lambda);
+        }
+      }
+      else
+      {
+        for (unsigned int i=0;i<Ndof;i++)
+        {
+          *(alldofs[i])=(1-lambda)*Tadd[start-1][i]+Tadd[start][i]*lambda;
+        }
+      }
+    }
+    else
+    {
+      std::vector<unsigned> indices;
+      std::vector<double> psi;
+      unsigned numsupport=basis->get_interpolation_info(clamped_s,indices,psi);
+      for (unsigned int i=0;i<Ndof;i++)
+      {
+          *(alldofs[i])=0.0;
+      }
+      for (unsigned int iindex=0;iindex<numsupport;iindex++)
+      {
+        if (indices[iindex]==0)
+        {
+          for (unsigned int i=0;i<Ndof;i++)
+          {
+            *(alldofs[i])+=psi[iindex]*backed_up_dofs[i];
+          }
+        }
+        else
+        {
+          for (unsigned int i=0;i<Ndof;i++)
+          {
+            *(alldofs[i])+=psi[iindex]*Tadd[indices[iindex]-1][i];
+          }
+        }
+      }
     }
   }
 }

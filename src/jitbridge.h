@@ -482,6 +482,8 @@ typedef struct JITFuncSpec_Table_FiniteElement
 
   char * domain_name;
 
+  bool * has_constant_mass_matrix_for_sure;
+
   // Exported functions
   void (*check_compiler_size)(unsigned long long,unsigned long long,char *);  
   double (*get_element_size)(void *);

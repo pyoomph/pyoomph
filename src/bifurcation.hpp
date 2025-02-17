@@ -338,6 +338,8 @@ namespace pyoomph
 
 
   // Find a periodic orbit by this
+  class PeriodicBSplineBasis;
+  
   class PeriodicOrbitHandler : public oomph::AssemblyHandler
   {
     protected:
@@ -350,9 +352,17 @@ namespace pyoomph
       double T; // Period of the periodic orbit
       unsigned T_global_eqn,n_element;      
       oomph::Vector<int> Count;
+      PeriodicBSplineBasis *basis=NULL;
+      std::vector<double> s_knots;
+      std::vector<double> backed_up_dofs;
+      // When we do not have a spline basis, we do finite differences. Here, we store the coefficients and indices
+      unsigned FD_ds_order;
+      std::vector<std::vector<double>> FD_ds_weights;
+      std::vector<std::vector<unsigned>> FD_ds_inds;
+      void get_jacobian_time_fd_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
     public:
       unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
-      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd);
+      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd,int bspline_order,int gl_order,std::vector<double> knots);
       // Destructor (used for cleaning up memory)
       ~PeriodicOrbitHandler();
       unsigned n_tsteps() const {return 1+Tadd.size();}
@@ -360,6 +370,11 @@ namespace pyoomph
       unsigned ndof(oomph::GeneralisedElement *const &elem_pt);
       void get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals);
       void get_jacobian(oomph::GeneralisedElement *const &elem_pt,oomph::Vector<double> &residuals,oomph::DenseMatrix<double> &jacobian);      
+      void backup_dofs();
+      void restore_dofs();
+      void set_dofs_to_interpolated_values(const double &s);
+      double get_knot_value(int i);
+      unsigned get_periodic_knot_index(int i);
   };
 
 }

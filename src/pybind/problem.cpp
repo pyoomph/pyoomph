@@ -345,6 +345,11 @@ void PyReg_Problem(py::module &m)
 		.def("set_eigenweight", &pyoomph::AzimuthalSymmetryBreakingHandler::set_eigenweight)	
 		.def("set_global_equations_forced_zero", &pyoomph::AzimuthalSymmetryBreakingHandler::set_global_equations_forced_zero);
 
+	py::class_<pyoomph::PeriodicOrbitHandler, oomph::AssemblyHandler>(m, "PeriodicOrbitHandler")
+		.def("backup_dofs", &pyoomph::PeriodicOrbitHandler::backup_dofs)	
+		.def("restore_dofs", &pyoomph::PeriodicOrbitHandler::restore_dofs)	
+		.def("set_dofs_to_interpolated_values", &pyoomph::PeriodicOrbitHandler::set_dofs_to_interpolated_values)	;		
+
 	py::class_<pyoomph::DynamicBulkElementInstance>(m, "DynamicBulkElementInstance")
 		.def("_exchange_mesh", &pyoomph::DynamicBulkElementInstance::set_bulk_mesh)
 		.def("link_external_data", &pyoomph::DynamicBulkElementInstance::link_external_data)
