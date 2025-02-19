@@ -3196,16 +3196,20 @@ namespace pyoomph
           this->FD_ds_inds[i][1]=get_periodic_knot_index(i-1);
           this->FD_ds_inds[i][2]=get_periodic_knot_index(i-2);
         }
-        else
+        else if (bspline_order==0)
         {
           this->FD_ds_weights[i].resize(1);
           //this->FD_ds_inds[i].resize(2);
-          double ds=get_knot_value(i)-get_knot_value(i-1);
+          double ds=get_knot_value(i+1)-get_knot_value(i);
           this->FD_ds_weights[i][0]=1/ds;
           //this->FD_ds_weights[i][1]=-1/ds;
           std::cout << "FILLING FOR NTSTEPS " << this->n_tsteps() << " ds " << ds <<"" << " ds0 " << get_knot_value(i) << "ds- " << get_knot_value(i-1) <<std::endl;
-          //throw_runtime_error("Unknown finite difference mode: "+std::to_string(bspline_order));
-        }        
+          
+        } 
+        else
+        {
+          throw_runtime_error("Unknown finite difference mode: "+std::to_string(bspline_order));       
+        }
       }
     }
 
@@ -3286,27 +3290,17 @@ namespace pyoomph
       for (unsigned int ti=0;ti<ntsteps-1;ti++)  // Only loop to n-1 (the last, periodic dofs are handled via identity matrices)
       {
         double invds=this->FD_ds_weights[ti][0];
-        unsigned index0,indexminus;
-        double *U0,*Uminus;
-        if (ti>0)
-        {
-          index0=ti;
-          indexminus=ti-1;
-          U0=&(Tadd[index0-1][0]);
-          if (ti>1) Uminus=&(Tadd[indexminus-1][0]);
-          else Uminus=&(dof_backup[0]);          
-        }
-        else
-        {
-          index0=0;
-          indexminus=ntsteps-2;
-          U0=&(dof_backup[0]);
-          Uminus=&(Tadd[indexminus-1][0]);
-        }        
+        unsigned index0,indexplus;
+        double *U0,*Uplus;
+        index0=ti;
+        indexplus=ti+1;
+        if (ti>0) U0=&(Tadd[index0-1][0]);          
+        else U0=&(dof_backup[0]);
+        Uplus=&(Tadd[indexplus-1][0]);             
         for (unsigned int i=0;i<raw_ndof;i++)
         {
-            U[i]=0.5*(U0[i]+Uminus[i]);
-            dUds[i]=invds*(U0[i]-Uminus[i]);
+            U[i]=0.5*(U0[i]+Uplus[i]);
+            dUds[i]=invds*(Uplus[i]-U0[i]);
             *(alldofs[glob_eqs[i]])=U[i];
         }
         current_res.initialise(0.0);

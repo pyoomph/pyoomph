@@ -198,7 +198,7 @@ class SlepcEigenSolver(GenericEigenSolver):
         _SetDefaultPetscOption("st_mat_mumps_icntl_6",5)
         return self
 
-    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
+    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple["DefaultMatrixType"]]=None)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
         if which!="LM":
             raise RuntimeError("Implement which="+str(which))
         if OPpart is not None:
@@ -206,13 +206,13 @@ class SlepcEigenSolver(GenericEigenSolver):
 #        if v0 is not None:
 #            raise RuntimeError("Implement v0="+str(v0))
         
-        if False:
-            n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
-
-            #print("M value ranges",numpy.amin(M_val),numpy.amax(M_val)) #type:ignore
-            M = PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(M_rs, M_ci, M_val)) #type:ignore
-            J = PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(J_rs, J_ci, -J_val)) #type:ignore
-
+        if custom_J_and_M is not None:
+            Jin=custom_J_and_M[0]
+            Min=custom_J_and_M[1]
+            n=Jin.shape[0]
+            M=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Min.indptr, Min.indices, Min.data))
+            J=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Jin.indptr, Jin.indices, Jin.data))
+            
         else:
             Jin,Min,n,complex_mat=self.get_J_M_n_and_type()
             upscale_to_complex=complex_mat and (PETSc.ScalarType in {numpy.float64,numpy.float128,numpy.float32})

@@ -348,6 +348,7 @@ void PyReg_Problem(py::module &m)
 	py::class_<pyoomph::PeriodicOrbitHandler, oomph::AssemblyHandler>(m, "PeriodicOrbitHandler")
 		.def("backup_dofs", &pyoomph::PeriodicOrbitHandler::backup_dofs)	
 		.def("restore_dofs", &pyoomph::PeriodicOrbitHandler::restore_dofs)	
+		.def("get_base_ndof",&pyoomph::PeriodicOrbitHandler::get_problem_ndof)
 		.def("set_dofs_to_interpolated_values", &pyoomph::PeriodicOrbitHandler::set_dofs_to_interpolated_values)	;		
 
 	py::class_<pyoomph::DynamicBulkElementInstance>(m, "DynamicBulkElementInstance")
