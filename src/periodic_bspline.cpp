@@ -94,10 +94,10 @@ PeriodicBSplineBasis::PeriodicBSplineBasis(const std::vector<double> &knots, uns
       this->augknots=newknots;
     }
 
-    for (int i = 0; i < this->augknots.size(); i++)
+    /*for (int i = 0; i < this->augknots.size(); i++)
     {
         std::cout << this->augknots[i] << std::endl;
-    }
+    }*/
 
     // Calculate the integrals of the B-splines
   /*  integral_psi.resize(knots.size()-1);

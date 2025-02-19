@@ -3112,6 +3112,14 @@ namespace pyoomph
       }
     }    
 
+    // Floquet mode: We explicitly store the 0th dofs at the last step 
+    if (bspline_order==0)
+    {
+      floquet_mode=true;
+      Tadd.push_back(x0);
+    }
+    else floquet_mode=false;
+
 
     for (unsigned int ti=0;ti<Tadd.size();ti++)
     {      
@@ -3151,13 +3159,11 @@ namespace pyoomph
     this->s_knots.back()=1.0;
 
     /// Setup the finite difference information here
-    if (bspline_order<0)
+    if (bspline_order<=0)
     {
       this->FD_ds_order=1; 
       this->FD_ds_weights.resize(this->s_knots.size()-1);
-      this->FD_ds_inds.resize(this->s_knots.size()-1);
-      
-
+      this->FD_ds_inds.resize(this->s_knots.size()-1);      
       for (unsigned int i=0;i<this->FD_ds_weights.size();i++)
       {
         if (bspline_order==-1)
@@ -3192,7 +3198,13 @@ namespace pyoomph
         }
         else
         {
-          throw_runtime_error("Unknown finite difference mode: "+std::to_string(bspline_order));
+          this->FD_ds_weights[i].resize(1);
+          //this->FD_ds_inds[i].resize(2);
+          double ds=get_knot_value(i)-get_knot_value(i-1);
+          this->FD_ds_weights[i][0]=1/ds;
+          //this->FD_ds_weights[i][1]=-1/ds;
+          std::cout << "FILLING FOR NTSTEPS " << this->n_tsteps() << " ds " << ds <<"" << " ds0 " << get_knot_value(i) << "ds- " << get_knot_value(i-1) <<std::endl;
+          //throw_runtime_error("Unknown finite difference mode: "+std::to_string(bspline_order));
         }        
       }
     }
@@ -3254,19 +3266,319 @@ namespace pyoomph
       return elem_pt->ndof()*nT +1; 
   }
 
-  void PeriodicOrbitHandler::get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals)  
+
+
+  void PeriodicOrbitHandler::get_residuals_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)  
   {
       residuals.initialise(0.0);
       unsigned raw_ndof = elem_pt->ndof();
-
       DenseMatrix<double> jacobian(raw_ndof), M(raw_ndof);            
-      Vector<double> current_res(raw_ndof);
-      
-      Vector<double> dof_backup(raw_ndof);
-      
-      
+      Vector<double> current_res(raw_ndof),dof_backup(raw_ndof),U(raw_ndof),dUds(raw_ndof);             
+      Vector<unsigned> glob_eqs(raw_ndof);
+      oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();  
+      unsigned ntsteps=this->n_tsteps();
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          dof_backup[i]=*(alldofs[glob_eq]);          
+          glob_eqs[i]=glob_eq;
+      }
+      for (unsigned int ti=0;ti<ntsteps-1;ti++)  // Only loop to n-1 (the last, periodic dofs are handled via identity matrices)
+      {
+        double invds=this->FD_ds_weights[ti][0];
+        unsigned index0,indexminus;
+        double *U0,*Uminus;
+        if (ti>0)
+        {
+          index0=ti;
+          indexminus=ti-1;
+          U0=&(Tadd[index0-1][0]);
+          if (ti>1) Uminus=&(Tadd[indexminus-1][0]);
+          else Uminus=&(dof_backup[0]);          
+        }
+        else
+        {
+          index0=0;
+          indexminus=ntsteps-2;
+          U0=&(dof_backup[0]);
+          Uminus=&(Tadd[indexminus-1][0]);
+        }        
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+            U[i]=0.5*(U0[i]+Uminus[i]);
+            dUds[i]=invds*(U0[i]-Uminus[i]);
+            *(alldofs[glob_eqs[i]])=U[i];
+        }
+        current_res.initialise(0.0);
+        M.initialise(0.0);
+        jacobian.initialise(0.0);  
+        if (!parameter_pt) elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);                      
+        else elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt,current_res, jacobian, M);
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          residuals[ti*raw_ndof + i] = current_res[i];              
+          for (unsigned j=0;j<raw_ndof;j++)          
+          {
+            residuals[ti*raw_ndof+i]+=M(i,j)*dUds[j]/T;
+          }
+        }   
+        /*if (ti==0)
+        {
+          for (unsigned i = 0; i < raw_ndof; i++)
+          {
+            residuals[(ntsteps-1)*raw_ndof + i] = current_res[i];              
+            for (unsigned j=0;j<raw_ndof;j++)          
+            {
+              residuals[(ntsteps-1)*raw_ndof+i]-=M(i,j)*dUds[j]/T;
+            }
+          }
+        }*/
+      }
+
+      // Fill the connection
+      //std::cout << "CONNECTION INDEX" << ntsteps << std::endl;
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        residuals[(ntsteps-1)*raw_ndof+i]+=Tadd[ntsteps-2][i]-dof_backup[i];
+      }
+
+
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        *(this->Problem_pt->GetDofPtr()[glob_eqs[i]])=dof_backup[i];
+      }
+
+      if (!parameter_pt)
+      {
+        double plane_eq=-d_plane;
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
+          plane_eq+=x*n0[glob_eq]/Count[glob_eq];
+        }      
+        residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+      }
+  }
+
+  void PeriodicOrbitHandler::get_residuals_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)  
+  {
+      residuals.initialise(0.0);
+      unsigned raw_ndof = elem_pt->ndof();
+      DenseMatrix<double> jacobian(raw_ndof), M(raw_ndof);            
+      Vector<double> current_res(raw_ndof),dof_backup(raw_ndof);             
+      Vector<unsigned> glob_eqs(raw_ndof);
+      oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();      
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          dof_backup[i]=*(alldofs[glob_eq]);          
+          glob_eqs[i]=glob_eq;
+      }     
+
+      for (unsigned int ti=0;ti<this->n_tsteps();ti++)
+      {          
+        Vector<double> ddof_ds(raw_ndof,0.0);          
+        for (unsigned int ii=0;ii<this->FD_ds_inds[ti].size();ii++)
+        {
+          unsigned index=this->FD_ds_inds[ti][ii];
+          if (index>0)
+          {
+            index--;
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {              
+              ddof_ds[i]+=this->FD_ds_weights[ti][ii]*Tadd[index][i];
+            }
+          }
+          else
+          {
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {              
+              ddof_ds[i]+=this->FD_ds_weights[ti][ii]*dof_backup[i];
+            }
+
+          }
+        }
+
+        // Setup the dofs          
+        if (ti>0)
+        {
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {
+            unsigned glob_eq=glob_eqs[i];
+            *(alldofs[glob_eq])=Tadd[ti-1][glob_eq];              
+          }
+        }            
+        current_res.initialise(0.0);
+        M.initialise(0.0);
+        jacobian.initialise(0.0);  
+        if (!parameter_pt) elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);                      
+        else elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt,current_res, jacobian, M);
+        for (unsigned i = 0; i < raw_ndof; i++)
+        {
+          residuals[ti*raw_ndof + i] = current_res[i];              
+          for (unsigned j=0;j<raw_ndof;j++)          
+          {
+            residuals[ti*raw_ndof+i]+=M(i,j)*ddof_ds[j]/T;
+          }
+
+        }          
+      }
+
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        *(this->Problem_pt->GetDofPtr()[glob_eqs[i]])=dof_backup[i];
+      }
+
+      if (!parameter_pt)
+      {
+        double plane_eq=-d_plane;
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
+          plane_eq+=x*n0[glob_eq]/Count[glob_eq];
+        }      
+        residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+      }
+
+  }
+
+  void PeriodicOrbitHandler::get_residuals_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)  
+  {
+      residuals.initialise(0.0);
+      unsigned raw_ndof = elem_pt->ndof();
+      DenseMatrix<double> jacobian(raw_ndof), M(raw_ndof);            
+      Vector<double> current_res(raw_ndof),dof_backup(raw_ndof);             
+      Vector<unsigned> glob_eqs(raw_ndof);
+      oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();      
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          dof_backup[i]=*(alldofs[glob_eq]);          
+          glob_eqs[i]=glob_eq;
+      }   
+
+      for (unsigned int ie=0;ie<this->basis->get_num_elements();ie++)
+      {
+        std::vector<double> w;
+        std::vector<unsigned> indices;
+        std::vector<std::vector<double>> psi_s;
+        std::vector<std::vector<double>> dpsi_ds;
+        unsigned nGL=this->basis->get_integration_info(ie,w,indices,psi_s,dpsi_ds);
+        for (unsigned iGL=0;iGL<nGL;iGL++)
+        {
+          std::vector<double> Ulocal(raw_ndof,0.0);
+          std::vector<double> dUdsLocal(raw_ndof,0.0);
+          for (unsigned int psi_index=0;psi_index<indices.size();psi_index++)
+          {
+            std::vector<double> U_at_index(raw_ndof,0.0);
+            if (indices[psi_index]==0) U_at_index=dof_backup;
+            else 
+            {
+              for (unsigned int i=0;i<raw_ndof;i++)
+              {
+                U_at_index[i]=Tadd[indices[psi_index]-1][glob_eqs[i]];
+              }
+            }
+            // I guess this can be optimized and filled in a rotary buffer
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {
+              Ulocal[i]+=psi_s[iGL][psi_index]*U_at_index[i];
+              dUdsLocal[i]+=dpsi_ds[iGL][psi_index]*U_at_index[i];
+            }
+          }
+
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {
+            unsigned glob_eq=elem_pt->eqn_number(i);
+            *(alldofs[glob_eqs[i]])=Ulocal[i]; // Set the unknowns
+          }
+
+          current_res.initialise(0.0);
+          M.initialise(0.0);
+          jacobian.initialise(0.0);  
+          if (!parameter_pt) elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);                      
+          else elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt,current_res, jacobian, M);
+
+          for (unsigned int l=0;l<indices.size();l++)
+          {
+            unsigned ti=indices[l];
+            for (unsigned i = 0; i < raw_ndof; i++)
+            {
+              residuals[ti*raw_ndof + i] += current_res[i]*psi_s[iGL][l]*w[iGL];            
+              for (unsigned j=0;j<raw_ndof;j++)          
+              {
+                residuals[ti*raw_ndof+i]+=M(i,j)*dUdsLocal[j]/T*psi_s[iGL][l]*w[iGL];                
+              }
+            }
+          }
+        }
+      }
+
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        *(this->Problem_pt->GetDofPtr()[glob_eqs[i]])=dof_backup[i];
+      }
+      if (!parameter_pt)
+      {
+        double plane_eq=-d_plane;
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
+          plane_eq+=x*n0[glob_eq]/Count[glob_eq];
+        }      
+        residuals[raw_ndof*this->n_tsteps()]=plane_eq;    
+      }
+  }
+
+  void PeriodicOrbitHandler::get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals)  
+  {        
+      if (!this->basis)
+      {                
+        if (floquet_mode) this->get_residuals_floquet_mode(elem_pt,residuals,NULL);     
+        else this->get_residuals_time_nodal_mode(elem_pt,residuals,NULL);                     
+      }      
+      else
+      {       
+        this->get_residuals_bspline_mode(elem_pt,residuals,NULL);
+      }  
+  }
+
+
+  void PeriodicOrbitHandler::get_jacobian_time_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
+  {
+      if (!Problem_pt->are_hessian_products_calculated_analytically())
+      {
+        throw_runtime_error("Cannot track periodic orbits without having analytical Hessian. Use Problem.setup_for_stability_analysis(analytic_hessian=True) before.");
+      }
+      residuals.initialise(0.0);
+      jacobian.initialise(0.0);
+      pyoomph::BulkElementBase * pyoomph_elem_pt=dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
+      auto *ft=pyoomph_elem_pt->get_code_instance()->get_func_table();
+      if (ft->current_res_jac<0) { throw_runtime_error("The current residual is not set in the element. Not sure whether this can happen"); }
+      bool has_constant_mass_matrix=ft->has_constant_mass_matrix_for_sure[ft->current_res_jac];
+      /*if (!has_constant_mass_matrix)
+      {
+        throw_runtime_error("The mass matrix must be constant for the time being for periodic orbits.");
+      }*/
+      unsigned raw_ndof = elem_pt->ndof();
+      DenseMatrix<double> J(raw_ndof), M(raw_ndof);            
+      Vector<double> current_res(raw_ndof);      
+      Vector<double> dof_backup(raw_ndof);            
       Vector<unsigned> glob_eqs(raw_ndof);
       oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+
+      oomph::Vector<double> Ulocal(raw_ndof,0.0);
+      oomph::Vector<double> dUdsLocal(raw_ndof,0.0);
+
+      std::vector<SinglePassMultiAssembleInfo> multi_assm;
+      multi_assm.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &current_res, &J, &M));
+      oomph::DenseMatrix<double> dMdU_dUdsterm(raw_ndof,raw_ndof,0.0);
+      oomph::DenseMatrix<double> dummy_dJdU_dUdsterm(raw_ndof,raw_ndof,0.0);            
+      multi_assm.back().add_hessian(dUdsLocal, &dummy_dJdU_dUdsterm, &dMdU_dUdsterm);
+
       for (unsigned int i=0;i<raw_ndof;i++)
       {
           unsigned glob_eq=elem_pt->eqn_number(i);
@@ -3274,64 +3586,10 @@ namespace pyoomph
           glob_eqs[i]=glob_eq;
       }            
 
-
-     ////////////// Finite differences in time //////////////
-      if (!this->basis)
-      {                                            
-        for (unsigned int ti=0;ti<this->n_tsteps();ti++)
-        {          
-          Vector<double> ddof_ds(raw_ndof,0.0);          
-          for (unsigned int ii=0;ii<this->FD_ds_inds[ti].size();ii++)
-          {
-            unsigned index=this->FD_ds_inds[ti][ii];
-            if (index>0)
-            {
-              index--;
-              for (unsigned int i=0;i<raw_ndof;i++)
-              {              
-                ddof_ds[i]+=this->FD_ds_weights[ti][ii]*Tadd[index][i];
-              }
-            }
-            else
-            {
-              for (unsigned int i=0;i<raw_ndof;i++)
-              {              
-                ddof_ds[i]+=this->FD_ds_weights[ti][ii]*dof_backup[i];
-              }
-
-            }
-          }
-
-          // Setup the dofs          
-          if (ti>0)
-          {
-            for (unsigned int i=0;i<raw_ndof;i++)
-            {
-              unsigned glob_eq=glob_eqs[i];
-              *(alldofs[glob_eq])=Tadd[ti-1][glob_eq];              
-            }
-          }            
-          current_res.initialise(0.0);
-          M.initialise(0.0);
-          jacobian.initialise(0.0);  
-          elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);                      
-          for (unsigned i = 0; i < raw_ndof; i++)
-          {
-            residuals[ti*raw_ndof + i] = current_res[i];              
-            for (unsigned j=0;j<raw_ndof;j++)          
-            {
-              residuals[ti*raw_ndof+i]+=M(i,j)*ddof_ds[j]/T;
-            }
-
-          }          
-        }
-      }
-
-      ////////////// NEW WAY //////////////
-      else
+      
+      unsigned Teq=raw_ndof*this->n_tsteps();
+      for (unsigned int ie=0;ie<this->basis->get_num_elements();ie++)
       {
-        for (unsigned int ie=0;ie<this->basis->get_num_elements();ie++)
-        {
           std::vector<double> w;
           std::vector<unsigned> indices;
           std::vector<std::vector<double>> psi_s;
@@ -3339,8 +3597,8 @@ namespace pyoomph
           unsigned nGL=this->basis->get_integration_info(ie,w,indices,psi_s,dpsi_ds);
           for (unsigned iGL=0;iGL<nGL;iGL++)
           {
-            std::vector<double> Ulocal(raw_ndof,0.0);
-            std::vector<double> dUdsLocal(raw_ndof,0.0);
+            Ulocal.initialise(0.0);
+            dUdsLocal.initialise(0.0);
             for (unsigned int psi_index=0;psi_index<indices.size();psi_index++)
             {
               std::vector<double> U_at_index(raw_ndof,0.0);
@@ -3368,11 +3626,18 @@ namespace pyoomph
 
             current_res.initialise(0.0);
             M.initialise(0.0);
-            jacobian.initialise(0.0);  
-            elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);
-
-
-
+            J.initialise(0.0);  
+            if (has_constant_mass_matrix)
+            {
+              elem_pt->get_jacobian_and_mass_matrix(current_res, J, M);
+            }
+            else
+            {            
+              dMdU_dUdsterm.initialise(0.0);
+              dummy_dJdU_dUdsterm.initialise(0.0);
+              pyoomph_elem_pt->get_multi_assembly(multi_assm);
+            }
+            
             for (unsigned int l=0;l<indices.size();l++)
             {
               unsigned ti=indices[l];
@@ -3380,23 +3645,38 @@ namespace pyoomph
               {
                 residuals[ti*raw_ndof + i] += current_res[i]*psi_s[iGL][l]*w[iGL];            
                 for (unsigned j=0;j<raw_ndof;j++)          
-                {
-                  //residuals[ti*raw_ndof+i]+=M(i,j)*dUdsLocal[j]/T*psi_s[iGL][l]*w[iGL];
+                {                  
+                  residuals[ti*raw_ndof+i]+=M(i,j)*dUdsLocal[j]/T*psi_s[iGL][l]*w[iGL];
                   //residuals[ti*raw_ndof+i]-=M(i,j)*Ulocal[j]/T*dpsi_ds[iGL][l]*w[iGL];
-                  residuals[ti*raw_ndof+i]+=M(i,j)*0.5*(dUdsLocal[j]*psi_s[iGL][l]-Ulocal[j]*dpsi_ds[iGL][l])*w[iGL]/T;
+                  //residuals[ti*raw_ndof+i]+=M(i,j)*0.5*(dUdsLocal[j]*psi_s[iGL][l]-Ulocal[j]*dpsi_ds[iGL][l])*w[iGL]/T;                  
+                  // and add the derivative with respect to T
+                  //jacobian(ti*raw_ndof+i,Teq)+=-M(i,j)*0.5*(dUdsLocal[j]*psi_s[iGL][l]-Ulocal[j]*dpsi_ds[iGL][l])*w[iGL]/(T*T);                  
+                  jacobian(ti*raw_ndof+i,Teq)+=-M(i,j)*dUdsLocal[j]*psi_s[iGL][l]*w[iGL]/(T*T);                  
                   
+                }
+                for (unsigned int l2=0;l2<indices.size();l2++)
+                {
+                  unsigned ti2=indices[l2];
+                  for (unsigned j=0;j<raw_ndof;j++)          
+                  {                  
+                    
+                      jacobian(ti*raw_ndof+i,ti2*raw_ndof+j)+=J(i,j)*psi_s[iGL][l]*psi_s[iGL][l2]*w[iGL];
+                      //jacobian(ti*raw_ndof+i,ti2*raw_ndof+j)+=M(i,j)*0.5*(dpsi_ds[iGL][l2]*psi_s[iGL][l]-psi_s[iGL][l2]*dpsi_ds[iGL][l])*w[iGL]/T;                  
+                      jacobian(ti*raw_ndof+i,ti2*raw_ndof+j)+=M(i,j)*(dpsi_ds[iGL][l2]*psi_s[iGL][l])*w[iGL]/T;                  
+                      if (!has_constant_mass_matrix)
+                      {
+                        jacobian(ti*raw_ndof+i,ti2*raw_ndof+j)+=dMdU_dUdsterm(i,j)/T*psi_s[iGL][l]*psi_s[iGL][l2]*w[iGL];
+                      }        
+                    
+                  }
                 }
               }
             }
 
           }
-        }
-
-
       }
 
-      ////////////// END //////////////
-
+    
 
       for (unsigned int i=0;i<raw_ndof;i++)
       {
@@ -3406,17 +3686,22 @@ namespace pyoomph
       double plane_eq=-d_plane;
       for (unsigned int i=0;i<raw_ndof;i++)
       {
-        unsigned glob_eq=elem_pt->eqn_number(i);
+        unsigned glob_eq=glob_eqs[i];
         double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
         plane_eq+=x*n0[glob_eq]/Count[glob_eq];
       }
 
       // Get the plane equation
       residuals[raw_ndof*this->n_tsteps()]=plane_eq;
-      //elem_pt->get_jacobian_and_mass_matrix(residuals, jacobian, M);    
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        unsigned glob_eq=glob_eqs[i];
+        jacobian(Teq,i)=n0[glob_eq]/Count[glob_eq];
+      }
+
   }
 
-  void PeriodicOrbitHandler::get_jacobian_time_fd_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
+  void PeriodicOrbitHandler::get_jacobian_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
   {
       //std::cout << "FD MODE STARTED " << std::endl;
       if (!Problem_pt->are_hessian_products_calculated_analytically())
@@ -3429,16 +3714,24 @@ namespace pyoomph
       auto *ft=pyoomph_elem_pt->get_code_instance()->get_func_table();
       if (ft->current_res_jac<0) { throw_runtime_error("The current residual is not set in the element. Not sure whether this can happen"); }
       bool has_constant_mass_matrix=ft->has_constant_mass_matrix_for_sure[ft->current_res_jac];
-      if (!has_constant_mass_matrix)
+      /*if (!has_constant_mass_matrix)
       {
         throw_runtime_error("The mass matrix must be constant for the time being for periodic orbits.");
-      }
+      }*/
       unsigned raw_ndof = elem_pt->ndof();
       DenseMatrix<double> J(raw_ndof), M(raw_ndof);            
       Vector<double> current_res(raw_ndof);      
       Vector<double> dof_backup(raw_ndof);            
       Vector<unsigned> glob_eqs(raw_ndof);
+      unsigned Teq=raw_ndof*this->n_tsteps();
       oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+      Vector<double> ddof_ds(raw_ndof,0.0);          
+
+      std::vector<SinglePassMultiAssembleInfo> multi_assm;
+      multi_assm.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &current_res, &J, &M));
+      oomph::DenseMatrix<double> dMdU_dUdsterm(raw_ndof,raw_ndof,0.0);
+      oomph::DenseMatrix<double> dummy_dJdU_dUdsterm(raw_ndof,raw_ndof,0.0);            
+      multi_assm.back().add_hessian(ddof_ds, &dummy_dJdU_dUdsterm, &dMdU_dUdsterm);
       for (unsigned int i=0;i<raw_ndof;i++)
       {
           unsigned glob_eq=elem_pt->eqn_number(i);
@@ -3446,7 +3739,7 @@ namespace pyoomph
           glob_eqs[i]=glob_eq;
       }            
 
-      Vector<double> ddof_ds(raw_ndof,0.0);          
+      
       for (unsigned int ti=0;ti<this->n_tsteps();ti++)
       {          
           ddof_ds.initialise(0.0);
@@ -3483,7 +3776,16 @@ namespace pyoomph
           current_res.initialise(0.0);
           M.initialise(0.0);
           J.initialise(0.0);  
-          elem_pt->get_jacobian_and_mass_matrix(current_res, J, M);                      
+          if (has_constant_mass_matrix)
+          {
+            elem_pt->get_jacobian_and_mass_matrix(current_res, J, M);                      
+          }
+          else
+          {            
+            dMdU_dUdsterm.initialise(0.0);
+            dummy_dJdU_dUdsterm.initialise(0.0);
+            pyoomph_elem_pt->get_multi_assembly(multi_assm);
+          }
           for (unsigned i = 0; i < raw_ndof; i++)
           {
             residuals[ti*raw_ndof + i] = current_res[i];
@@ -3492,14 +3794,18 @@ namespace pyoomph
             {
               jacobian(ti*raw_ndof+i,ti*raw_ndof+j)+=J(i,j); // Purely diagonal jacobian blocks here
               residuals[ti*raw_ndof+i]+=M(i,j)*ddof_ds[j]/T;
-              // Now fill the jacobian (TODO: Assuming constant M here for the time being)
+              if (!has_constant_mass_matrix)
+              {
+                    jacobian(ti*raw_ndof+i,ti*raw_ndof+j)+=dMdU_dUdsterm(i,j)/T;
+              }                
               for (unsigned int ii=0;ii<this->FD_ds_inds[ti].size();ii++)
               {
                 unsigned index=this->FD_ds_inds[ti][ii];
                 jacobian(ti*raw_ndof+i,index*raw_ndof+j)+=M(i,j)*this->FD_ds_weights[ti][ii]/T;
+                
               }
               // and add the derivative with respect to T
-              jacobian(ti*raw_ndof+i,raw_ndof*this->n_tsteps())+=-M(i,j)*ddof_ds[j]/(T*T);
+              jacobian(ti*raw_ndof+i,Teq)+=-M(i,j)*ddof_ds[j]/(T*T);
 
             }
 
@@ -3524,7 +3830,7 @@ namespace pyoomph
       for (unsigned int i=0;i<raw_ndof;i++)
       {
         unsigned glob_eq=glob_eqs[i];
-        jacobian(raw_ndof*this->n_tsteps(),i)=n0[glob_eq]/Count[glob_eq];
+        jacobian(Teq,i)=n0[glob_eq]/Count[glob_eq];
       }
   }
 
@@ -3532,15 +3838,27 @@ namespace pyoomph
   {
     if (!basis)
     {
-      this->get_jacobian_time_fd_mode(elem_pt,residuals,jacobian);
+      if (floquet_mode) 
+      {
+        // Currently FD only
+      }
+      else 
+      {
+        this->get_jacobian_time_nodal_mode(elem_pt,residuals,jacobian);      
+        return;
+      }
+    }
+    else
+    {
+      this->get_jacobian_time_bspline_mode(elem_pt,residuals,jacobian);
       return;
     }
-
+    // This is just there to debug (comment the return statements for comparison with FD), remove if everything works
 
     residuals.initialise(0.0);
     this->get_residuals(elem_pt, residuals);
     unsigned raw_ndof=elem_pt->ndof();
-    unsigned tot_ndof=raw_ndof*this->n_tsteps()+1;
+    unsigned tot_ndof=residuals.size();
     oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
     for (unsigned int i=0;i<tot_ndof;i++)
     {
@@ -3551,7 +3869,7 @@ namespace pyoomph
       *(alldofs[glob_eq])=backup+eps;
       oomph::Vector<double> res_p(raw_ndof*this->n_tsteps()+1,0.0);
       this->get_residuals(elem_pt, res_p);
-      for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
+      for (unsigned int j=0;j<tot_ndof;j++)
       {
         jacobian(j,i)=(res_p[j]-residuals[j])/eps;
       }
@@ -3560,14 +3878,26 @@ namespace pyoomph
     }
 
 
-    if (!basis)
-    {
+/*
+    // Check the Jacobian
       oomph::DenseMatrix<double> ana_J(raw_ndof*this->n_tsteps()+1,raw_ndof*this->n_tsteps()+1,0.0);
       oomph::Vector<double> ana_res(raw_ndof*this->n_tsteps()+1,0.0);
-      this->get_jacobian_time_fd_mode(elem_pt,ana_res,ana_J);
-      for (unsigned int i=0;i<raw_ndof*this->n_tsteps();i++)
+      if (!basis)
       {
-        for (unsigned int j=0;j<raw_ndof*this->n_tsteps();j++)
+        this->get_jacobian_time_nodal_mode(elem_pt,ana_res,ana_J);
+      }
+      else
+      {
+        this->get_jacobian_time_bspline_mode(elem_pt,ana_res,ana_J);
+      }
+      for (unsigned int i=0;i<raw_ndof*this->n_tsteps()+1;i++)
+      {
+        if (std::fabs(ana_res[i]-residuals[i])>1e-6)
+        {
+          std::cout << "RESIDUAL MISMATCH " << i << " " << ana_res[i] << " " << residuals[i] << std::endl;
+          std::cout << " raw_ndof " <<  raw_ndof<< " n_tsteps " << this->n_tsteps() << std::endl;
+        }
+        for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
         {
           if (std::fabs(ana_J(i,j)-jacobian(i,j))>1e-6)
           {
@@ -3576,9 +3906,8 @@ namespace pyoomph
           }
         }
       }
-      
-      return;
-    }
+      */
+   
   }
 
   void PeriodicOrbitHandler::backup_dofs()
@@ -3588,6 +3917,10 @@ namespace pyoomph
     for (unsigned int i=0;i<Ndof;i++)
     {
       backed_up_dofs[i]=*(alldofs[i]);
+    }
+    if (this->floquet_mode)
+    {
+      for (unsigned int i=0;i<Ndof;i++) std::cout << " LOOP CHECK " << i << "  " << backed_up_dofs[i] << " vs " << Tadd.back()[i] << " DIFFERENCE " << (backed_up_dofs[i]-Tadd.back()[i])*10000<< "  PTSRS " << alldofs[i] << " vs " << &(Tadd.back()[i]) << std::endl;
     }
   }
   void PeriodicOrbitHandler::restore_dofs()
@@ -3660,4 +3993,24 @@ namespace pyoomph
       }
     }
   }
+
+
+  void PeriodicOrbitHandler::get_dresiduals_dparameter(oomph::GeneralisedElement *const &elem_pt, double *const &parameter_pt,oomph::Vector<double> &dres_dparam)
+  {
+      if (!basis)
+      {
+        if (floquet_mode) this->get_residuals_floquet_mode(elem_pt,dres_dparam,parameter_pt);     
+        else this->get_residuals_time_nodal_mode(elem_pt,dres_dparam,parameter_pt);        
+      } 
+      else this->get_residuals_bspline_mode(elem_pt,dres_dparam,parameter_pt);    
+  }
+
+
+  void PeriodicOrbitHandler::get_djacobian_dparameter(GeneralisedElement *const &elem_pt,double *const &parameter_pt,Vector<double> &dres_dparam,DenseMatrix<double> &djac_dparam)
+  {
+    throw_runtime_error("Not implemented");
+
+  }
 }
+
+

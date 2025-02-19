@@ -352,14 +352,20 @@ namespace pyoomph
       double T; // Period of the periodic orbit
       unsigned T_global_eqn,n_element;      
       oomph::Vector<int> Count;
-      PeriodicBSplineBasis *basis=NULL;
+      PeriodicBSplineBasis *basis=NULL; // If nonzero, we use a B-spline basis, otherwise BDF2, central FD between the nodes or
+      bool floquet_mode; // if this is true (and basis==NULL), we use the Floquet mode, where we explictly have dofs for the periodic time point at s=1
       std::vector<double> s_knots;
       std::vector<double> backed_up_dofs;
       // When we do not have a spline basis, we do finite differences. Here, we store the coefficients and indices
       unsigned FD_ds_order;
+      
       std::vector<std::vector<double>> FD_ds_weights;
       std::vector<std::vector<unsigned>> FD_ds_inds;
-      void get_jacobian_time_fd_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_jacobian_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_residuals_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+      void get_jacobian_time_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_residuals_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+      void get_residuals_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
     public:
       unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
       PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd,int bspline_order,int gl_order,std::vector<double> knots);
@@ -369,7 +375,9 @@ namespace pyoomph
       unsigned long eqn_number(oomph::GeneralisedElement *const &elem_pt, const unsigned &ieqn_local);      
       unsigned ndof(oomph::GeneralisedElement *const &elem_pt);
       void get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals);
-      void get_jacobian(oomph::GeneralisedElement *const &elem_pt,oomph::Vector<double> &residuals,oomph::DenseMatrix<double> &jacobian);      
+      void get_jacobian(oomph::GeneralisedElement *const &elem_pt,oomph::Vector<double> &residuals,oomph::DenseMatrix<double> &jacobian);            
+      void get_dresiduals_dparameter(oomph::GeneralisedElement *const &elem_pt, double *const &parameter_pt, oomph::Vector<double> &dres_dparam);    
+      void get_djacobian_dparameter(oomph::GeneralisedElement *const &elem_pt, double *const &parameter_pt, oomph::Vector<double> &dres_dparam, oomph::DenseMatrix<double> &djac_dparam);
       void backup_dofs();
       void restore_dofs();
       void set_dofs_to_interpolated_values(const double &s);

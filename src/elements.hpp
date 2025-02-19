@@ -73,10 +73,10 @@ namespace pyoomph
   class SinglePassMultiAssembleHessianInfo
   {
   public:
-    const oomph::Vector<double> &Y;
+    oomph::Vector<double> &Y;
     oomph::DenseMatrix<double> *M_Hessian;
     oomph::DenseMatrix<double> *J_Hessian;
-    SinglePassMultiAssembleHessianInfo(const oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M) : Y(_Y), M_Hessian(M), J_Hessian(J) {}
+    SinglePassMultiAssembleHessianInfo(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M) : Y(_Y), M_Hessian(M), J_Hessian(J) {}
   };
 
   class SinglePassMultiAssembleDParamInfo
@@ -102,10 +102,13 @@ namespace pyoomph
     oomph::DenseMatrix<double> *jacobian = NULL;
     oomph::DenseMatrix<double> *mass_matrix = NULL;
 
-    void add_hessian(const oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M = NULL)
+    void add_hessian(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M = NULL)
     {
       hessians.push_back(SinglePassMultiAssembleHessianInfo(_Y, J, M));
     }
+    
+    SinglePassMultiAssembleHessianInfo & get_hessian(unsigned int i) { return  hessians[i]; }
+    
     void add_param_deriv(double *const &param, oomph::Vector<double> *dres, oomph::DenseMatrix<double> *dJ = NULL, oomph::DenseMatrix<double> *dM = NULL)
     {
       dparams.push_back(SinglePassMultiAssembleDParamInfo(param, dres, dJ, dM));
