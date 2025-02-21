@@ -3971,6 +3971,86 @@ class Problem(_pyoomph.Problem):
         else:
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
+
+    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["floquet","bspline","central","BDF2"]="floquet",  bspline_order:int=2,bspline_GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase"):
+        """
+        TODO; Add documentation
+        """
+        self.deactivate_bifurcation_tracking()        
+        self.time_stepper_pt().make_steady()
+        if len(history_dofs)==0:
+            raise ValueError("No history dofs provided")
+        knots=[]
+        if T_constraint=="plane":
+            T_constraint=0
+        elif T_constraint=="phase":
+            T_constraint=1
+        else:
+            raise ValueError("Invalid T_constraint: "+str(T_constraint))
+        
+        if mode=="floquet":
+            self._start_orbit_tracking(history_dofs,T,0,-1,knots,T_constraint)
+        elif mode=="bspline":
+            if bspline_order<1:
+                raise ValueError("Invalid bspline order: "+str(bspline_order))
+            self._start_orbit_tracking(history_dofs,T,bspline_order,bspline_GL_order,knots,T_constraint)
+        elif mode=="central":
+            self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint)
+        elif mode=="BDF2":
+            self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
+        else:
+            raise ValueError("Invalid mode: "+str(mode))
+        
+    def get_floquet_multipliers(self,n:Optional[int]=None,valid_threshold:Optional[float]=10000,shift:Optional[Union[float]]=None,ignore_periodic_unity:Union[bool,float]=False)->NPComplexArray:
+        """
+        TODO; Add documentation
+        """
+        # Main ideas from here: https://arxiv.org/html/2407.18230v1#S2.E6
+        import _pyoomph
+        import scipy
+        if not isinstance(self.assembly_handler_pt(),_pyoomph.PeriodicOrbitHandler):
+            raise RuntimeError("Periodic orbit handler not active. Call activate_periodic_orbit_handler first, then solve the orbit, then call this function")
+        if not self.assembly_handler_pt().is_floquet_mode():
+            raise RuntimeError("Floquet mode not active. Call activate_periodic_orbit_handler with mode='floquet' first, then solve the orbit, then call this function")
+        nbase=self.assembly_handler_pt().get_base_ndof()
+        if n is None:
+            n=nbase
+        if n<=0:
+            raise ValueError("Invalid number of Floquet multipliers requested: "+str(n))
+        
+        Jfull=self.assemble_jacobian(with_residual=False)        
+        n=Jfull.shape[0]-1
+        Jfull=Jfull[:n,:n] # Remove the T equation        
+        Mdiag=numpy.zeros(n)
+        Mdiag[n-nbase:]=1.0 
+        Mfull=scipy.sparse.diags_array(Mdiag).tocsr() # Make the mass matrix 
+        eigs,eigv,_,_=self.get_eigen_solver().solve(neval=n,custom_J_and_M=(Jfull,Mfull),shift=shift) # Solve the eigenproblem
+        valid_eigs=numpy.array([e for e in eigs if numpy.isfinite(e) and not numpy.isnan(e)])
+        if valid_threshold is not None:
+            valid_inds=numpy.argwhere(numpy.abs(valid_eigs)<valid_threshold).flatten()            
+            eigv=eigv[valid_inds,:]
+            valid_eigs=valid_eigs[valid_inds]        
+        gamms=1/(1-valid_eigs)
+        
+        if ignore_periodic_unity is True:
+            ignore_periodic_unity=1e-7
+        if ignore_periodic_unity is not False:
+            unity_eigval=numpy.argwhere(numpy.abs(gamms-1)<ignore_periodic_unity).flatten()            
+            if unity_eigval.size>0:
+                if unity_eigval.size>1:
+                    print("WARNING: Found multiple unity eigenvalues")
+                gamms=numpy.delete(gamms,unity_eigval)
+                eigv=numpy.delete(eigv,unity_eigval,axis=0)  # TODO: Check if this is correct
+        # Sort by magnitude
+        sortinds=numpy.argsort(numpy.abs(gamms))
+        gamms=gamms[sortinds]
+        eigv=eigv[sortinds,:]
+        self._last_eigenvalues=gamms
+        self._last_eigenvectors=numpy.c_[eigv,numpy.zeros(eigv.shape[0])]
+        self._last_eigenvalues_m=None
+        self._last_eigenvalues_k=None
+        return gamms
+
     def get_last_eigenvalues(self,dimensional:bool=False)->NPComplexArray:
         """Returns the last computed eigenvalues.
 
@@ -4406,6 +4486,11 @@ class Problem(_pyoomph.Problem):
         """
         if endtime is None:
             raise ValueError("Must specify an endtime")
+        
+        if self._bifurcation_tracking_parameter_name is not None:
+            raise RuntimeError("Cannot use run with bifurcation tracking enabled. Use solve instead to find the bifurcation or call deactivate_bifurcation_tracking() before")
+        if isinstance(self.assembly_handler_pt(),_pyoomph.PeriodicOrbitHandler):
+            raise RuntimeError("Cannot use run with periodic orbit tracking enabled. Use solve instead to find the periodic orbit or call deactivate_bifurcation_tracking() before")
 
         if spatial_adapt>self.max_refinement_level:
             spatial_adapt=self.max_refinement_level

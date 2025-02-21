@@ -358,17 +358,22 @@ namespace pyoomph
       std::vector<double> backed_up_dofs;
       // When we do not have a spline basis, we do finite differences. Here, we store the coefficients and indices
       unsigned FD_ds_order;
+      unsigned T_constraint_mode; // 0: Plane constraint, 1: Period constraint
+      std::vector<std::vector<double>> du0ds; // Derivatives of the start orbit for the phase constraint
+      void update_phase_constraint_information();
       
       std::vector<std::vector<double>> FD_ds_weights;
       std::vector<std::vector<unsigned>> FD_ds_inds;
       void get_jacobian_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
       void get_residuals_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
-      void get_jacobian_time_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_jacobian_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
       void get_residuals_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+      void get_jacobian_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
       void get_residuals_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
     public:
       unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
-      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd,int bspline_order,int gl_order,std::vector<double> knots);
+      bool is_floquet_mode() {return floquet_mode;}
+      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint);
       // Destructor (used for cleaning up memory)
       ~PeriodicOrbitHandler();
       unsigned n_tsteps() const {return 1+Tadd.size();}
