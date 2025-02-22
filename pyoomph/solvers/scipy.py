@@ -146,13 +146,16 @@ class ScipyEigenSolver(GenericEigenSolver):
 		return None
 
 
-	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple[DefaultMatrixType]]=None)->Tuple[NPComplexArray,NPComplexArray,DefaultMatrixType,DefaultMatrixType]:
+	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple[DefaultMatrixType]]=None,with_left_eigenvectors:bool=False)->Tuple[NPComplexArray,NPComplexArray,DefaultMatrixType,DefaultMatrixType]:
 		if shift is None:
 			shift=self.shift
 		if target is not None:
 			raise RuntimeError("implement target for this eigensolver")
 		self.problem._set_solved_residual(self.real_contribution)
-
+		
+		if with_left_eigenvectors:
+			raise RuntimeError("Implement with_left_eigenvectors")    
+        
 		if custom_J_and_M is not None:
 			J,M=custom_J_and_M
 			n=J.shape[0]

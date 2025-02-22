@@ -3670,7 +3670,7 @@ namespace pyoomph
           {
             for (unsigned i = 0; i < raw_ndof; i++)
             {
-              double fact=dU0ds[i]*Count[glob_eqs[i]]*w[iGL];
+              double fact=dU0ds[i]/Count[glob_eqs[i]]*w[iGL];
               residuals[raw_ndof*this->n_tsteps()]+=fact*Ulocal[i];
               //for (unsigned int l2=0;l2<indices.size();l2++)
               //{
@@ -3862,7 +3862,7 @@ namespace pyoomph
             {
               for (unsigned i = 0; i < raw_ndof; i++)
               {
-                double fact=dU0ds[i]*Count[glob_eqs[i]]*w[iGL];
+                double fact=dU0ds[i]/Count[glob_eqs[i]]*w[iGL];
                 residuals[raw_ndof*this->n_tsteps()]+=fact*Ulocal[i];
                 for (unsigned int l2=0;l2<indices.size();l2++)
                 {

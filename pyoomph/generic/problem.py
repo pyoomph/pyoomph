@@ -4038,7 +4038,7 @@ class Problem(_pyoomph.Problem):
             unity_eigval=numpy.argwhere(numpy.abs(gamms-1)<ignore_periodic_unity).flatten()            
             if unity_eigval.size>0:
                 if unity_eigval.size>1:
-                    print("WARNING: Found multiple unity eigenvalues")
+                    print("WARNING: Found multiple unity Floquet multipliers. Usually, only one is present (except at distinct bifurcations of the orbit) ")
                 gamms=numpy.delete(gamms,unity_eigval)
                 eigv=numpy.delete(eigv,unity_eigval,axis=0)  # TODO: Check if this is correct
         # Sort by magnitude

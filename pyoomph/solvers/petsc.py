@@ -198,14 +198,16 @@ class SlepcEigenSolver(GenericEigenSolver):
         _SetDefaultPetscOption("st_mat_mumps_icntl_6",5)
         return self
 
-    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple["DefaultMatrixType"]]=None)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
+    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple["DefaultMatrixType"]]=None,with_left_eigenvectors:bool=False)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
         if which!="LM":
             raise RuntimeError("Implement which="+str(which))
         if OPpart is not None:
             raise RuntimeError("Implement OPpart="+str(OPpart))
 #        if v0 is not None:
 #            raise RuntimeError("Implement v0="+str(v0))
-        
+    
+        if with_left_eigenvectors:
+            raise RuntimeError("Implement with_left_eigenvectors")    
         if custom_J_and_M is not None:
             Jin=custom_J_and_M[0]
             Min=custom_J_and_M[1]

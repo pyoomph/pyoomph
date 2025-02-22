@@ -388,6 +388,7 @@ namespace pyoomph
       void set_dofs_to_interpolated_values(const double &s);
       double get_knot_value(int i);
       unsigned get_periodic_knot_index(int i);
+      double get_T() const {return T;}
   };
 
 }
