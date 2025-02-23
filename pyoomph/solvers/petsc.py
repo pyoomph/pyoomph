@@ -24,7 +24,7 @@
 #
 # ========================================================================
  
-from .generic import GenericLinearSystemSolver, GenericEigenSolver, EigenSolverWhich
+from .generic import GenericLinearSystemSolver, GenericEigenSolver, EigenSolverWhich,DefaultMatrixType
 from collections import OrderedDict
 import petsc4py #type:ignore
 import sys
@@ -198,7 +198,7 @@ class SlepcEigenSolver(GenericEigenSolver):
         _SetDefaultPetscOption("st_mat_mumps_icntl_6",5)
         return self
 
-    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple["DefaultMatrixType"]]=None,with_left_eigenvectors:bool=False)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
+    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple["DefaultMatrixType"]]=None,with_left_eigenvectors:bool=False,quiet:bool=True)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
         if which!="LM":
             raise RuntimeError("Implement which="+str(which))
         if OPpart is not None:
@@ -212,6 +212,14 @@ class SlepcEigenSolver(GenericEigenSolver):
             Jin=custom_J_and_M[0]
             Min=custom_J_and_M[1]
             n=Jin.shape[0]
+            if not isinstance(Jin,DefaultMatrixType):
+                Jin=Jin.tocsr()
+                assert isinstance(Jin,DefaultMatrixType)
+            if not isinstance(Min,DefaultMatrixType):
+                Min=Min.tocsr()
+                print("type",type(Min))
+                assert isinstance(Min,DefaultMatrixType)
+                
             M=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Min.indptr, Min.indices, Min.data))
             J=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Jin.indptr, Jin.indices, Jin.data))
             
@@ -292,7 +300,10 @@ class SlepcEigenSolver(GenericEigenSolver):
         self.further_setup(E) #type:ignore
         E.solve() #type:ignore
 
-        Print = PETSc.Sys.Print #type:ignore
+        if quiet:
+            Print = lambda *pargs,**kwargs: None
+        else:
+            Print = PETSc.Sys.Print #type:ignore
         Print()
         Print("******************************")
         Print("*** SLEPc Solution Results ***")
@@ -309,7 +320,7 @@ class SlepcEigenSolver(GenericEigenSolver):
         nconv = E.getConverged() #type:ignore
         Print("Number of converged eigenpairs %d" % nconv) #type:ignore
 
-        Print(M) #type:ignore
+        #Print(M) #type:ignore
 
         evals = []
         evects = []
@@ -325,10 +336,15 @@ class SlepcEigenSolver(GenericEigenSolver):
             #lastev = None
             for i in range(nconv): #type:ignore
                 k = E.getEigenpair(i, vr, vi) #type:ignore
+                #k=E.getEigenvalue(i) #type:ignore
+                #E.getEigenvector(i, vr, vi) #type:ignore
                 error = E.computeError(i) #type:ignore
                 evals.append(k) #type:ignore
-                _vr = vr.getArray() #type:ignore
-                #Print("IN K %9f%+9f j"%(k.real,k.imag))
+                _vr = 0+vr.getArray() #type:ignore
+                #_vi=0+vi.getArray() #type:ignore
+                # TODO: Something seems to be wrong in complex SLEPc. At least here, with complex shift, it can be messed up
+                #Print("IN K %9f%+9f j"%(k.real,k.imag)+" error: %12g" % error) #type:ignore
+                #print("EQ ",k*(Min*_vr)-Jin*_vr)
                 if k.imag != 0.0: #type:ignore
                     #Print("LASTEV "+("None" if lastev is None else "NOTNONE"))
 
@@ -342,9 +358,10 @@ class SlepcEigenSolver(GenericEigenSolver):
                         else:
                             evects.append(0+_vr)
                             #lastev = k
-                        Print(" %9f%+9f j %12g" % (k.real, k.imag, error))
+                        
                     else:
                         evects.append(_vr+vi.getArray()*1j) #type:ignore
+                        Print(" %9f%+9f j %12g" % (k.real, k.imag, error))
                 else:
                     #lastev = None
                     evects.append(0+_vr) #type:ignore

@@ -351,6 +351,7 @@ void PyReg_Problem(py::module &m)
 		.def("get_base_ndof",&pyoomph::PeriodicOrbitHandler::get_problem_ndof)
 		.def("is_floquet_mode",&pyoomph::PeriodicOrbitHandler::is_floquet_mode)
 		.def("get_T",&pyoomph::PeriodicOrbitHandler::get_T)
+		.def("get_num_time_steps",&pyoomph::PeriodicOrbitHandler::n_tsteps)
 		.def("set_dofs_to_interpolated_values", &pyoomph::PeriodicOrbitHandler::set_dofs_to_interpolated_values)	;		
 
 	py::class_<pyoomph::DynamicBulkElementInstance>(m, "DynamicBulkElementInstance")

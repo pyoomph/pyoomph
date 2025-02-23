@@ -340,7 +340,7 @@ class GenericEigenSolver:
 			return subclass
 		return decorator
 
-	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple[DefaultMatrixType]]=None,with_left_eigenvectors:bool=False)->Tuple[NPComplexArray,NPComplexArray,DefaultMatrixType,DefaultMatrixType]:
+	def solve(self,neval:int,shift:Optional[Union[float,complex]]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple[DefaultMatrixType]]=None,with_left_eigenvectors:bool=False,quiet:bool=True)->Tuple[NPComplexArray,NPComplexArray,DefaultMatrixType,DefaultMatrixType]:
 		raise RuntimeError("Here")
 	
 	@staticmethod

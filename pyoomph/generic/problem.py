@@ -148,6 +148,73 @@ class GenericProblemHooks:
     
 
 
+        
+class _PeriodicOrbit:
+    """ 
+    A class representing a periodic orbit.
+    """
+    def __init__(self,problem:"Problem",lyap_coeff,param,omega,pvalue,pdvalue,al):
+         self.problem=problem
+         self.emerging_info={"lyap_coeff":lyap_coeff,"param":param,"omega":omega,"pvalue":pvalue,"dpvalue":pdvalue,"al":al}
+         
+    def __enter__(self):
+        return self
+    
+    def __exit__(self,exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], traceback: Optional[types.TracebackType]):
+        # TODO: Setup the history dofs for a transient continuation
+        self.problem.deactivate_bifurcation_tracking()
+    
+    def _get_handler(self)->_pyoomph.PeriodicOrbitHandler:
+        handler=self.problem.assembly_handler_pt()
+        if not isinstance(handler,_pyoomph.PeriodicOrbitHandler):
+            raise ValueError("Periodic orbit handler not activated (anymore)")
+        return handler
+    
+    def get_T(self,dimensional=True):
+        """
+        Returns the period time of the orbit
+        """
+        return self._get_handler().get_T()*(self.problem.get_scaling("temporal") if dimensional else 1)
+    
+    def get_num_time_steps(self):
+        """
+        Returns the number of time steps of the discretized orbit
+        """
+        return self._get_handler().get_num_time_steps()
+    
+    def iterate_over_samples(self,Tstart:Optional[float]=None,Tend:Optional[float]=None,N:Optional[int]=None,set_current_time:bool=True):
+        tbackup=self.problem.get_current_time(dimensional=False,as_float=True)
+        TS=self.problem.get_scaling("temporal")
+        T=self.get_T(dimensional=False)
+        if N is None:
+            N=self.get_num_time_steps()
+        if Tstart is None:
+            Tstart=0.0
+        else:
+            Tstart=float(Tstart/TS)
+        if Tend is None:
+            Tend=Tstart+T
+        else:
+            Tend=float(Tend/TS)
+        
+        ssamples=numpy.linspace(Tstart,Tend,N,endpoint=True)/T
+        self._get_handler().backup_dofs()
+        for s in ssamples:
+            self._get_handler().set_dofs_to_interpolated_values(s)            
+            self.problem.invalidate_cached_mesh_data()
+            Tcurr=s*T
+            if set_current_time:
+                self.problem.set_current_time(Tcurr,dimensional=False,as_float=True)
+            yield Tcurr*TS
+        self._get_handler().restore_dofs()
+        self.problem.set_current_time(tbackup,dimensional=False,as_float=True)
+        
+    def get_floquet_multipliers(self,n:Optional[int]=None,valid_threshold:Optional[float]=10000,shift:Optional[Union[float]]=None,ignore_periodic_unity:Union[bool,float]=False):
+        return self.problem.get_floquet_multipliers(n=n,valid_threshold=valid_threshold,shift=shift,ignore_periodic_unity=ignore_periodic_unity)
+    
+    def starts_supercritically(self):
+        return self.emerging_info["lyap_coeff"]<0
+
 #Problem with some automatic behaviour
 class Problem(_pyoomph.Problem):
     """A class representing a problem in the pyoomph library.
@@ -4000,6 +4067,42 @@ class Problem(_pyoomph.Problem):
             self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
         else:
             raise ValueError("Invalid mode: "+str(mode))
+
+
+    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase")->_PeriodicOrbit:
+        
+        from pyoomph.generic.bifurcation_tools import get_hopf_lyapunov_coefficient    
+        
+        if self._bifurcation_tracking_parameter_name is None or self.get_bifurcation_tracking_mode()!="hopf" or len(self.get_last_eigenvalues())!=1:
+            raise ValueError("Hopf bifurcation tracking not activated or solved. Please call activate_bifurcation_tracking first, then solve. Then call this routine.")        
+        # Store the information from the Hopf tracker
+        omega=self.get_last_eigenvalues()[0].imag                            
+        q=self.get_last_eigenvectors()[0]
+        if omega<0:
+            omega=-omega
+            q=numpy.conjugate(q)
+        param=self._bifurcation_tracking_parameter_name
+        parameter=self.get_global_parameter(param)
+        pvalue=self.get_global_parameter(param).value
+        # Deactivate the bifurcation tracking
+        self.deactivate_bifurcation_tracking()
+        self.solve()
+        # Get the Lyapunov coefficient
+        lyap_coeff,sign,al,qR,qI=get_hopf_lyapunov_coefficient(self,param,omega=omega,q=q)
+        print("AL",al)
+        if dparam:
+            eps=numpy.sqrt(abs(dparam))        
+        parameter.value+=-eps**2*sign
+        u0=self.get_current_dofs()[0]
+        
+        T=2*numpy.pi/omega
+        upert=lambda t: u0+2*eps*al*numpy.real(numpy.exp(1j*omega*t)*(qR+1j*qI))
+        history_dofs=[]
+        for t in numpy.linspace(0,2*numpy.pi/omega,NT,endpoint=False):
+            history_dofs.append(upert(t))
+        self.set_current_dofs(history_dofs.pop(0))
+        self.activate_periodic_orbit_handler(T,history_dofs,mode,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order,T_constraint=T_constraint)
+        return _PeriodicOrbit(self,lyap_coeff,param,omega,pvalue,parameter.value,al)
         
     def get_floquet_multipliers(self,n:Optional[int]=None,valid_threshold:Optional[float]=10000,shift:Optional[Union[float]]=None,ignore_periodic_unity:Union[bool,float]=False)->NPComplexArray:
         """
@@ -4023,7 +4126,7 @@ class Problem(_pyoomph.Problem):
         Jfull=Jfull[:n,:n] # Remove the T equation        
         Mdiag=numpy.zeros(n)
         Mdiag[n-nbase:]=1.0 
-        Mfull=scipy.sparse.diags_array(Mdiag).tocsr() # Make the mass matrix 
+        Mfull=scipy.sparse.csr_matrix(scipy.sparse.diags_array(Mdiag).tocsr()) # Make the mass matrix         
         eigs,eigv,_,_=self.get_eigen_solver().solve(neval=n,custom_J_and_M=(Jfull,Mfull),shift=shift) # Solve the eigenproblem
         valid_eigs=numpy.array([e for e in eigs if numpy.isfinite(e) and not numpy.isnan(e)])
         if valid_threshold is not None:

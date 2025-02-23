@@ -3143,7 +3143,7 @@ namespace pyoomph
     
     if (knots.empty())
     {
-      knots.resize(Tadd.size()+2);
+      knots.resize(Tadd.size()+(floquet_mode ? 1: 2));
       for (unsigned int i=0;i<knots.size();i++)
       {
         knots[i]=i/(knots.size()-1.0);
@@ -4313,7 +4313,9 @@ namespace pyoomph
     while (s_knots[start+1]<clamped_s) start++;
     if (!basis)
     {
+      
       double lambda=(clamped_s-s_knots[start])/(s_knots[start+1]-s_knots[start]);
+      //std::cout << "AT " << clamped_s << " START " << start << " S_KNOTS " << s_knots[start] << " " << s_knots[start+1] << " TADD SIZE " << Tadd.size() << " LAMBDA " << lambda << " T =" << clamped_s*T << std::endl;
       if (start==0)
       {
         for (unsigned int i=0;i<Ndof;i++)
