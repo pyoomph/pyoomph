@@ -942,6 +942,19 @@ namespace pyoomph
     }
   }
 
+  std::vector<std::complex<double>> MyHopfHandler::get_nicely_rotated_eigenfunction()
+  {
+    std::vector<std::complex<double>> eigenfunction(Ndof);
+    oomph::Vector<double> PhiRot=Phi;
+    oomph::Vector<double> PsiRot=Psi;
+    rotate_complex_eigenvector_nicely(PhiRot,PsiRot);
+    for (unsigned n = 0; n < Ndof; n++)
+    {
+      eigenfunction[n] = std::complex<double>(PhiRot[n], PsiRot[n]);
+    }
+    return eigenfunction;
+  }
+
   //====================================================================
   /// Set to solve the standard (underlying jacobian)  system
   //===================================================================
@@ -3078,11 +3091,13 @@ namespace pyoomph
 
   //////// PERIODIC ORBIT TRACKER
 
-  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint)
+  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint,std::string sparse_assembly_method) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint)
   {
+    old_sparse_assembly_method=problem_pt->get_sparse_assembly_method();
+    problem_pt->set_sparse_assembly_method(sparse_assembly_method);
     Ndof = problem_pt->ndof();    
     n_element = problem_pt->mesh_pt()->nelement();
-    Tadd=tadd;
+    Tadd=tadd;    
     x0.resize(Ndof);
     n0.resize(Ndof);
     double nlength=0;
@@ -3240,6 +3255,7 @@ namespace pyoomph
 
   PeriodicOrbitHandler::~PeriodicOrbitHandler()
   {
+    Problem_pt->set_sparse_assembly_method(old_sparse_assembly_method);
     Problem_pt->GetDofPtr().resize(Ndof);
     Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(),
                                               Ndof, false);
@@ -4284,6 +4300,7 @@ namespace pyoomph
   void PeriodicOrbitHandler::backup_dofs()
   {
     oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+    if (backed_up_dofs.size()) throw_runtime_error("The dofs have already been backed up. Likely, you try have a nested loop over the periodic orbit samples, which is not supported (or you forget to call restore_dofs() after a loop)");
     backed_up_dofs.resize(Ndof);
     for (unsigned int i=0;i<Ndof;i++)
     {
@@ -4365,6 +4382,49 @@ namespace pyoomph
         }
       }
     }
+  }
+
+  std::vector<std::tuple<double,double>> PeriodicOrbitHandler::get_s_integration_samples()
+  {
+    std::vector<std::tuple<double,double>> samples;
+    if (!basis)
+    {
+      if (floquet_mode)
+      {
+        for (unsigned int i=0;i<s_knots.size()-1;i++)
+        {
+          samples.push_back(std::make_tuple((s_knots[i]+s_knots[i+1])/2,s_knots[i+1]-s_knots[i]));
+        }        
+      }
+      else
+      {        
+        for (unsigned int i=0;i<s_knots.size()-1;i++)
+        {
+          samples.push_back(std::make_tuple(s_knots[i],0.5*(this->get_knot_value(i+1)-this->get_knot_value(i-1))));
+        }  
+      }
+    }
+    else
+    {
+      for (unsigned int ie=0;ie<this->basis->get_num_elements();ie++)
+      {
+        std::vector<double> w;
+        std::vector<unsigned> indices;
+        std::vector<std::vector<double>> psi_s;
+        std::vector<std::vector<double>> dpsi_ds;
+        unsigned nGL=this->basis->get_integration_info(ie,w,indices,psi_s,dpsi_ds);
+        for (unsigned int iGL=0;iGL<nGL;iGL++)
+        {
+          double s=0;
+          for (unsigned int is=0;is<indices.size();is++)
+          {
+            s+=psi_s[iGL][is]*s_knots[indices[is]];
+          }
+          samples.push_back(std::make_tuple(s,w[iGL]));
+        }
+      }    
+    }
+    return samples;
   }
 
 

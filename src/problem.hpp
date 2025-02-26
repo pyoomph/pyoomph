@@ -222,6 +222,9 @@ namespace pyoomph
     bool improved_pitchfork_tracking_on_unstructured_meshes=false;
 
     double * get_lambda_tracking_real() {return &lambda_tracking_real;}
+
+    void set_sparse_assembly_method(const std::string & method);
+    std::string get_sparse_assembly_method();
     
     std::vector<DynamicBulkElementCode *> &get_bulk_element_codes() { return bulk_element_codes; }
     std::string get_bifurcation_tracking_mode() const { return bifurcation_tracking_mode; }
@@ -322,7 +325,7 @@ namespace pyoomph
     void set_arc_length_theta_sqr(double thetasqr) {Theta_squared=thetasqr;}
     double get_arc_length_theta_sqr() {return Theta_squared;}    
     void start_bifurcation_tracking(const std::string param, const std::string typus, const bool &blocksolve, const std::vector<double> &eigenv1, const std::vector<double> &eigenv2, const double &omega, std::map<std::string, std::string> special_residual_forms);
-    void start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode);
+    void start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode,std::string sparse_assembly_method);
     void after_bifurcation_tracking_step();
     double &global_parameter(const std::string &n);
 
@@ -361,6 +364,7 @@ namespace pyoomph
     virtual void get_jacobian(oomph::DoubleVector &residuals,oomph::CRDoubleMatrix &jacobian);
     
     virtual SparseRank3Tensor assemble_hessian_tensor(bool symmetric);
+    virtual std::vector<double> get_second_order_directional_derivative(std::vector<double> dir);
     
     virtual void set_symmetric_hessian_assembly(bool active) {symmetric_hessian_assembly=active;}
     virtual bool get_symmetric_hessian_assembly() const {return symmetric_hessian_assembly;}

@@ -149,12 +149,15 @@ class GenericProblemHooks:
 
 
         
-class _PeriodicOrbit:
+class PeriodicOrbit:
     """ 
     A class representing a periodic orbit.
     """
-    def __init__(self,problem:"Problem",lyap_coeff,param,omega,pvalue,pdvalue,al):
+    def __init__(self,problem:"Problem",mode,lyap_coeff,param,omega,pvalue,pdvalue,al,bspline_order,bspline_GL_order,T_constraint):
          self.problem=problem
+         self.mode=mode
+         self.bspline_order,self.bspline_GL_order=bspline_order,bspline_GL_order
+         self.T_constraint=T_constraint
          self.emerging_info={"lyap_coeff":lyap_coeff,"param":param,"omega":omega,"pvalue":pvalue,"dpvalue":pdvalue,"al":al}
          
     def __enter__(self):
@@ -175,6 +178,11 @@ class _PeriodicOrbit:
         Returns the period time of the orbit
         """
         return self._get_handler().get_T()*(self.problem.get_scaling("temporal") if dimensional else 1)
+    
+    def get_init_ds(self):
+        if abs(self.emerging_info["dpvalue"]-self.emerging_info["pvalue"])<=5e-10:
+            return 5e-10*(1 if self.emerging_info["dpvalue"]-self.emerging_info["pvalue"]>0 else -1)            
+        return self.emerging_info["dpvalue"]-self.emerging_info["pvalue"]
     
     def get_num_time_steps(self):
         """
@@ -198,22 +206,80 @@ class _PeriodicOrbit:
             Tend=float(Tend/TS)
         
         ssamples=numpy.linspace(Tstart,Tend,N,endpoint=True)/T
+        print("Backing up dofs")
         self._get_handler().backup_dofs()
         for s in ssamples:
-            self._get_handler().set_dofs_to_interpolated_values(s)            
+            self._get_handler().set_dofs_to_interpolated_values(s) # TODO: We might need the time history for e.g. local expressions, integrals, etc. involving partial_t            
             self.problem.invalidate_cached_mesh_data()
             Tcurr=s*T
             if set_current_time:
                 self.problem.set_current_time(Tcurr,dimensional=False,as_float=True)
             yield Tcurr*TS
+        print("Restoring dofs")
         self._get_handler().restore_dofs()
         self.problem.set_current_time(tbackup,dimensional=False,as_float=True)
         
-    def get_floquet_multipliers(self,n:Optional[int]=None,valid_threshold:Optional[float]=10000,shift:Optional[Union[float]]=None,ignore_periodic_unity:Union[bool,float]=False):
-        return self.problem.get_floquet_multipliers(n=n,valid_threshold=valid_threshold,shift=shift,ignore_periodic_unity=ignore_periodic_unity)
+    def get_floquet_multipliers(self,n:Optional[int]=None,valid_threshold:Optional[float]=10000,shift:Optional[Union[float]]=None,ignore_periodic_unity:Union[bool,float]=False,quiet:bool=True):
+        return self.problem.get_floquet_multipliers(n=n,valid_threshold=valid_threshold,shift=shift,ignore_periodic_unity=ignore_periodic_unity,quiet=quiet)
     
     def starts_supercritically(self):
         return self.emerging_info["lyap_coeff"]<0
+    
+    def evalulate_observable_time_integral(self,*observables:str):
+        if len(observables)==0:
+            raise ValueError("No observables given")
+        accus={n:0 for n in observables}
+        obs_info:Dict[str,Tuple[AnySpatialMesh,str]]={}
+        for o in observables:
+            splt=o.split("/")
+            if len(splt)<=1:
+                raise ValueError("Observables must be given like 'domain/observable', i.e. first the mesh path, then the observable")
+            meshpath,observable="/".join(splt[:-1]),splt[-1]
+            mesh=self.problem.get_mesh(meshpath)
+            obs_info[o]=(mesh,observable)
+        
+        self._get_handler().backup_dofs()
+        for (s,w) in self._get_handler().get_s_integration_samples():            
+            self._get_handler().set_dofs_to_interpolated_values(s) # TODO: We might need the time history for e.g. local expressions, integrals, etc. involving partial_t
+            self.problem.invalidate_cached_mesh_data()
+            for o in observables:
+                val=obs_info[o][0].evaluate_observable(obs_info[o][1])                
+                accus[o]+=val*w            
+        self._get_handler().restore_dofs()
+        T=self.get_T()
+        if len(observables)>1:
+            return tuple(accus[o]*T for o in observables)
+        else:
+            return accus[observables[0]]*T
+        
+    
+    def change_sampling(self,*,mode:Literal["floquet","central","bspline","BDF2"]="floquet",N:Optional[int]=None, bspline_order:Optional[int]=None,bspline_GL_order:Optional[int]=None,T_constraint:Optional[Literal["plane","phase"]]=None,do_solve:bool=True):
+        if mode is None:
+            mode=self.mode
+        if bspline_order is None:
+            bspline_order=self.bspline_order
+        if bspline_GL_order is None:
+            bspline_GL_order=self.bspline_GL_order
+        if T_constraint is None:
+            T_constraint=self.T_constraint            
+        if N is None:
+            N=self.get_num_time_steps()
+        history_dofs=[]
+        Nbase=self._get_handler().get_base_ndof()
+        for T in self.iterate_over_samples(N=N):
+            history_dofs.append(self.problem.get_current_dofs()[0][:Nbase])
+        T=self.get_T()
+        self.problem.deactivate_bifurcation_tracking()
+        self.problem.set_current_dofs(history_dofs.pop(0))
+        self.problem.activate_periodic_orbit_handler(T,history_dofs,mode=mode,T_constraint=T_constraint,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order)
+        self.mode=mode
+        self.bspline_order=bspline_order
+        self.bspline_GL_order=bspline_GL_order
+        self.T_constraint=T_constraint
+        if do_solve:
+            self.problem.solve()
+        
+            
 
 #Problem with some automatic behaviour
 class Problem(_pyoomph.Problem):
@@ -305,6 +371,8 @@ class Problem(_pyoomph.Problem):
         self.logfile_name:Optional[str]="_pyoomph_logfile.txt"
         #: When set to True, we warn about unused global parameters for arclength continuation or bifurcation tracking. If set to "error", we raise an error.
         self.warn_about_unused_global_parameters:Union[bool,Literal["error"]]="error"
+        #:  There are different methods implemented in oomph-lib to fill the sparse matrices (Jacobian, mass matrix, etc.). Depending on the problem, one or the other method may be faster or more memory efficient. The default method is "vectors_of_pairs", which is the most general one.                
+        self.sparse_assembly_method:Literal["vectors_of_pairs","two_vectors","lists","maps","two_arrays"]="vectors_of_pairs"
         self.only_write_logfile_on_proc0:bool=True
 
         self._meshtemplate_list:List[MeshTemplate]=[]
@@ -1261,7 +1329,7 @@ class Problem(_pyoomph.Problem):
         return self.add_mesh(mesh)
 
 
-
+   
 
 
     def relink_external_data(self):
@@ -3761,7 +3829,7 @@ class Problem(_pyoomph.Problem):
         return zeromap
             
 
-    def activate_eigenbranch_tracking(self,branch_type:Optional[Literal["real","complex","normal_mode"]]=None,eigenvector:Optional[int]=None):
+    def activate_eigenbranch_tracking(self,branch_type:Optional[Literal["real","complex","normal_mode"]]=None,eigenvector:Optional[int]=None,eigenvalue:Optional[complex]=None):
         """Activates eigenbranch tracking for the specified eigenbranch type. Subsequent calls of solve(...) and arclength_continuation(...) will then track the eigenbranch.
         This is similar to bifurcation tracking, but it does not adjust a parameter to find a bifurcation, i.e. where Re(lambda)=0. Instead, it starts with a eigenvalue/eigenvector pair. Once activated, you can follow the eigenbranch by calling arclength_continuation(...).        
         At each step, the eigenvalue/eigenvector pair will be updated and is available via get_last_eigenvalues()[0] and get_last_eigenvectors()[0].
@@ -3770,9 +3838,9 @@ class Problem(_pyoomph.Problem):
             branch_type (Optional[Literal["real", "complex", "normal_mode"]]): The type of eigenbranch to track. Defaults to None, i.e. auto-detect.
             eigenvector (Optional[int]): The previously calculated eigenvector index to use for tracking. Defaults to None, i.e. the eigenvector at index zero.
         """
-        self.activate_bifurcation_tracking(None,bifurcation_type=branch_type,eigenvector=eigenvector)
+        self.activate_bifurcation_tracking(None,bifurcation_type=branch_type,eigenvector=eigenvector,eigenvalue_for_branch_tracking=eigenvalue)
 
-    def activate_bifurcation_tracking(self,parameter:Optional[Union[str,_pyoomph.GiNaC_GlobalParam]],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal","cartesian_normal_mode"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None,cartesian_wavenumber_k:Optional[ExpressionOrNum]=None):
+    def activate_bifurcation_tracking(self,parameter:Optional[Union[str,_pyoomph.GiNaC_GlobalParam]],bifurcation_type:Optional[Literal["hopf","fold","pitchfork","azimuthal","cartesian_normal_mode"]]=None,blocksolve:bool=False,eigenvector:Optional[Union[NPFloatArray,NPComplexArray,int]]=None,omega:Optional[float]=None,azimuthal_mode:Optional[int]=None,cartesian_wavenumber_k:Optional[ExpressionOrNum]=None,eigenvalue_for_branch_tracking:Optional[complex]=None):
         """
         Activates bifurcation tracking for the specified parameter and bifurcation type. Subsequent calls of solve(...) and arclength_continuation(...) will then track the bifurcation.
 
@@ -3798,7 +3866,15 @@ class Problem(_pyoomph.Problem):
                 self._set_lambda_tracking_real(numpy.real(self.get_last_eigenvalues()[eigenvector]))    
                 eigenvector_v=self.get_last_eigenvectors()[eigenvector]
             else:
-                raise RuntimeError("Can only track eigenbranches, not custom vectors. Please set eigenvector to and integer (for the index of the calculate eigenvector or None, meaning index 0) ")
+                #raise RuntimeError("Can only track eigenbranches, not custom vectors. Please set eigenvector to and integer (for the index of the calculate eigenvector or None, meaning index 0) ")
+                eigenvector_v=eigenvector
+                if eigenvalue_for_branch_tracking is None:
+                    raise RuntimeError("Please set eigenvalue_for_branch_tracking if you track a custom eigenvector")
+                self._set_lambda_tracking_real(numpy.real(eigenvalue_for_branch_tracking))
+                omega=numpy.imag(eigenvalue_for_branch_tracking)
+                #if bifurcation_type is None:
+                #    if numpy.abs(numpy.imag(eigenvalue_for_branch_tracking))>1e-6:
+                #        bifurcation_type="hopf"
             if bifurcation_type is None:
                 bifurcation_type=self.guess_nearest_bifurcation_type(eigenvector)
             
@@ -3845,6 +3921,8 @@ class Problem(_pyoomph.Problem):
             if eigenvector_v is not None:
                 eigenvector=eigenvector_v
         else:
+            if eigenvalue_for_branch_tracking is not None:
+                raise RuntimeError("Cannot use eigenvalue_for_branch_tracking except for eigenbranch continuation")
             if isinstance(eigenvector,int):
                 if eigenvector>=len(self.get_last_eigenvectors()):
                     raise RuntimeError("Eigenvector "+str(eigenvector)+" not calculated")
@@ -4032,14 +4110,14 @@ class Problem(_pyoomph.Problem):
             #print("GOING FOR IT ",parameter, bifurcation_type, blocksolve,  -omega,contribs)
             #print("KVALUE",self._normal_mode_param_k.value,"HAS IMAG",has_imag)
             
-            self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), -omega,contribs) #type:ignore
+            self._start_bifurcation_tracking(parameter, bifurcation_type, blocksolve, numpy.real(eigenvector),numpy.imag(eigenvector), omega,contribs) #type:ignore
             self.assembly_handler_pt().set_global_equations_forced_zero(base_zero_dofs,eigen_zero_dofs) #type:ignore            
             
         else:
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
 
-    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["floquet","bspline","central","BDF2"]="floquet",  bspline_order:int=2,bspline_GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase"):
+    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["floquet","bspline","central","BDF2"]="floquet",  bspline_order:int=2,bspline_GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase",sparse_assembly_method:Literal["lists","maps"]="lists"):
         """
         TODO; Add documentation
         """
@@ -4056,20 +4134,20 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Invalid T_constraint: "+str(T_constraint))
         
         if mode=="floquet":
-            self._start_orbit_tracking(history_dofs,T,0,-1,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T,0,-1,knots,T_constraint,sparse_assembly_method)
         elif mode=="bspline":
             if bspline_order<1:
                 raise ValueError("Invalid bspline order: "+str(bspline_order))
-            self._start_orbit_tracking(history_dofs,T,bspline_order,bspline_GL_order,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T,bspline_order,bspline_GL_order,knots,T_constraint,sparse_assembly_method)
         elif mode=="central":
-            self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint,sparse_assembly_method)
         elif mode=="BDF2":
-            self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint,sparse_assembly_method)
         else:
             raise ValueError("Invalid mode: "+str(mode))
 
 
-    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase")->_PeriodicOrbit:
+    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},sparse_assembly_method:Literal["lists","maps"]="lists",check_collapse_to_stationary:bool=True)->PeriodicOrbit:
         
         from pyoomph.generic.bifurcation_tools import get_hopf_lyapunov_coefficient    
         
@@ -4077,34 +4155,88 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Hopf bifurcation tracking not activated or solved. Please call activate_bifurcation_tracking first, then solve. Then call this routine.")        
         # Store the information from the Hopf tracker
         omega=self.get_last_eigenvalues()[0].imag                            
-        q=self.get_last_eigenvectors()[0]
+        #q=self.get_last_eigenvectors()[0]
+        
+        
+        q=self.assembly_handler_pt().get_nicely_rotated_eigenfunction()
         if omega<0:
             omega=-omega
-            q=numpy.conjugate(q)
+            q=numpy.conj(q)
+        
         param=self._bifurcation_tracking_parameter_name
         parameter=self.get_global_parameter(param)
         pvalue=self.get_global_parameter(param).value
         # Deactivate the bifurcation tracking
         self.deactivate_bifurcation_tracking()
-        self.solve()
+        self.timestepper.make_steady()
+        #self.solve()
         # Get the Lyapunov coefficient
-        lyap_coeff,sign,al,qR,qI=get_hopf_lyapunov_coefficient(self,param,omega=omega,q=q)
-        print("AL",al)
+        lyap_coeff,sign,al,qR,qI=get_hopf_lyapunov_coefficient(self,param,omega=omega,q=q,FD_delta=FD_delta)
+        print("AL",al,"QR MAGNITUDE",numpy.linalg.norm(qR+1j*qI))
         if dparam:
             eps=numpy.sqrt(abs(dparam))        
         parameter.value+=-eps**2*sign
         u0=self.get_current_dofs()[0]
         
         T=2*numpy.pi/omega
-        upert=lambda t: u0+2*eps*al*numpy.real(numpy.exp(1j*omega*t)*(qR+1j*qI))
+        upert=lambda t: u0+2*eps*al*amplitude_factor*numpy.real(numpy.exp(1j*omega*t)*(qR+1j*qI))
+        print("Amplitude perturbation factor:",2*eps*al*amplitude_factor)
+        print("Parameter step",-eps**2*sign)
         history_dofs=[]
         for t in numpy.linspace(0,2*numpy.pi/omega,NT,endpoint=False):
-            history_dofs.append(upert(t))
-        self.set_current_dofs(history_dofs.pop(0))
-        self.activate_periodic_orbit_handler(T,history_dofs,mode,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order,T_constraint=T_constraint)
-        return _PeriodicOrbit(self,lyap_coeff,param,omega,pvalue,parameter.value,al)
+            history_dofs.append(upert(t))        
+        self.set_current_dofs(history_dofs[0])
+        self.activate_periodic_orbit_handler(T,history_dofs[1:],mode,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order,T_constraint=T_constraint,sparse_assembly_method=sparse_assembly_method)
+        history_dofs.append(history_dofs[0])
+        res=PeriodicOrbit(self,mode,lyap_coeff,param,omega,pvalue,parameter.value,al,bspline_order,bspline_GL_order,T_constraint)
+        if check_collapse_to_stationary:
+            avg_dists0=0
+            ncnt=0            
+            for T in res.iterate_over_samples():
+                dofs=self.get_current_dofs()[0][:self.assembly_handler_pt().get_base_ndof()]
+                avg_dists0+=(numpy.dot(numpy.array(history_dofs[ncnt])-numpy.array(u0),numpy.array(dofs)-numpy.array(u0)))
+                ncnt+=1
+            avg_dists0/=ncnt
+                
+            
+        if do_solve:
+            self.solve(**solve_kwargs)
+            if check_collapse_to_stationary:
+                avg_dists=0
+                i=0
+                for T in res.iterate_over_samples():
+                    dofs=self.get_current_dofs()[0][:self.assembly_handler_pt().get_base_ndof()]
+                    add=numpy.dot(numpy.array(history_dofs[i])-numpy.array(u0),numpy.array(dofs)-numpy.array(u0))
+                    #print("adding",add,numpy.amax(numpy.absolute(numpy.array(history_dofs[i])-numpy.array(u0))))
+                    avg_dists+=add
+                    i+=1
+                avg_dists/=ncnt
+                print("Average 'radius'^2 of the starting guess orbit:",avg_dists0)
+                print("Average 'radius'^2 of the solved guess orbit:",avg_dists)
+                if avg_dists<1e-10*avg_dists0:
+                    raise RuntimeError("The solved orbit is likely collapsed")
+                
+                start=None
+                nontrivial=False
+                i=0
+                skip=False
+                for T in res.iterate_over_samples():
+                    if skip:
+                        continue
+                    if i==0:
+                        start=self.get_current_dofs()[0][:self.assembly_handler_pt().get_base_ndof()]
+                    else:
+                        dist=numpy.linalg.norm(numpy.array(start)-numpy.array(self.get_current_dofs()[0][:self.assembly_handler_pt().get_base_ndof()]))
+                        if dist>1e-5*avg_dists0:
+                            nontrivial=True
+                            skip=True
+                    i+=1
+                if not nontrivial:
+                    raise RuntimeError("The solved orbit is likely collapsed")
+                    #print("DOT",numpy.sqrt(numpy.dot(numpy.array(history_dofs[i])-numpy.array(u0),numpy.array(dofs)-numpy.array(u0))))
+        return res
         
-    def get_floquet_multipliers(self,n:Optional[int]=None,valid_threshold:Optional[float]=10000,shift:Optional[Union[float]]=None,ignore_periodic_unity:Union[bool,float]=False)->NPComplexArray:
+    def get_floquet_multipliers(self,n:Optional[int]=None,valid_threshold:Optional[float]=10000,shift:Optional[Union[float]]=None,ignore_periodic_unity:Union[bool,float]=False,quiet:bool=True)->NPComplexArray:
         """
         TODO; Add documentation
         """
@@ -4122,12 +4254,12 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Invalid number of Floquet multipliers requested: "+str(n))
         
         Jfull=self.assemble_jacobian(with_residual=False)        
-        n=Jfull.shape[0]-1
-        Jfull=Jfull[:n,:n] # Remove the T equation        
-        Mdiag=numpy.zeros(n)
-        Mdiag[n-nbase:]=1.0 
+        nMat=Jfull.shape[0]-1
+        Jfull=Jfull[:nMat,:nMat] # Remove the T equation        
+        Mdiag=numpy.zeros(nMat)
+        Mdiag[nMat-nbase:]=1.0 
         Mfull=scipy.sparse.csr_matrix(scipy.sparse.diags_array(Mdiag).tocsr()) # Make the mass matrix         
-        eigs,eigv,_,_=self.get_eigen_solver().solve(neval=n,custom_J_and_M=(Jfull,Mfull),shift=shift) # Solve the eigenproblem
+        eigs,eigv,_,_=self.get_eigen_solver().solve(neval=n,custom_J_and_M=(Jfull,Mfull),shift=shift,quiet=quiet) # Solve the eigenproblem
         valid_eigs=numpy.array([e for e in eigs if numpy.isfinite(e) and not numpy.isnan(e)])
         if valid_threshold is not None:
             valid_inds=numpy.argwhere(numpy.abs(valid_eigs)<valid_threshold).flatten()            

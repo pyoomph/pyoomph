@@ -1089,8 +1089,61 @@ namespace pyoomph
 		}
 	}
 
-	std::vector<std::complex<double>> Problem::get_bifurcation_eigenvector()
+    void Problem::set_sparse_assembly_method(const std::string &method)
+    {
+		/*Perform_assembly_using_vectors_of_pairs,
+      Perform_assembly_using_two_vectors,
+      Perform_assembly_using_maps,
+      Perform_assembly_using_lists,
+      Perform_assembly_using_two_arrays*/
+		if (method == "vectors_of_pairs")
+		{
+			Sparse_assembly_method=Perform_assembly_using_vectors_of_pairs;
+		}
+		else if (method == "two_vectors")
+		{
+			Sparse_assembly_method=Perform_assembly_using_two_vectors;
+		}
+		else if (method == "maps")
+		{
+			Sparse_assembly_method=Perform_assembly_using_maps;
+		}
+		else if (method == "lists")
+		{
+			Sparse_assembly_method=Perform_assembly_using_lists;
+		}
+		else if (method == "two_arrays")
+		{
+			Sparse_assembly_method=Perform_assembly_using_two_arrays;
+		}
+		else
+		{
+			throw_runtime_error("Unknown sparse assembly method: " + method);
+		}
+    }
+
+
+	std::string Problem::get_sparse_assembly_method()
 	{
+		switch (Sparse_assembly_method)
+		{
+		case Perform_assembly_using_vectors_of_pairs:
+			return "vectors_of_pairs";
+		case Perform_assembly_using_two_vectors:
+			return "two_vectors";
+		case Perform_assembly_using_maps:
+			return "maps";
+		case Perform_assembly_using_lists:
+			return "lists";
+		case Perform_assembly_using_two_arrays:
+			return "two_arrays";
+		default:
+			return "unknown";
+		}
+	}
+
+    std::vector<std::complex<double>> Problem::get_bifurcation_eigenvector()
+    {
 		if (bifurcation_tracking_mode == "")
 			return std::vector<std::complex<double>>();
 		oomph::Vector<oomph::DoubleVector> be;
@@ -1109,10 +1162,10 @@ namespace pyoomph
 		return res;
 	}
 
-	void Problem::start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode)
+	void Problem::start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode,std::string sparse_assembly_method)
 	{
 		reset_assembly_handler_to_default();
-		this->assembly_handler_pt() = new PeriodicOrbitHandler(this, T,history,bspline_order,gl_order,knots,T_constraint_mode);
+		this->assembly_handler_pt() = new PeriodicOrbitHandler(this, T,history,bspline_order,gl_order,knots,T_constraint_mode,sparse_assembly_method);
 	}
 
 
@@ -1270,6 +1323,54 @@ namespace pyoomph
 			this->linear_solver_pt()->enable_doc_time();
 			oomph::oomph_info.stream_pt() = &std::cout;
 		}
+	}
+
+	std::vector<double> Problem::get_second_order_directional_derivative(std::vector<double> dir)
+	{
+		if (dof_distribution_pt()->nrow_local()!=dir.size()) throw_runtime_error("Mismatch in size of dir vector and the number of DoFs");
+		
+		/*
+		oomph::DoubleVectorWithHaloEntries d1;
+		oomph::Vector<oomph::DoubleVectorWithHaloEntries> d2(1);
+		oomph::Vector<oomph::DoubleVectorWithHaloEntries> res(1);
+    	d1.build(dof_distribution_pt(), 0.0);
+    	d2[0].build(dof_distribution_pt(), 0.0);
+		res[0].build(dof_distribution_pt(), 0.0);
+		for (unsigned int i=0;i<dir.size();i++) 
+		{
+			d1[i]=dir[i];
+			d2[0][i]=dir[i];
+		}
+		this->get_hessian_vector_products(d1,d2,res);
+		std::vector<double> result(this->ndof(), 0.0);
+		for (unsigned int i=0;i<this->ndof();i++) result[i]=0.5*res[0][i];
+		return result;
+		*/
+
+		std::vector<double> result(this->ndof(), 0.0);
+		const unsigned long n_elements = mesh_pt()->nelement();
+		for (unsigned int ne = 0; ne < n_elements; ne++)
+		{
+			BulkElementBase *elem_pt = dynamic_cast<BulkElementBase *>(mesh_pt()->element_pt(ne));
+			const unsigned nvar = assembly_handler_pt()->ndof(elem_pt);
+			oomph::DenseMatrix<double> hessian_buffer(nvar, nvar * nvar, 0.0);
+			elem_pt->assemble_hessian_tensor(hessian_buffer);
+			for (unsigned int i = 0; i < nvar; i++)
+			{
+				unsigned iG = assembly_handler_pt()->eqn_number(elem_pt, i);
+				for (unsigned int j = 0; j < nvar; j++)
+				{
+					unsigned jG = assembly_handler_pt()->eqn_number(elem_pt, j);
+					for (unsigned int k = 0; k < nvar; k++)
+					{
+						double hval = hessian_buffer(i, k * nvar + j);						
+						unsigned kG = assembly_handler_pt()->eqn_number(elem_pt, k);
+						result[iG]+=hval*dir[jG]*dir[kG];
+					}
+				}
+			}
+		}
+		return result;
 	}
 
 	SparseRank3Tensor Problem::assemble_hessian_tensor(bool symmetric)

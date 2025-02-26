@@ -60,11 +60,13 @@ class PETSCSolver(GenericLinearSystemSolver):
     #		if "add_zero_diagonal" in opts.keys():
     #			problem.set_diagonal_zero_entries(True)
     
-    def use_mumps(self):
+    def use_mumps(self,mumps_param14:Optional[int]=None):
         _SetDefaultPetscOption("mat_mumps_icntl_6",5)
         _SetDefaultPetscOption("ksp_type","preonly")
         _SetDefaultPetscOption("pc_type","lu")
         _SetDefaultPetscOption("pc_factor_mat_solver_type","mumps")
+        if mumps_param14 is not None:
+            _SetDefaultPetscOption("mat_mumps_icntl_14",mumps_param14)
         return self    
 
     def set_default_petsc_option(self,name:str,val:Any=None,force:bool=False)->None:
@@ -191,11 +193,13 @@ class SlepcEigenSolver(GenericEigenSolver):
     def set_default_option(self,name:str,val:Any=None,force:bool=False)->None:
         _SetDefaultPetscOption(name,val, force)
     
-    def use_mumps(self):        
+    def use_mumps(self,mumps_param14:Optional[int]=None):        
         _SetDefaultPetscOption("st_ksp_type","preonly")
         _SetDefaultPetscOption("st_pc_type","lu")
         _SetDefaultPetscOption("st_pc_factor_mat_solver_type","mumps")
         _SetDefaultPetscOption("st_mat_mumps_icntl_6",5)
+        if mumps_param14 is not None:
+            _SetDefaultPetscOption("st_mat_mumps_icntl_14",mumps_param14)
         return self
 
     def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple["DefaultMatrixType"]]=None,with_left_eigenvectors:bool=False,quiet:bool=True)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
@@ -217,7 +221,6 @@ class SlepcEigenSolver(GenericEigenSolver):
                 assert isinstance(Jin,DefaultMatrixType)
             if not isinstance(Min,DefaultMatrixType):
                 Min=Min.tocsr()
-                print("type",type(Min))
                 assert isinstance(Min,DefaultMatrixType)
                 
             M=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Min.indptr, Min.indices, Min.data))
@@ -360,7 +363,7 @@ class SlepcEigenSolver(GenericEigenSolver):
                             #lastev = k
                         
                     else:
-                        evects.append(_vr+vi.getArray()*1j) #type:ignore
+                        evects.append(0+_vr+vi.getArray()*1j) #type:ignore
                         Print(" %9f%+9f j %12g" % (k.real, k.imag, error))
                 else:
                     #lastev = None
@@ -394,8 +397,11 @@ class SlepcEigenSolver(GenericEigenSolver):
             self._last_basis=numpy.array(self._last_basis)
         else:
             self._last_basis=None
-            
+        
+        M.destroy() #type:ignore
+        J.destroy() #type:ignore    
         E.destroy() #type:ignore
+        
         return numpy.array(evals), numpy.array(evects),Jin,Min #type:ignore
 
     def get_PETSc(self)->Any:
