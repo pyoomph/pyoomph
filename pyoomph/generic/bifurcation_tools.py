@@ -57,7 +57,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
 
     eigensolve_kwargs={}
         
-    wrapped_diffs=True
+    
     u=problem.get_current_dofs()[0]
     def nodalf(up):
         problem.set_current_dofs(up)
@@ -232,7 +232,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         print("Normalisation (1,0) required")
         print(numpy.dot(qR,qR)+numpy.dot(qI,qI),numpy.dot(qR,qI))
         print(numpy.dot(pR,MqR)+numpy.dot(pI,MqI),numpy.dot(pR,MqI)-numpy.dot(pI,MqR))
-        exit()
+        #exit()
         #print("THIS gives:")
         #print("qR",qR)
         #print("qI",qI)
@@ -283,30 +283,11 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
     # Step 2 
     # TODO: Make via Hessian products instead
     
-    use_unitscales=False
     
-    if wrapped_diffs:
-        if use_unitscales:
-            a=d2f(qRus)
-            b=d2f(qIus)
-            c=0.25*(d2f(qRus+qIus)-d2f(qRus-qIus))
-        else:
-            a=d2f(qR)
-            b=d2f(qI)
-            c=0.25*(d2f(qR+qI)-d2f(qR-qI))
-    else:
-        f0=nodalf(u)
-        fp=nodalf(u+delt*qR)
-        fm=nodalf(u-delt*qR)
-        a=(fm-2*f0+fp)/(delt**2)
-        fp=nodalf(u+delt*qI)
-        fm=nodalf(u-delt*qI)
-        b=(fm-2*f0+fp)/(delt**2)
-        f1p=nodalf(u+delt*(qR+qI))
-        f2p=nodalf(u+delt*(qR-qI))
-        f1m=nodalf(u-delt*(qR+qI))
-        f2m=nodalf(u-delt*(qR-qI))
-        c=0.25*(f1m+f1p-f2m-f2p)
+    
+    a=d2f(qR)
+    b=d2f(qI)
+    c=0.25*(d2f(qR+qI)-d2f(qR-qI))    
     
     if verbose:
         print("Step 2")
@@ -321,8 +302,12 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         #print("c",c)
 
     #step 3
-    r=solve_mat(A,M*(a+b))
-    sv=solve_mat(-A+2j*M*omega0,M*(a-b+2j*c))
+    # I don't think this part of pde2path is correct
+    #r=solve_mat(A,M*(a+b))
+    #sv=solve_mat(-A+2j*M*omega0,M*(a-b+2j*c))
+    # I think it should be this
+    r=solve_mat(A,a+b)
+    sv=solve_mat(-A+2j*M*omega0,a-b+2j*c)
     sR=numpy.real(sv)
     sI=numpy.imag(sv)
     if verbose:
@@ -335,20 +320,8 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         print("CHECKING sI",numpy.amax(numpy.absolute(2*omega0*M@sR-A@sI - 2*M@c)), "SI magnitude",numpy.linalg.norm(sI))
 
     # step 4
-    if wrapped_diffs:
-        sig1=0.25*numpy.dot(pR,d2f(qR+r)-d2f(qR-r))
-        sig2=0.25*numpy.dot(pI,d2f(qI+r)-d2f(qI-r)) # TODO: In the book, it is pI, in pde2path is is pR
-    else:
-        f1p=nodalf(u+delt*(qR+r))
-        f2p=nodalf(u+delt*(qR-r))
-        f1m=nodalf(u-delt*(qR+r))
-        f2m=nodalf(u-delt*(qR-r))
-        sig1=0.25*numpy.dot(pR,(f1m+f1p-f2m-f2p))
-        f1p=nodalf(u+delt*(qI+r))
-        f2p=nodalf(u+delt*(qI-r))
-        f1m=nodalf(u-delt*(qI+r))
-        f2m=nodalf(u-delt*(qI-r));
-        sig2=0.25*numpy.dot(pI,(f1m+f1p-f2m-f2p)) # TODO: In the book, it is pI, in pde2path is is pR
+    sig1=0.25*numpy.dot(pR,d2f(qR+r)-d2f(qR-r))
+    sig2=0.25*numpy.dot(pI,d2f(qI+r)-d2f(qI-r)) # TODO: In the book, it is pI, in pde2path is is pR    
     sig=sig1+sig2
     if verbose:
         print("Step 4")
@@ -357,32 +330,10 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         print("sig",sig)
     
     # step 5
-    if wrapped_diffs:
-        d1=0.25*numpy.dot(pR,d2f(qR+sR)-d2f(qR-sR))
-        d2=0.25*numpy.dot(pR,d2f(qI+sI)-d2f(qI-sI))
-        d3=0.25*numpy.dot(pI,d2f(qR+sI)-d2f(qR-sI)) # TODO: In the book, it is pI, in pde2path is is pR
-        d4=0.25*numpy.dot(pI,d2f(qI+sR)-d2f(qI-sR)) # TODO: In the book, it is pI, in pde2path is is pR
-    else:
-        f1p=nodalf(u+delt*(qR+sR))
-        f2p=nodalf(u+delt*(qR-sR))
-        f1m=nodalf(u-delt*(qR+sR))
-        f2m=nodalf(u-delt*(qR-sR))
-        d1=0.25*numpy.dot(pR,(f1m+f1p-f2m-f2p))
-        f1p=nodalf(u+delt*(qI+sI))
-        f2p=nodalf(u+delt*(qI-sI))
-        f1m=nodalf(u-delt*(qI+sI))
-        f2m=nodalf(u-delt*(qI-sI))
-        d2=0.25*numpy.dot(pR,(f1m+f1p-f2m-f2p))
-        f1p=nodalf(u+delt*(qR+sI))
-        f2p=nodalf(u+delt*(qR-sI))
-        f1m=nodalf(u-delt*(qR+sI))
-        f2m=nodalf(u-delt*(qR-sI))
-        d3=0.25*numpy.dot(pI,(f1m+f1p-f2m-f2p)) # TODO: In the book, it is pI, in pde2path is is pR
-        f1p=nodalf(u+delt*(qI+sR))
-        f2p=nodalf(u+delt*(qI-sR))
-        f1m=nodalf(u-delt*(qI+sR))
-        f2m=nodalf(u-delt*(qI-sR))
-        d4=0.25*numpy.dot(pI,(f1m+f1p-f2m-f2p)) # TODO: In the book, it is pI, in pde2path is is pR
+    d1=0.25*numpy.dot(pR,d2f(qR+sR)-d2f(qR-sR))
+    d2=0.25*numpy.dot(pR,d2f(qI+sI)-d2f(qI-sI))
+    d3=0.25*numpy.dot(pI,d2f(qR+sI)-d2f(qR-sI)) # TODO: In the book, it is pI, in pde2path is is pR
+    d4=0.25*numpy.dot(pI,d2f(qI+sR)-d2f(qI-sR)) # TODO: In the book, it is pI, in pde2path is is pR    
     d0=d1+d2+d3-d4
     if verbose:
         print("Step 5")
@@ -392,39 +343,13 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         print("d4",d4)
         print("d0",d0)
     
-    # Step 6
-    
-    #d=[qr;qz]; 
-    if wrapped_diffs:
-        g1=numpy.dot(pR,d3f(qR))
-        g2=numpy.dot(pI,d3f(qI))
-        g3=numpy.dot(pR+pI,d3f(qR+qI))
-        g4=numpy.dot(pR-pI,d3f(qR-qI))
-    else:
-        fmm=nodalf(u-2*delt*qR)
-        fm=nodalf(u-delt*qR)
-        fp=nodalf(u+delt*qR)
-        fpp=nodalf(u+2*delt*qR); 
-        g1=numpy.dot(pR,(-0.5*fmm+fm-fp+0.5*fpp)/(delt**3)) 
-        #d=[qi;qz]; 
-        fmm=nodalf(u-2*delt*qI)
-        fm=nodalf(u-delt*qI)
-        fp=nodalf(u+delt*qI)
-        fpp=nodalf(u+2*delt*qI)
-        g2=numpy.dot(pI,(-0.5*fmm+fm-fp+0.5*fpp)/(delt**3))
-        d=qR+qI
-        fmm=nodalf(u-2*delt*d)
-        fm=nodalf(u-delt*d)
-        fp=nodalf(u+delt*d)
-        fpp=nodalf(u+2*delt*d)        
-        g3=numpy.dot(pR+pI,(-0.5*fmm+fm-fp+0.5*fpp)/(delt**3))
-        d=qR-qI
-        fmm=nodalf(u-2*delt*d)
-        fm=nodalf(u-delt*d)
-        fp=nodalf(u+delt*d)
-        fpp=nodalf(u+2*delt*d)
-        g4=numpy.dot(pR-pI,(-0.5*fmm+fm-fp+0.5*fpp)/(delt**3))
+    # Step 6        
+    g1=numpy.dot(pR,d3f(qR))
+    g2=numpy.dot(pI,d3f(qI))
+    g3=numpy.dot(pR+pI,d3f(qR+qI))
+    g4=numpy.dot(pR-pI,d3f(qR-qI))    
     g0=2*(g1+g2)/3+(g3+g4)/6
+    
     if verbose:
         print("Step 6")
         print("g1",g1)
@@ -434,7 +359,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         print("g0",g0)
     
     # step 7
-    ga=(g0-2*sig+d0)/abs(2*omega0);
+    ga=(g0-2*sig+d0)/abs(2*omega0)
     c1=abs(omega0)*ga
     if verbose:
         print("Step 7")
@@ -468,10 +393,10 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
     al=numpy.sqrt(-dlam*mup/c1); 
     if verbose:
         print("dmu_dparam",mup,al)
-        print("Would return",dlam,al)
+        print("Will return",dlam,al)
     
 
-    problem.set_current_dofs(u) # TODO: Do not do it every time, but only when required      
+    problem.set_current_dofs(u) 
     for i in range(ntstep):
         if not was_steady[i]:
             problem.time_stepper_pt(i).undo_make_steady()
