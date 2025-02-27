@@ -1406,6 +1406,8 @@ namespace pyoomph
 	}
 
 
+
+
 	class PeriodicOrbitAssemblyBlockDenseMatrix : public oomph::DenseMatrix<double>
 	{
 		private:
@@ -1482,7 +1484,7 @@ namespace pyoomph
 				throw_runtime_error("Cannot resize block matrix like this");
 			}
 
-    		inline double& entry(const unsigned long& i, const unsigned long& j)
+    		inline double& entry(const unsigned long& i, const unsigned long& j) override
 			{		
 				unsigned ib=i/base_ndof;
 				unsigned jb=j/base_ndof;
@@ -1529,6 +1531,116 @@ namespace pyoomph
 			}
 
 	};
+
+
+
+
+	class PeriodicOrbitAssemblyBlockBandMatrix : public oomph::DenseMatrix<double>
+	{
+		/* 
+			A periodic band matrix (consisting of NTxNT blocks) with bandwidth b
+			Also, an additional row and column is added at the end (for the period constraint)
+		*/
+		protected:
+			unsigned NT; // Number of blocks
+			unsigned bandwidth; // Bandwidth
+			unsigned base_ndof; // Number of dofs per block
+			oomph::Vector<double> data;
+		public:
+			PeriodicOrbitAssemblyBlockBandMatrix(unsigned _NT,unsigned _b) : oomph::DenseMatrix<double>(), NT(_NT), bandwidth(_b), base_ndof(0), data()
+			{
+				
+			}
+
+			~PeriodicOrbitAssemblyBlockBandMatrix()
+			{
+				//if (data) delete data;
+			}
+
+			void resize(const unsigned long& n)
+    		{		
+				// TODO: Potentially do not realloc here if N==M==n 
+      			oomph::DenseMatrix<double>::resize(n); //TODO: Remove
+				N=n;
+				M=n;
+				if ((n-1)%NT!=0) throw_runtime_error("Invalid size for block matrix");
+				base_ndof=(n-1)/NT;
+				data.resize(((2*bandwidth+1)*base_ndof*base_ndof+1)*NT+n);						
+    		}
+        		
+    		void initialise(const double& val)
+    		{
+				std::cout << "INITIALISE " << val << std::endl;
+				oomph::DenseMatrix<double>::initialise(val); //TODO: Remove
+				data.initialise(val);
+    		}
+			
+    		void resize(const unsigned long& n, const unsigned long& m)
+			{
+				throw_runtime_error("Cannot resize block matrix like this");
+			}
+    
+    		void resize(const unsigned long& n,const unsigned long& m,const double& initial_value)
+			{
+				throw_runtime_error("Cannot resize block matrix like this");
+			}
+
+			inline unsigned get_dataindex(const unsigned long& i, const unsigned long& j) const
+			{
+				std::cout << "GET DATA INDEX " << i << " " << j << std::endl;
+				unsigned ib=i/base_ndof;
+				if (ib>=NT) 
+				{
+					throw_runtime_error("TODO TIME COL");
+				}
+				unsigned jb=j/base_ndof;
+				if (jb>=NT) 
+				{
+					throw_runtime_error("TODO TIME ROW");
+				}
+				int diff=(int)jb-(int)ib;
+				if (diff>(int)bandwidth)
+				{
+					throw_runtime_error("TODO BANDWIDTH1");
+				}
+				else if  (-diff>(int)bandwidth)
+				{
+					throw_runtime_error("TODO BANDWIDTH2");
+				}
+				unsigned offset=ib*((2*bandwidth+1)*base_ndof*base_ndof+1); // row block offset
+				int blockindexj=bandwidth+diff;
+				offset+=(bandwidth+diff)*base_ndof*base_ndof; // column block offset
+				unsigned ioff=i%base_ndof;
+				unsigned joff=j%base_ndof;
+
+				return offset+(ioff*base_ndof+joff);
+			}
+
+			inline double& entry(const unsigned long& i, const unsigned long& j) override
+			{		
+				return data[get_dataindex(i,j)];
+			}
+    
+    		inline double get_entry(const unsigned long& i, const unsigned long& j) const override
+    		{      
+				return data[get_dataindex(i,j)];
+			}
+				
+			 double operator()(const unsigned long& i, const unsigned long& j) const override
+    		{
+      			return (this)->get_entry(i, j);
+    		}
+    
+    		 double& operator()(const unsigned long& i, const unsigned long& j) override
+    		{
+				std::cout << "OPERATOR " << i << " " << j << std::endl;
+      			return (this)->entry(i, j);
+    		}
+
+			
+
+	};
+
 
 
  	void Problem::sparse_assemble_row_or_column_compressed_for_periodic_orbit(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residuals,bool compressed_row_flag)
@@ -1626,12 +1738,18 @@ namespace pyoomph
 
 
     	{
-      
+
+#define PYOOMPH_PERIODIC_ORBIT_BAND_MATRIX  
       		//oomph::Vector<oomph::Vector<double>> el_residuals(n_vector);
       		//oomph::Vector<oomph::DenseMatrix<double>> el_jacobian(n_matrix);
 			oomph::Vector<double> el_residuals;
-			PeriodicOrbitAssemblyBlockDenseMatrix el_jacobian(assembly_handler_pt->n_tsteps());
-      
+	#ifdef PYOOMPH_PERIODIC_ORBIT_BAND_MATRIX
+			//PeriodicOrbitAssemblyBlockDenseMatrix el_jacobian(assembly_handler_pt->n_tsteps());
+			PeriodicOrbitAssemblyBlockBandMatrix el_jacobian(assembly_handler_pt->n_tsteps(),3); // TODO: Bandwidth
+	#else
+			oomph::DenseMatrix<double> el_jacobian;
+    #endif
+
       		for (unsigned long e = el_lo; e <= el_hi; e++)
       		{
 #ifdef OOMPH_HAS_MPI
@@ -1662,79 +1780,34 @@ namespace pyoomph
 					//assembly_handler_pt->get_all_vectors_and_matrices(elem_pt, el_residuals, el_jacobian);
 					assembly_handler_pt->get_jacobian(elem_pt, el_residuals, el_jacobian);
 
-					const double ***block_data = el_jacobian.get_block_data();
-					const unsigned nblocks = el_jacobian.get_numblocks();
-					const unsigned base_ndof = el_jacobian.get_nbasedof();
-					// Main coupling block
-					for (unsigned ib = 0; ib < nblocks-1; ib++)
-					{
-						for (unsigned ioffs=0;ioffs<base_ndof;ioffs++)
-						{
-							unsigned i_local=ib*base_ndof+ioffs;
-							
-							unsigned eqn_number = assembly_handler_pt->eqn_number(elem_pt, i_local);						
-							residuals[0][eqn_number] += el_residuals[i_local];
-							if (block_data[ib])
-							{
-								for (unsigned jb = 0; jb < nblocks-1; jb++)
-								{
-									if (block_data[ib][jb])
-									{
-										for (unsigned joffs=0;joffs<base_ndof;joffs++)
-										{
-											unsigned j_local=jb*base_ndof+joffs;
-											unsigned unknown = assembly_handler_pt->eqn_number(elem_pt, j_local);														
-											double value = block_data[ib][jb][ioffs*base_ndof+joffs];
-											if (std::fabs(value) > Numerical_zero_for_sparse_assembly)
-											{							
-												if (compressed_row_flag)
-												{
-													matrix_data_map[eqn_number][unknown] += value;
-												}							
-												else
-												{							
-													matrix_data_map[unknown][eqn_number] += value;
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-						throw_runtime_error("TODO: Fill the last blocks")		
-					}
+#ifdef PYOOMPH_PERIODIC_ORBIT_BAND_MATRIX
 					
-					/*for (unsigned i = 0; i < nvar; i++)
+						//throw_runtime_error("TODO: Fill it in")		
+					
+#else
+					
+					for (unsigned i = 0; i < nvar; i++)
 					{
 						unsigned eqn_number = assembly_handler_pt->eqn_number(elem_pt, i);
-						//for (unsigned v = 0; v < n_vector; v++)
-						//{
-						//	residuals[v][eqn_number] += el_residuals[v][i];
-						//}
 						residuals[0][eqn_number] += el_residuals[i];
 						for (unsigned j = 0; j < nvar; j++)
 						{
-							unsigned unknown = assembly_handler_pt->eqn_number(elem_pt, j);						
-							//for (unsigned m = 0; m < n_matrix; m++)
-							//{							
-								//double value = el_jacobian[m](i, j);
-								double value = el_jacobian(i, j);
-								if (std::fabs(value) > Numerical_zero_for_sparse_assembly)
-								{							
-									if (compressed_row_flag)
-									{
-										//matrix_data_map[m][eqn_number][unknown] += value;
-										matrix_data_map[eqn_number][unknown] += value;
-									}							
-									else
-									{							
-										//matrix_data_map[m][unknown][eqn_number] += value;
-										matrix_data_map[unknown][eqn_number] += value;
-									}
+							double value = el_jacobian(i, j);
+							if (std::fabs(value) > Numerical_zero_for_sparse_assembly)
+							{
+								unsigned unknown = assembly_handler_pt->eqn_number(elem_pt, j);	
+								if (compressed_row_flag)
+								{
+									matrix_data_map[eqn_number][unknown] += value;
+								}							
+								else
+								{	
+									matrix_data_map[unknown][eqn_number] += value;
 								}
-							//}
+							}
 						}
-					}*/
+					}
+#endif
 
 #ifdef OOMPH_HAS_MPI
         		} // endif halo element
