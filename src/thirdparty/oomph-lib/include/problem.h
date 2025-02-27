@@ -3,6 +3,8 @@ IMPORTANT NOTICE: This file stems from oomph-lib, but has been MODIFIED for pyoo
 MODIFICATIONS ARE INDICATED BY A COMMENT STARTING WITH //FOR PYOOMPH
 (Changed on 15th April 2024):    
 Made Problem::adapt(unsigned&, unsigned&) to a virtual  method
+(Changed on 27th February 2025):
+Made First_el_for_assembly, Last_el_plus_one_for_assembly, Must_recompute_load_balance_for_assembly & recompute_load_balanced_assembly() protected instead of private
 *******************************************************************************/
 
 // LIC// ====================================================================
@@ -507,10 +509,7 @@ namespace oomph
     /// pointers in external halo and haloed schemes for all meshes.
     void remove_null_pointers_from_external_halo_node_storage();
 
-    /// Helper function to re-assign the first and last elements to be
-    /// assembled by each processor during parallel assembly for
-    /// non-distributed problem.
-    void recompute_load_balanced_assembly();
+    
 
     /// Boolean to switch on assessment of load imbalance in parallel
     /// assembly of distributed problem
@@ -520,20 +519,9 @@ namespace oomph
     /// Should only be set to true when run in validation mode.
     bool Use_default_partition_in_load_balance;
 
-    /// First element to be assembled by given processor for
-    /// non-distributed problem (only kept up to date when default assignment
-    /// is used)
-    Vector<unsigned> First_el_for_assembly;
+    
 
-    /// Last element (plus one) to be assembled by given processor
-    /// for non-distributed problem (only kept up to date when default
-    /// assignment is used)
-    Vector<unsigned> Last_el_plus_one_for_assembly;
 
-    /// Boolean indicating that the division of elements over processors
-    /// during the assembly process must be re-load-balanced.
-    /// (only used for non-distributed problems)
-    bool Must_recompute_load_balance_for_assembly;
 
     /// Map which stores the correspondence between a root element and
     /// its element number (plus one) within the global mesh at the point
@@ -557,6 +545,29 @@ namespace oomph
 #endif
 
   protected:
+
+    //FOR PYOOMPH : Made First_el_for_assembly, Last_el_plus_one_for_assembly, Must_recompute_load_balance_for_assembly & recompute_load_balanced_assembly() protected instead of private
+    /// First element to be assembled by given processor for
+    /// non-distributed problem (only kept up to date when default assignment
+    /// is used)
+    Vector<unsigned> First_el_for_assembly;
+
+    /// Last element (plus one) to be assembled by given processor
+    /// for non-distributed problem (only kept up to date when default
+    /// assignment is used)
+    Vector<unsigned> Last_el_plus_one_for_assembly;
+
+    /// Boolean indicating that the division of elements over processors
+    /// during the assembly process must be re-load-balanced.
+    /// (only used for non-distributed problems)
+    bool Must_recompute_load_balance_for_assembly;
+
+    /// Helper function to re-assign the first and last elements to be
+    /// assembled by each processor during parallel assembly for
+    /// non-distributed problem.
+    void recompute_load_balanced_assembly();
+
+
     /// Vector of pointers to dofs
     Vector<double*> Dof_pt;
 

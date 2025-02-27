@@ -3091,10 +3091,8 @@ namespace pyoomph
 
   //////// PERIODIC ORBIT TRACKER
 
-  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint,std::string sparse_assembly_method) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint)
+  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint)
   {
-    old_sparse_assembly_method=problem_pt->get_sparse_assembly_method();
-    problem_pt->set_sparse_assembly_method(sparse_assembly_method);
     Ndof = problem_pt->ndof();    
     n_element = problem_pt->mesh_pt()->nelement();
     Tadd=tadd;    
@@ -3255,7 +3253,6 @@ namespace pyoomph
 
   PeriodicOrbitHandler::~PeriodicOrbitHandler()
   {
-    Problem_pt->set_sparse_assembly_method(old_sparse_assembly_method);
     Problem_pt->GetDofPtr().resize(Ndof);
     Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(),
                                               Ndof, false);

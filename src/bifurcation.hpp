@@ -348,7 +348,6 @@ namespace pyoomph
     protected:
       Problem *Problem_pt;                    // Pointer to the problem class
       unsigned Ndof;                          // Degrees of freedom of the original problem (non-augmented)
-      std::string old_sparse_assembly_method;
       std::vector<std::vector<double>> Tadd; // Additional time steps
       std::vector<double> x0; // Start point for the periodic orbit
       std::vector<double> n0; // Start normal for the periodic orbit
@@ -378,7 +377,7 @@ namespace pyoomph
       unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
       bool is_floquet_mode() {return floquet_mode;}
       std::vector<std::tuple<double,double>> get_s_integration_samples(); // Returns tuples of (s,w), so that integral_0^1(f(U(s))*ds) ~= sum( f(U(s_i))*w_i )
-      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint,std::string sparse_assembly_method);
+      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint);
       // Destructor (used for cleaning up memory)
       ~PeriodicOrbitHandler();
       unsigned n_tsteps() const {return 1+Tadd.size();}

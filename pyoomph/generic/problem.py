@@ -4117,7 +4117,7 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
 
-    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["floquet","bspline","central","BDF2"]="floquet",  bspline_order:int=2,bspline_GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase",sparse_assembly_method:Literal["lists","maps"]="lists"):
+    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["floquet","bspline","central","BDF2"]="floquet",  bspline_order:int=2,bspline_GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase"):
         """
         TODO; Add documentation
         """
@@ -4134,20 +4134,20 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Invalid T_constraint: "+str(T_constraint))
         
         if mode=="floquet":
-            self._start_orbit_tracking(history_dofs,T,0,-1,knots,T_constraint,sparse_assembly_method)
+            self._start_orbit_tracking(history_dofs,T,0,-1,knots,T_constraint)
         elif mode=="bspline":
             if bspline_order<1:
                 raise ValueError("Invalid bspline order: "+str(bspline_order))
-            self._start_orbit_tracking(history_dofs,T,bspline_order,bspline_GL_order,knots,T_constraint,sparse_assembly_method)
+            self._start_orbit_tracking(history_dofs,T,bspline_order,bspline_GL_order,knots,T_constraint)
         elif mode=="central":
-            self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint,sparse_assembly_method)
+            self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint)
         elif mode=="BDF2":
-            self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint,sparse_assembly_method)
+            self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
         else:
             raise ValueError("Invalid mode: "+str(mode))
 
 
-    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},sparse_assembly_method:Literal["lists","maps"]="lists",check_collapse_to_stationary:bool=True)->PeriodicOrbit:
+    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True)->PeriodicOrbit:
         
         from pyoomph.generic.bifurcation_tools import get_hopf_lyapunov_coefficient    
         
@@ -4186,7 +4186,7 @@ class Problem(_pyoomph.Problem):
         for t in numpy.linspace(0,2*numpy.pi/omega,NT,endpoint=False):
             history_dofs.append(upert(t))        
         self.set_current_dofs(history_dofs[0])
-        self.activate_periodic_orbit_handler(T,history_dofs[1:],mode,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order,T_constraint=T_constraint,sparse_assembly_method=sparse_assembly_method)
+        self.activate_periodic_orbit_handler(T,history_dofs[1:],mode,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order,T_constraint=T_constraint)
         history_dofs.append(history_dofs[0])
         res=PeriodicOrbit(self,mode,lyap_coeff,param,omega,pvalue,parameter.value,al,bspline_order,bspline_GL_order,T_constraint)
         if check_collapse_to_stationary:

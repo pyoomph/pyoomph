@@ -217,6 +217,8 @@ namespace pyoomph
     void actions_after_parameter_increase(double *const &parameter_pt) override;    
 
     double lambda_tracking_real = 0.0; // Real(lambda) for tracking of eigenbranches
+    virtual void sparse_assemble_row_or_column_compressed_for_periodic_orbit(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residuals,bool compressed_row_flag);
+    void sparse_assemble_row_or_column_compressed(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residual,bool compressed_row_flag) override;
   public:
     bool use_custom_residual_jacobian=false;
     bool improved_pitchfork_tracking_on_unstructured_meshes=false;
@@ -325,7 +327,7 @@ namespace pyoomph
     void set_arc_length_theta_sqr(double thetasqr) {Theta_squared=thetasqr;}
     double get_arc_length_theta_sqr() {return Theta_squared;}    
     void start_bifurcation_tracking(const std::string param, const std::string typus, const bool &blocksolve, const std::vector<double> &eigenv1, const std::vector<double> &eigenv2, const double &omega, std::map<std::string, std::string> special_residual_forms);
-    void start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode,std::string sparse_assembly_method);
+    void start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode);
     void after_bifurcation_tracking_step();
     double &global_parameter(const std::string &n);
 
