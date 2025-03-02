@@ -2352,8 +2352,13 @@ namespace pyoomph
 		for (unsigned int i=startindex;i<endindex;i++)
 		{
 			unsigned length=split_offsets[i+1]-split_offsets[i];
+			std::cout << "SPlIT INDEX "<< i << " " << length << " FROM " << split_offsets[i] << " TO " << split_offsets[i+1] <<std::endl;
 			res.push_back(std::vector<double>(length));
-			for (unsigned int vi=0;vi<length;vi++) res.back()[vi]=*dofptr[split_offsets[i]+vi];
+			for (unsigned int vi=0;vi<length;vi++) 
+			{
+				std::cout << "DOFPTR" << " at " << split_offsets[i]+vi << "  " << dofptr[split_offsets[i]+vi] <<std::endl << std::flush;
+				res.back()[vi]=*dofptr[split_offsets[i]+vi];
+			}
 		}
 		return res;
 	}
