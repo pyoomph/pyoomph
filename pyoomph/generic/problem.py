@@ -1650,13 +1650,18 @@ class Problem(_pyoomph.Problem):
         if self._custom_assembler is None:
             raise RuntimeError("If you set use_custom_residual_jacobian=True, you must specify a custom assembler or override get_custom_residuals_jacobian yourself")
         if info.require_jacobian():
+            if info.get_parameter_name()!="":
+                raise RuntimeError("Cannot derive custom Jacobian with respect to a parameter yet")
             res,J=self._custom_assembler.get_residuals_and_jacobian(True)
             assert res.dtype==numpy.float64 #type:ignore
             info.set_custom_residuals(res)
             assert J.indptr.dtype==numpy.int32 and J.indices.dtype==numpy.int32 and J.data.dtype==numpy.float64 #type:ignore
             info.set_custom_jacobian(J.data,J.indices,J.indptr) #type:ignore
         else:
-            res=self._custom_assembler.get_residuals_and_jacobian(False)
+            paramname=info.get_parameter_name()
+            if paramname=="":
+                paramname=None
+            res=self._custom_assembler.get_residuals_and_jacobian(False,paramname)
             assert res.dtype==numpy.float64 #type:ignore
             info.set_custom_residuals(res)
 
@@ -2061,7 +2066,7 @@ class Problem(_pyoomph.Problem):
                 self.force_remesh(self._domains_to_remesh)
         self.invalidate_cached_mesh_data()
         if self._custom_assembler:
-            self._custom_assembler.actions_after_succesfull_newton_solve()
+            self._custom_assembler.actions_after_successful_newton_solve()
         for hook in self._hooks:
             hook.actions_after_newton_solve()
 

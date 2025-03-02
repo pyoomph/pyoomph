@@ -295,6 +295,7 @@ void PyReg_Problem(py::module &m)
 
 	py::class_<pyoomph::CustomResJacInformation>(m, "CustomResJacInfo")
 		.def("require_jacobian", &pyoomph::CustomResJacInformation::require_jacobian)
+		.def("get_parameter_name", &pyoomph::CustomResJacInformation::get_parameter_name)
 		.def("set_custom_residuals", [](pyoomph::CustomResJacInformation &self, py::array_t<double> r)
 			 {
        py::buffer_info binfo = r.request();

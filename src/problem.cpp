@@ -827,7 +827,7 @@ namespace pyoomph
 		}
 		else
 		{
-			CustomResJacInformation info(false);
+			CustomResJacInformation info(false,"");
 			get_custom_residuals_jacobian(&info);
 			if (!residuals.built())
 			{
@@ -839,6 +839,28 @@ namespace pyoomph
 		}
 	}
 
+	void Problem::get_derivative_wrt_global_parameter(double* const& parameter_pt,oomph::DoubleVector& result)
+	{
+		if (!use_custom_residual_jacobian)
+		{
+			get_derivative_wrt_global_parameter_elemental_assembly(parameter_pt,result);
+		}
+		else
+		{
+			int pindex=this->resolve_parameter_value_ptr(parameter_pt);
+			if (pindex<0) throw_runtime_error("Cannot resolve the double pointer of a global parameter to this problem");			
+			CustomResJacInformation info(false,global_params_by_index[pindex]->get_name());
+			get_custom_residuals_jacobian(&info);
+			if (!result.built())
+			{
+				oomph::LinearAlgebraDistribution dist(this->communicator_pt(), info.residuals.size(), false);
+				result.build(&dist, 0.0);
+			}
+			for (unsigned int i = 0; i < info.residuals.size(); i++)
+				result[i] = info.residuals[i];
+		}
+
+	}
 	void Problem::get_jacobian(oomph::DoubleVector &residuals, oomph::CRDoubleMatrix &jacobian)
 	{
 		if (!use_custom_residual_jacobian)
@@ -847,7 +869,7 @@ namespace pyoomph
 		}
 		else
 		{
-			CustomResJacInformation info(true);
+			CustomResJacInformation info(true,"");
 			get_custom_residuals_jacobian(&info);
 			//       std::cout << "RET FROM PYTH" << std::endl;
 

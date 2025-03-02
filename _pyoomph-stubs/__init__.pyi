@@ -117,6 +117,8 @@ class CustomMultiReturnExpression(CustomMultiReturnExpressionBase):
 class CustomMultiReturnExpressionBase:
     pass
 class CustomResJacInfo:
+    def get_parameter_name(self) -> str:
+        ...
     def require_jacobian(self) -> bool:
         ...
     def set_custom_jacobian(self, arg0: numpy.typing.NDArray[numpy.float64], arg1: numpy.typing.NDArray[numpy.int32], arg2: numpy.typing.NDArray[numpy.int32]) -> None:

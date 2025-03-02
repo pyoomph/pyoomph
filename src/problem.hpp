@@ -181,6 +181,7 @@ namespace pyoomph
    protected:
       friend class Problem;
       bool Require_jacobian;
+      std::string dparameter;
       std::vector<double> residuals;
       oomph::Vector<double> Jvals;
       oomph::Vector<int> Jcolumn_index,Jrow_start;      
@@ -188,7 +189,8 @@ namespace pyoomph
       bool require_jacobian() const {return Require_jacobian;}
       void set_custom_residuals(const std::vector<double> & r) {residuals=r;}
       void set_custom_jacobian(const std::vector<double> & Jv, const std::vector<int> & col_index,const std::vector<int> & row_start);      
-      CustomResJacInformation(bool req_J) : Require_jacobian(req_J) {}
+      std::string get_parameter_name() const {return dparameter;}
+      CustomResJacInformation(bool req_J,std::string parameter_name) : Require_jacobian(req_J), dparameter(parameter_name) {}
   };
 
   class DofAugmentations
@@ -389,8 +391,13 @@ namespace pyoomph
     {
      oomph::Problem::get_residuals(residuals);
     }
+    virtual void get_derivative_wrt_global_parameter_elemental_assembly(double* const& parameter_pt,oomph::DoubleVector &result)
+    {
+     oomph::Problem::get_derivative_wrt_global_parameter(parameter_pt,result);
+    }
     virtual void get_residuals(oomph::DoubleVector &residuals);
     virtual void get_jacobian(oomph::DoubleVector &residuals,oomph::CRDoubleMatrix &jacobian);
+    virtual void get_derivative_wrt_global_parameter(double* const& parameter_pt,oomph::DoubleVector& result);
     
     virtual SparseRank3Tensor assemble_hessian_tensor(bool symmetric);
     virtual std::vector<double> get_second_order_directional_derivative(std::vector<double> dir);

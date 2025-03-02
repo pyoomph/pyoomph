@@ -55,7 +55,7 @@ class CustomAssemblyBase:
     def actions_after_setting_initial_condition(self)->None:
         self.invalidate_cache()
 
-    def actions_after_succesfull_newton_solve(self)->None:
+    def actions_after_successful_newton_solve(self)->None:
         pass
 
     def initialize(self)->None:
@@ -65,12 +65,12 @@ class CustomAssemblyBase:
         pass
 
     @overload
-    def get_residuals_and_jacobian(self,require_jacobian:Literal[False])->NPFloatArray: ...
+    def get_residuals_and_jacobian(self,require_jacobian:Literal[False],dparameter:Optional[str]=None)->NPFloatArray: ...
 
     @overload
-    def get_residuals_and_jacobian(self,require_jacobian:Literal[True])->Tuple[NPFloatArray,csr_matrix]: ...
+    def get_residuals_and_jacobian(self,require_jacobian:Literal[True],dparameter:Optional[str]=None)->Tuple[NPFloatArray,csr_matrix]: ...
 
-    def get_residuals_and_jacobian(self,require_jacobian:bool)->Union[NPFloatArray,Tuple[NPFloatArray,csr_matrix]]:
+    def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,csr_matrix]]:
         raise RuntimeError("Must be implemented")
         pass
 
@@ -133,7 +133,7 @@ class FixedMeshMaxQuadraticNonlinearAssembly(CustomAssemblyBase):
         self.invalidate_time_history()
 
 
-    def actions_after_succesfull_newton_solve(self) -> None:
+    def actions_after_successful_newton_solve(self) -> None:
         """Whenever we successfully take a time step, we can backup the degrees of freedom for the next step to save some time
         """
         if self._last_current_dofs is not None:
@@ -265,7 +265,7 @@ class FixedMeshMaxQuadraticNonlinearAssembly(CustomAssemblyBase):
         return res
         
 
-    def get_residuals_and_jacobian(self,require_jacobian:bool)->Union[NPFloatArray,Tuple[NPFloatArray,csr_matrix]]:
+    def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,csr_matrix]]:
         """Get the residual vector (and potentially the Jacobian) based on the current and history dofs using the cached tensors.
 
         When a parameter changes, for which we have evaluted the tensor, we have to recalculate the cache. 
@@ -277,7 +277,7 @@ class FixedMeshMaxQuadraticNonlinearAssembly(CustomAssemblyBase):
             Union[NPFloatArray,Tuple[NPFloatArray,csr_matrix]]: Either the residual vector or the residual vector and the Jacobian.
         """
         assert self.problem
-        
+        assert dparameter is None
 
 
         for pname,oldval in self._param_values.items():

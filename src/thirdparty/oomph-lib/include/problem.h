@@ -7,6 +7,8 @@ Made Problem::adapt(unsigned&, unsigned&) to a virtual  method
 Made First_el_for_assembly, Last_el_plus_one_for_assembly, Must_recompute_load_balance_for_assembly & recompute_load_balanced_assembly() protected instead of private
 (Changed on 28th February 2025):
 Made void Problem::reset_assembly_handler_to_default() virtual
+(Changed on 2rd March 2025):
+Made void get_derivative_wrt_global_parameter(double* const& parameter_pt,DoubleVector& result) virtual
 *******************************************************************************/
 
 // LIC// ====================================================================
@@ -1917,8 +1919,8 @@ namespace oomph
 
     /// Get the derivative of the entire residuals vector wrt a
     /// global parameter, used in continuation problems
-    void get_derivative_wrt_global_parameter(double* const& parameter_pt,
-                                             DoubleVector& result);
+    // FOR PYOOMPH : Made virtual
+    virtual void get_derivative_wrt_global_parameter(double* const& parameter_pt,DoubleVector& result);
 
     /// Return the product of the global hessian (derivative of Jacobian
     /// matrix  with respect to all variables) with
