@@ -4905,7 +4905,7 @@ namespace pyoomph
 				if (inf.hessians.size())
 				{
 					if (!functable->hessian_generated)
-						throw_runtime_error("You want to calculate Hessian contributions, but analytical Hessian were not set. Please call problem.set_analytic_hessian_products(True) before just-in-time compilation");
+						throw_runtime_error("You want to calculate Hessian contributions, but analytical Hessian were not set. Please call problem.setup_for_stability_analysis(analytic_hessian=True) before just-in-time compilation");
 
 					for (auto &hinf : inf.hessians)
 					{

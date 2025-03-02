@@ -1,8 +1,11 @@
 from .problem import Problem
 from ..expressions import GlobalParameter
 from ..typings import *
-
+import _pyoomph
 import numpy,scipy
+from .assembly import CustomAssemblyBase
+from ..solvers.generic import DefaultMatrixType
+from scipy.sparse import csr_matrix      
 
 def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,str],FD_delta:float=1e-5,FD_param_delta:float=1e-5,omega:Optional[float]=None,q:Optional[NPComplexArray]=None,mu0:float=0,omega_epsilon:float=1e-3):
     # Taken from § 10.2 of Yuri A. Kuznetsov, Elements of Applied Bifurcation Theory, Fourth Edition, Springer, 2004
@@ -80,7 +83,8 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         was_steady[i]=ts.is_steady()
         ts.make_steady()
     
-    from scipy.sparse import csr_matrix      
+
+
     n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = problem.assemble_eigenproblem_matrices(0) #type:ignore
     M=csr_matrix((M_val, M_ci, M_rs), shape=(n, n))	#TODO: Is csr or csc?
     A=csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
@@ -402,3 +406,376 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
             problem.time_stepper_pt(i).undo_make_steady()
 
     return ga,dlam,al,qR,qI
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DofAugmentationSpecifications=_pyoomph.DofAugmentations
+
+class MultiAssembleRequest:
+    def __init__(self,problem:Problem):
+        self._what=[]
+        self._contributions=[]
+        self._hessian_vectors=[]
+        self._hessian_vector_indices=[]
+        self._parameters=[]
+        self.problem=problem
+        
+    def _resolve_hessian_vector_index(self,V):
+        for i,w in enumerate(self._hessian_vectors):
+            if V is w:
+                return i
+        self._hessian_vectors.append(V)
+        return len(self._hessian_vectors)-1
+    
+    def request_base_residuals(self,contribution=""):
+        self._what.append("residuals")
+        self._contributions.append(contribution)
+        
+    def request_base_jacobian(self,contribution=""):
+        self._what.append("jacobian")
+        self._contributions.append(contribution)
+        
+    def request_base_mass_matrix(self,contribution=""):
+        self._what.append("mass_matrix")
+        self._contributions.append(contribution)
+        
+    def request_base_dresiduals_dparameter(self,parameter:Union[str,GlobalParameter],contribution=""):
+        self._what.append("dresiduals_dparameter")
+        self._contributions.append(contribution)
+        self._parameters.append(parameter)
+    
+    def request_base_djacobian_dparameter(self,parameter:Union[str,GlobalParameter],contribution=""):
+        self._what.append("djacobian_dparameter")
+        self._contributions.append(contribution)
+        self._parameters.append(parameter)
+        
+    def request_base_dmass_matrix_dparameter(self,parameter:Union[str,GlobalParameter],contribution=""):
+        self._what.append("dmass_matrix_dparameter")
+        self._contributions.append(contribution)
+        self._parameters.append(parameter)
+        
+    def request_base_hessian_vector_product(self,vector:NPFloatArray,contribution=""):
+        self._what.append("hessian_vector_product")
+        self._contributions.append(contribution)
+        self._hessian_vector_indices.append(self._resolve_hessian_vector_index(vector))
+        
+    def request_base_mass_matrix_hessian_vector_product(self,vector:NPFloatArray,contribution=""):
+        self._what.append("mass_matrix_hessian_vector_product")
+        self._contributions.append(contribution)
+        self._hessian_vector_indices.append(self._resolve_hessian_vector_index(vector))
+        
+        
+    def assemble(self):
+        n,vectors,csrdatas,return_indices=self.problem._assemble_multiassembly(self._what,self._contributions,self._parameters,self._hessian_vectors,self._hessian_vector_indices)
+        nmatrix=len(csrdatas)//2
+        nvectors=len(vectors)-nmatrix
+        matrices=[]
+        #print("RETURN INDICES",return_indices)
+        for i in range(nmatrix):
+            matrices.append(scipy.sparse.csr_matrix((vectors[nvectors+i],csrdatas[2*i+1],csrdatas[2*i]),shape=(n,n)))
+        res=[]
+        for r in return_indices:
+            if r>=0:
+                res.append(vectors[r])
+            else:
+                res.append(matrices[-(r+1)])        
+        return res
+
+class AugmentedAssemblyHandler(CustomAssemblyBase):
+    def __init__(self):
+        super().__init__()
+        self._augdof_spec=None
+        
+    def initialize(self):
+        #self._augdof_spec._in_specification=True
+        #self._augdof_spec._problem=self.problem
+        self._augdof_spec=self.problem._create_dof_augmentation()
+        self.define_augmented_dofs(self.get_augmented_dofs())
+        self.problem._add_augmented_dofs(self._augdof_spec)
+        
+        
+    def finalize(self):
+        self.problem._reset_augmented_dof_vector_to_nonaugmented()
+        
+        
+    def get_augmented_dofs(self)->DofAugmentationSpecifications:
+        return self._augdof_spec
+            
+    def define_augmented_dofs(self,dofs:DofAugmentationSpecifications):
+        raise NotImplementedError("define_augmented_dofs not implemented")
+    
+    def define_augmented_residuals(self,dofs:DofAugmentationSpecifications):
+        raise NotImplementedError("define_augmented_residuals not implemented")
+    
+    def define_augmented_residuals_and_jacobian(self,dofs:DofAugmentationSpecifications):
+        raise NotImplementedError("define_augmented_residuals_and_jacobian not implemented")
+    
+    def get_base_residuals_and_jacobian(self)->Tuple[NPFloatArray,DefaultMatrixType]:
+        old=self.problem.use_custom_residual_jacobian
+        self.problem.use_custom_residual_jacobian=False
+        R,J=self.problem.assemble_jacobian(with_residual=True)
+        self.problem.use_custom_residual_jacobian=old
+        return R,J
+    
+    def get_base_dresiduals_dparameter(self,parameter:Union[str,GlobalParameter])->NPFloatArray:
+        raise NotImplementedError("get_base_dresiduals_dparameter not implemented")
+    
+    def get_base_dresiduals_and_djacobian_dparameter(self,parameter:Union[str,GlobalParameter])->Tuple[NPFloatArray,DefaultMatrixType]:
+        raise NotImplementedError("get_base_dresiduals_and_djacobian_dparameter not implemented")
+    
+    def get_base_hessian_vector_product(self,vector:NPFloatArray)->NPFloatArray:
+        raise NotImplementedError("get_base_hessian_vector_product not implemented")
+
+    def start_multiassembly(self):
+        return MultiAssembleRequest(self.problem)
+    
+    def as_matrix_column(self,arr):
+        if isinstance(arr,list):
+            arr=numpy.array(arr)
+        return scipy.sparse.csr_matrix(arr.reshape(-1,1))
+    
+    def as_matrix_row(self,arr):
+        if isinstance(arr,list):
+            arr=numpy.array(arr)
+        return scipy.sparse.csr_matrix(arr.reshape(1,-1))
+
+class CustomBifurcationTracker(AugmentedAssemblyHandler):
+    """
+    A generic class to write custom bifurcation trackers.
+    """
+    def __init__(self,problem:Problem):
+        super().__init__()
+        self.problem=problem
+        
+    def get_real_eigenvector_guess(self,eigenvector:Union[NPAnyArray,int]=0,normalize:bool=True)->NPAnyArray:
+        """
+        Get a real eigenvector guess. This can be either an index to the previously solved eigenvalues or an eigenvector.        
+
+        Args:
+            eigenvector: Index to a calculated eigenvector or the eigenvector itself
+            normalize: Normalize the eigenvector to |V|=1
+
+        Returns:
+            The eigenvector as array
+        """
+        if eigenvector is None:
+            eigenvector=0
+        elif isinstance(eigenvector,int):
+            if eigenvector>=len(self.problem.get_last_eigenvalues()):
+                raise RuntimeError("Eigenvalue index out of range")
+            eigenvector=numpy.real(self.problem.get_last_eigenvectors()[eigenvector])
+        if normalize:
+            eigenvector/=numpy.linalg.norm(eigenvector)
+        return eigenvector
+
+    def get_complex_eigenvector_guess(self,eigenvector:Union[NPAnyArray,int],normalize:bool=True)->NPAnyArray:
+        """
+        Get a complex eigenvector guess. This can be either an index to the previously solved eigenvalues or an eigenvector.        
+
+        Args:
+            eigenvector: Index to a calculated eigenvector or the eigenvector itself
+            normalize: Normalize the eigenvector so that <Re(V),Im(V)>=0 and <Re(V),Re(V)>=1
+
+        Returns:
+            The eigenvector as array
+        """
+        if eigenvector is None:
+            eigenvector=0
+        elif isinstance(eigenvector,int):
+            if eigenvector>=len(self.problem.get_last_eigenvalues()):
+                raise RuntimeError("Eigenvalue index out of range")
+            eigenvector=self.problem.get_last_eigenvectors()[eigenvector]
+        if normalize:
+            pR,pI=numpy.real(eigenvector),numpy.imag(eigenvector)            
+            def optimize(theta):
+                p=(pR+pI*1j)*numpy.exp(1j*theta)
+                return abs(numpy.dot(numpy.real(p),numpy.imag(p)))
+            eigenvector/=numpy.linalg.norm(numpy.real(eigenvector))
+            theta=scipy.optimize.minimize_scalar(optimize,bounds=(0,2*numpy.pi),method="bounded",options={"xatol":1e-15,"maxiter":100}).x
+            eigenvector=(pR+pI*1j)*numpy.exp(1j*theta)
+            eigenvector/=numpy.linalg.norm(numpy.real(eigenvector))
+            
+            #print("Eigenvector ReIm",numpy.dot(numpy.real(eigenvector),numpy.imag(eigenvector)))
+            #print("Eigenvector ReRe",numpy.dot(numpy.real(eigenvector),numpy.real(eigenvector)))
+            #print("Eigenvector ImIm",numpy.dot(numpy.imag(eigenvector),numpy.imag(eigenvector)))
+            #exit()
+        return eigenvector
+
+
+class FoldTracker(CustomBifurcationTracker):
+    """
+    A custom fold tracker. This class can be used to track a fold bifurcation.
+    However, it might be slower compared to the internal fold tracker.
+    Along this, you can develop your own bifurcation trackers of e.g. co-dimension-2-bifurcations
+    """
+    def __init__(self,problem:Problem,parameter,eigenvector:Union[NPAnyArray,int]=0):
+        super().__init__(problem)
+        self.parameter=parameter
+        self.V0=self.get_real_eigenvector_guess(eigenvector)
+        self.V0=self.V0/numpy.linalg.norm(self.V0)
+        
+        
+    def define_augmented_dofs(self,dofs:DofAugmentationSpecifications):
+        # dofs will be grouped in (U,V,p)
+        dofs.add_vector(self.V0)
+        dofs.add_parameter(self.parameter)
+
+    def get_residuals_and_jacobian(self,require_jacobian:bool)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:               
+        V,=self.get_augmented_dofs().split(startindex=1,endindex=2) # Get the eigenvector solution
+        # Request the residuals and Jacobian of the non-augmented system
+        assembly=self.start_multiassembly()
+        assembly.request_base_residuals() # We need the base residuals
+        assembly.request_base_jacobian() # and the base jacobian
+        if require_jacobian:
+            # If we need the augmented Jacobian, we also need dR/dP and dJ_ik/dU_j V_k
+            assembly.request_base_dresiduals_dparameter(self.parameter)
+            assembly.request_base_djacobian_dparameter(self.parameter)
+            assembly.request_base_hessian_vector_product(V)
+            R,J,dRdP,dJdP,HV=assembly.assemble() # Assemble all quantities, will be given in the order of the requests
+        else:
+            R,J=assembly.assemble() # Only residuals and Jacobian are requested and required
+        Raug=numpy.hstack([R,J@V,numpy.dot(V,self.V0)-1]) # Augmented dof vector
+        if require_jacobian:            
+            col=lambda C:self.as_matrix_column(C)
+            row=lambda R:self.as_matrix_row(R)
+            # Augmented Jacobian
+            Jaug=scipy.sparse.block_array(
+                [[J,None,col(dRdP)],
+                 [HV,J,col(dJdP@V)],
+                 [None,row(self.V0),None]]).tocsr()            
+            return Raug,Jaug
+        else:
+            return Raug
+
+    def actions_after_succesfull_newton_solve(self)->None:
+        V,=self.get_augmented_dofs().split(startindex=1,endindex=2)
+        self.problem._last_eigenvalues=numpy.array([0])
+        self.problem._last_eigenvectors=numpy.array([numpy.array(V)])                
+
+class PitchForkTracker(CustomBifurcationTracker):
+    """
+    Simple pitchfork bifurcation tracker. This might be slower than the internal pitchfork tracker.        
+    """
+    def __init__(self, problem, parameter,eigenvector=0,symmetry_vector=None):
+        super().__init__(problem)
+        self.parameter=parameter
+        self.V0=self.get_real_eigenvector_guess(eigenvector)
+        self.V0/=numpy.linalg.norm(self.V0)
+        if symmetry_vector is None:
+            self.S=self.V0 # Symmetry constraint vector just copied
+        else:
+            # Or any prescribed symmetry vector
+            self.S=self.get_real_eigenvector_guess(symmetry_vector)
+            
+        
+    def define_augmented_dofs(self, dofs):
+        dofs.add_vector(self.V0)                
+        dofs.add_parameter(self.parameter)
+        dofs.add_scalar(0) # slack variable
+        
+    def get_residuals_and_jacobian(self,require_jacobian:bool)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:               
+        U,V,p,eps=self.get_augmented_dofs().split(startindex=0) # Get the eigenvector solution and the slack variable
+        eps=eps[0] # Get the scalar value of the slack variable (split dofs are all vectors)
+        # Request the residuals and Jacobian of the non-augmented system
+        assembly=self.start_multiassembly()
+        assembly.request_base_residuals() # We need the base residuals
+        assembly.request_base_jacobian() # and the base jacobian
+        if require_jacobian:
+            # If we need the augmented Jacobian, we also need dR/dP and dJ_ik/dU_j V_k
+            assembly.request_base_dresiduals_dparameter(self.parameter)
+            assembly.request_base_djacobian_dparameter(self.parameter)
+            assembly.request_base_hessian_vector_product(V)
+            R,J,dRdP,dJdP,HV=assembly.assemble() # Assemble all quantities, will be given in the order of the requests
+        else:
+            R,J=assembly.assemble() # Only residuals and Jacobian are requested and required
+        Raug=numpy.hstack([R+eps*self.S,J@V,numpy.dot(V,self.V0)-1,numpy.dot(U,self.S)]) 
+        if require_jacobian:            
+            col=lambda C:self.as_matrix_column(C)
+            row=lambda R:self.as_matrix_row(R)
+            # Augmented Jacobian
+            Jaug=scipy.sparse.block_array(
+                [[J,None,col(dRdP),col(self.S)],
+                 [HV,J,col(dJdP@V),None],
+                 [None,row(self.V0),None,None],
+                 [row(self.S),None,None,None]]).tocsr()            
+            return Raug,Jaug
+        else:
+            return Raug
+
+    def actions_after_succesfull_newton_solve(self)->None:
+        V,=self.get_augmented_dofs().split(startindex=1,endindex=2)
+        self.problem._last_eigenvalues=numpy.array([0])
+        self.problem._last_eigenvectors=numpy.array([numpy.array(V)])        
+        
+
+class HopfTracker(CustomBifurcationTracker):
+    def __init__(self,problem:Problem,parameter,eigenvector=0,omega=None):
+        super().__init__(problem)
+        self.parameter=parameter                    
+        self.eigenvector=self.get_complex_eigenvector_guess(eigenvector)
+        if omega is None:
+            if isinstance(eigenvector,int):
+                self.omega=numpy.imag(self.problem.get_last_eigenvalues()[0])
+            else:
+                raise RuntimeError("You need to provide the frequency of the Hopf bifurcation when using a custom eigenvector guess")
+        self.C=numpy.real(self.eigenvector)
+    
+    def define_augmented_dofs(self, dofs):
+        dofs.add_vector(numpy.real(self.eigenvector))
+        dofs.add_vector(numpy.imag(self.eigenvector))
+        dofs.add_parameter(self.parameter)
+        dofs.add_scalar(self.omega)
+        
+    def get_residuals_and_jacobian(self,require_jacobian:bool)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:               
+        Vr,Vi,p,omega=self.get_augmented_dofs().split(startindex=1) # Get all the augmented dofs
+        omega=omega[0] # Get the scalar value of the frequency variable (split dofs are all vectors)        
+        assembly=self.start_multiassembly()
+        assembly.request_base_residuals() # We need the base residuals
+        assembly.request_base_jacobian() # and the base jacobian
+        assembly.request_base_mass_matrix() # and the mass matrix
+        if require_jacobian:
+            # If we need the augmented Jacobian, we also need dR/dP and dJ_ik/dU_j V_k
+            assembly.request_base_dresiduals_dparameter(self.parameter)
+            assembly.request_base_djacobian_dparameter(self.parameter)
+            assembly.request_base_dmass_matrix_dparameter(self.parameter)
+            assembly.request_base_hessian_vector_product(Vr)
+            assembly.request_base_hessian_vector_product(Vi)
+            assembly.request_base_mass_matrix_hessian_vector_product(Vr)
+            assembly.request_base_mass_matrix_hessian_vector_product(Vi)
+            R,J,M,dRdP,dJdP,dMdP,HVr,HVi,dMdUVr,dMdUVi=assembly.assemble() # Assemble all quantities, will be given in the order of the requests
+        else:
+            R,J,M=assembly.assemble() # Only residuals and Jacobian are requested and required
+        Raug=numpy.hstack([R,-J@Vr+omega*M@Vi,-J@Vi-omega*M@Vr,numpy.dot(Vr,self.C)-1,numpy.dot(Vi,self.C)]) 
+        if require_jacobian:            
+            col=lambda C:self.as_matrix_column(C)
+            row=lambda R:self.as_matrix_row(R)
+            # Augmented Jacobian
+            Jaug=scipy.sparse.block_array(
+                [[J,None,None,col(dRdP),None],
+                 [-HVr+omega*dMdUVi,-J,omega*M,col(-dJdP@Vr+omega*dMdP@Vi),col(M@Vi)],
+                 [-HVi-omega*dMdUVr,-omega*M,-J,col(-dJdP@Vi-omega*dMdP@Vr),col(-M@Vr)],
+                 [None,row(self.C),None,None,None],
+                 [None,None,row(self.C),None,None]]).tocsr()            
+            return Raug,Jaug
+        else:
+            return Raug
+        
+    def actions_after_succesfull_newton_solve(self)->None:
+        Vr,Vi,p,omega=self.get_augmented_dofs().split(startindex=1)
+        self.problem._last_eigenvalues=numpy.array([1j*omega])
+        self.problem._last_eigenvectors=numpy.array([numpy.array(Vr)+numpy.array(Vi)*1j])

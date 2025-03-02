@@ -60,6 +60,9 @@ class CustomAssemblyBase:
 
     def initialize(self)->None:
         pass
+    
+    def finalize(self)->None:
+        pass
 
     @overload
     def get_residuals_and_jacobian(self,require_jacobian:Literal[False])->NPFloatArray: ...

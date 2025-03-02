@@ -5,6 +5,8 @@ MODIFICATIONS ARE INDICATED BY A COMMENT STARTING WITH //FOR PYOOMPH
 Made Problem::adapt(unsigned&, unsigned&) to a virtual  method
 (Changed on 27th February 2025):
 Made First_el_for_assembly, Last_el_plus_one_for_assembly, Must_recompute_load_balance_for_assembly & recompute_load_balanced_assembly() protected instead of private
+(Changed on 28th February 2025):
+Made void Problem::reset_assembly_handler_to_default() virtual
 *******************************************************************************/
 
 // LIC// ====================================================================
@@ -2503,7 +2505,8 @@ namespace oomph
     }
 
     /// Reset the system to the standard non-augemented state
-    void reset_assembly_handler_to_default();
+    // FOR PYOOMPH: Made virtual
+    virtual void reset_assembly_handler_to_default();
 
   private:
     /// Private helper function that actually contains the guts

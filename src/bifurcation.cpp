@@ -4441,6 +4441,321 @@ namespace pyoomph
     throw_runtime_error("Not implemented");
 
   }
+
+
+
+//===================================================================  
+  //===================================================================
+
+  CustomMultiAssembleHandler::CustomMultiAssembleHandler(Problem *const &problem_pt,std::vector<std::string> & _what,std::vector<std::string> & _contributions,std::vector<std::string> & _params,std::vector<std::vector<double>> & _hessian_vectors,std::vector<unsigned> & _hessian_vector_indices,std::vector<int> & return_indices) : problem(problem_pt), what(_what), contributions(_contributions), params(_params), hessian_vectors(_hessian_vectors) 
+  {
+    if (what.size()!=contributions.size()) throw_runtime_error("The what and contributions vectors must have the same size");
+    parameters.resize(what.size(),NULL);
+
+    unsigned pindex=0;
+    for (unsigned int i=0;i<what.size();i++)
+    {
+      if (what[i]=="dresiduals_dparameter" || what[i]=="djacobian_dparameter" || what[i]=="dmass_matrix_dparameter")
+      {
+        if (pindex>=params.size()) throw_runtime_error("You have not provided enough parameters for the what type '"+what[i]+"'");
+        pyoomph::GlobalParameterDescriptor * parameter=problem->get_global_parameter(params[pindex]);
+        parameters[i]=&parameter->value();
+        pindex++;
+      }      
+    }
+    if (pindex!=params.size()) throw_runtime_error("You have provided too many parameters");
+
+    unsigned hvindex=0;
+    hessian_vector_indices.resize(what.size(),-1);
+    for (unsigned int i=0;i<what.size();i++)
+    {
+      if (what[i]=="hessian_vector_product" || what[i]=="mass_matrix_hessian_vector_product")
+      {
+        if (hvindex>=_hessian_vector_indices.size()) throw_runtime_error("You have not provided enough hessian vector indices for the what type '"+what[i]+"'");
+        hessian_vector_indices[i]=_hessian_vector_indices[hvindex];
+        if (hessian_vector_indices[i]>=hessian_vectors.size()) throw_runtime_error("Hessian vector index out of bounds");
+        hvindex++;
+      }      
+    }
+    if (hvindex!=_hessian_vector_indices.size()) throw_runtime_error("You have provided too many hessian vector indices");
+
+    for (unsigned int i=0;i<contributions.size();i++)
+    {
+      bool found=false;
+      for (unsigned int j=0;j<unique_contributions.size();j++)
+      {
+        if (unique_contributions[j]==contributions[i])
+        {
+          found=true;
+          break;
+        }
+      }
+      if (!found) unique_contributions.push_back(contributions[i]);
+    }
+    setup_residual_contribution_map();
+    contribution_return_indices.resize(unique_contributions.size());
+    nvector=0;
+    nmatrix=0;
+    for (unsigned int i=0;i<unique_contributions.size();i++)
+    {
+      std::string &contribution=unique_contributions[i];
+      for (unsigned int j=0;j<contributions.size();j++)
+      {
+        if (contributions[j]==contribution)
+        {
+          // Now this has to be handled
+          if (what[j]=="residuals")
+          {
+            if (contribution_return_indices[i].residual_index!=-1) throw_runtime_error("You have multiple residual requests for the same contribution '"+contribution+"'");
+            contribution_return_indices[i].residual_index=nvector++;
+          }
+          else if (what[j]=="jacobian")
+          {
+            if (contribution_return_indices[i].jacobian_index!=-1) throw_runtime_error("You have multiple jacobian requests for the same contribution '"+contribution+"'");
+            contribution_return_indices[i].jacobian_index=nmatrix++;
+          }
+          else if (what[j]=="mass_matrix")
+          {
+            if (contribution_return_indices[i].mass_matrix_index!=-1) throw_runtime_error("You have multiple mass matrix requests for the same contribution '"+contribution+"'");
+            contribution_return_indices[i].mass_matrix_index=nmatrix++;
+          }
+          else if (what[j]=="dresiduals_dparameter")
+          {
+            if (parameters[j]==NULL) throw_runtime_error("You have not provided a parameter for the what type '"+what[j]+"'");
+            if (!contribution_return_indices[i].paramderivs.count(parameters[j])) contribution_return_indices[i].paramderivs[parameters[j]]=CustomMultiAssembleReturnIndexInfo();
+            if (contribution_return_indices[i].paramderivs[parameters[j]].residual_index!=-1) throw_runtime_error("You have multiple dresiduals_dparameter requests for the same parameter and contribution '"+contribution+"'");
+            contribution_return_indices[i].paramderivs[parameters[j]].residual_index=nvector++;            
+          }
+          else if (what[j]=="djacobian_dparameter")
+          {
+            if (parameters[j]==NULL) throw_runtime_error("You have not provided a parameter for the what type '"+what[j]+"'");
+            if (!contribution_return_indices[i].paramderivs.count(parameters[j])) contribution_return_indices[i].paramderivs[parameters[j]]=CustomMultiAssembleReturnIndexInfo();
+            if (contribution_return_indices[i].paramderivs[parameters[j]].jacobian_index!=-1) throw_runtime_error("You have multiple djacobian_dparameter requests for the same parameter and contribution '"+contribution+"'");
+            contribution_return_indices[i].paramderivs[parameters[j]].jacobian_index=nmatrix++;            
+          }
+          else if (what[j]=="dmass_matrix_dparameter")
+          {
+            if (parameters[j]==NULL) throw_runtime_error("You have not provided a parameter for the what type '"+what[j]+"'");
+            if (!contribution_return_indices[i].paramderivs.count(parameters[j])) contribution_return_indices[i].paramderivs[parameters[j]]=CustomMultiAssembleReturnIndexInfo();
+            if (contribution_return_indices[i].paramderivs[parameters[j]].mass_matrix_index!=-1) throw_runtime_error("You have multiple dmass_matrix_dparameter requests for the same parameter and contribution '"+contribution+"'");
+            contribution_return_indices[i].paramderivs[parameters[j]].mass_matrix_index=nmatrix++;            
+          }
+          else if (what[j]=="hessian_vector_product")
+          {
+            if (hessian_vector_indices[j]<0) throw_runtime_error("You have not provided a hessian vector index for what type of '"+what[j]+"'");
+            if (!contribution_return_indices[i].hessians.count(hessian_vector_indices[j])) contribution_return_indices[i].hessians[hessian_vector_indices[j]]=CustomMultiAssembleReturnIndexInfo();
+            if (contribution_return_indices[i].hessians[hessian_vector_indices[j]].jacobian_index!=-1) throw_runtime_error("You have multiple hessian requests for the same vector and contribution '"+contribution+"'");
+            contribution_return_indices[i].hessians[hessian_vector_indices[j]].jacobian_index=nmatrix++;            
+          }
+          else if (what[j]=="mass_matrix_hessian_vector_product")
+          {
+            if (hessian_vector_indices[j]<0) throw_runtime_error("You have not provided a hessian vector index for what type of '"+what[j]+"'");
+            if (!contribution_return_indices[i].hessians.count(hessian_vector_indices[j])) contribution_return_indices[i].hessians[hessian_vector_indices[j]]=CustomMultiAssembleReturnIndexInfo();
+            if (contribution_return_indices[i].hessians[hessian_vector_indices[j]].mass_matrix_index!=-1) throw_runtime_error("You have multiple hessian mass matrix requests for the same vector and contribution '"+contribution+"'");
+            contribution_return_indices[i].hessians[hessian_vector_indices[j]].mass_matrix_index=nmatrix++;            
+            contribution_return_indices[i].hessian_require_mass_matrix=true;
+          }
+          else
+          {
+            throw_runtime_error("Unknown what type '"+what[j]+"'");
+          }
+        }
+      }
+      for (auto & hc : contribution_return_indices[i].hessians) contribution_return_indices[i].hessian_vector_indices.push_back(hc.first);
+    }
+
+
+    if (nmatrix+nvector!=what.size()) throw_runtime_error("Something went wrong here");
+    return_indices.resize(what.size());
+    for (unsigned int i=0;i<what.size();i++)
+    {
+      unsigned uci=0;
+      for (unsigned int j=0;j<unique_contributions.size();j++) if (contributions[i]==unique_contributions[j]) {uci=j; break;}
+      if (what[i]=="residuals") return_indices[i]=contribution_return_indices[uci].residual_index;
+      else if (what[i]=="jacobian") return_indices[i]=-1-contribution_return_indices[uci].jacobian_index;
+      else if (what[i]=="mass_matrix") return_indices[i]=-1-contribution_return_indices[uci].mass_matrix_index;
+      else if (what[i]=="dresiduals_dparameter") return_indices[i]=contribution_return_indices[uci].paramderivs[parameters[i]].residual_index;
+      else if (what[i]=="djacobian_dparameter") return_indices[i]=-1-contribution_return_indices[uci].paramderivs[parameters[i]].jacobian_index;
+      else if (what[i]=="dmass_matrix_dparameter") return_indices[i]=-1-contribution_return_indices[uci].paramderivs[parameters[i]].mass_matrix_index;
+      else if (what[i]=="hessian_vector_product") return_indices[i]=-1-contribution_return_indices[uci].hessians[hessian_vector_indices[i]].jacobian_index;
+      else if (what[i]=="mass_matrix_hessian_vector_product") return_indices[i]=-1-contribution_return_indices[uci].hessians[hessian_vector_indices[i]].mass_matrix_index;
+      else throw_runtime_error("should never arrive here")      ;      
+    }
+    
+
+  }
+
+  unsigned CustomMultiAssembleHandler::ndof(oomph::GeneralisedElement* const& elem_pt)
+  {
+    return elem_pt->ndof();
+  }
+
+
+  unsigned long CustomMultiAssembleHandler::eqn_number(oomph::GeneralisedElement* const& elem_pt, const unsigned& ieqn_local)
+  {
+    return elem_pt->eqn_number(ieqn_local);
+  }
+  
+  void CustomMultiAssembleHandler::get_residuals(oomph::GeneralisedElement* const& elem_pt,Vector<double>& residuals)
+  {
+    throw_runtime_error("Residual called");
+  }
+
+  void CustomMultiAssembleHandler::get_jacobian(oomph::GeneralisedElement* const& elem_pt,oomph::Vector<double>& residuals,oomph::DenseMatrix<double>& jacobian)
+  {
+    throw_runtime_error("Jacobian called");
+  }
+
+  void CustomMultiAssembleHandler::setup_residual_contribution_map()
+  {
+    pyoomph::Problem *prob = dynamic_cast<pyoomph::Problem *>(problem);
+    if (!prob)
+      throw_runtime_error("Not a pyoomph::Problem... Strange");
+    auto codes = prob->get_bulk_element_codes();
+    for (unsigned int i = 0; i < codes.size(); i++)
+    {
+      int orig_residual = codes[i]->get_func_table()->current_res_jac; // Store the initial residual (base state)
+      std::vector<int> indices(unique_contributions.size(),-1);      
+      for (unsigned int ui=0;ui<unique_contributions.size();ui++)
+      {
+        if (codes[i]->_set_solved_residual(unique_contributions[ui]))
+        {
+          indices[ui] = codes[i]->get_func_table()->current_res_jac;
+        }
+      }      
+      codes[i]->get_func_table()->current_res_jac = orig_residual; // Reset it
+      residual_contribution_indices[codes[i]] = CustomMultiAssembleHandlerContributionList(codes[i], indices);
+    }
+    // Check whether we have an entirely empty contribution
+    for (unsigned int i=0;i<unique_contributions.size();i++)
+    {
+      bool found=false;
+      for (auto it=residual_contribution_indices.begin();it!=residual_contribution_indices.end();it++)
+      {
+        if (it->second.residual_indices[i]>=0)
+        {
+          found=true;
+          break;
+        }
+      }
+      if (!found) throw_runtime_error("You want to assemble a contribution '"+unique_contributions[i]+ "' that is not present in the problem at all");
+    }
+  }
+
+  int CustomMultiAssembleHandler::resolve_assembled_residual(oomph::GeneralisedElement *const &elem_pt, int residual_index)
+  {
+    pyoomph::BulkElementBase *el = dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
+    if (!el)
+    {
+      throw_runtime_error("Strange, not a pyoomph element");
+    }
+    auto *const_code = el->get_code_instance()->get_code();
+    if (!residual_contribution_indices.count(const_code))
+    {
+      throw_runtime_error("You have not set up your residual contribution mapping in beforehand");
+    }
+    auto &entry = residual_contribution_indices[const_code];
+    return entry.residual_indices[residual_index];
+  }
+
+  void CustomMultiAssembleHandler::get_all_vectors_and_matrices(oomph::GeneralisedElement* const& elem_pt,oomph::Vector<oomph::Vector<double>>& vec,oomph::Vector<oomph::DenseMatrix<double>>& matrix)
+  {
+    unsigned n_var = elem_pt->ndof();    
+    oomph::Vector<double> dummyV(n_var);    
+    oomph::DenseMatrix<double> dummyM(n_var);    
+    std::vector<SinglePassMultiAssembleInfo> multi_assm;
+    oomph::Vector<double> hessian_vec_local(hessian_vectors.size()*n_var);
+    std::vector<oomph::DenseMatrix<double>> hessian_Js(unique_contributions.size());
+    std::vector<oomph::DenseMatrix<double>> hessian_Ms(unique_contributions.size());
+
+    for (unsigned int i=0;i<vec.size();i++) vec[i].initialise(0.0);
+    for (unsigned int i=0;i<matrix.size();i++) matrix[i].initialise(0.0);
+    
+    pyoomph::BulkElementBase *pyoomph_elem_pt = dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
+    bool has_contribs=false;
+
+    // Fill the Hessian local vector
+    for (unsigned int ih=0;ih<hessian_vectors.size();ih++)
+    {
+      for (unsigned int iloc=0;iloc<n_var;iloc++)
+      {
+        unsigned globeq=elem_pt->eqn_number(iloc);
+        hessian_vec_local[ih*n_var+iloc]=hessian_vectors[ih][globeq];
+      }
+    }
+
+    for (unsigned int contribution_index=0;contribution_index<unique_contributions.size();contribution_index++)
+    {
+      int resindex;
+      if ((resindex = this->resolve_assembled_residual(pyoomph_elem_pt, contribution_index)) >= 0)
+      {
+        has_contribs=true;
+        oomph::Vector<double> *residuals=(contribution_return_indices[contribution_index].residual_index>=0 ? &vec[contribution_return_indices[contribution_index].residual_index] : &dummyV);
+        oomph::DenseMatrix<double> *jacobian=(contribution_return_indices[contribution_index].jacobian_index>=0 ? &matrix[contribution_return_indices[contribution_index].jacobian_index] : NULL);
+        oomph::DenseMatrix<double> *mass_matrix=(contribution_return_indices[contribution_index].mass_matrix_index>=0 ? &matrix[contribution_return_indices[contribution_index].mass_matrix_index] : NULL);
+        if (!jacobian && mass_matrix) jacobian=&dummyM;
+        multi_assm.push_back(SinglePassMultiAssembleInfo(resindex, residuals, jacobian, mass_matrix));
+        for (auto & paraminfo : contribution_return_indices[contribution_index].paramderivs)
+        {
+          residuals=(paraminfo.second.residual_index>=0 ? &vec[paraminfo.second.residual_index] : &dummyV);
+          jacobian=(paraminfo.second.jacobian_index>=0 ? &matrix[paraminfo.second.jacobian_index] : NULL);
+          mass_matrix=(paraminfo.second.mass_matrix_index>=0 ? &matrix[paraminfo.second.mass_matrix_index] : NULL);
+          if (!jacobian && mass_matrix) jacobian=&dummyM;
+          multi_assm.back().add_param_deriv(paraminfo.first, residuals,jacobian,mass_matrix);
+        }
+        if (!contribution_return_indices[contribution_index].hessian_vector_indices.empty())
+        {
+          hessian_Js[contribution_index].resize(hessian_vectors.size()*n_var,n_var,0.0);
+          if (contribution_return_indices[contribution_index].hessian_require_mass_matrix)
+          {
+            hessian_Ms[contribution_index].resize(hessian_vectors.size()*n_var,n_var,0.0);
+            multi_assm.back().add_hessian(hessian_vec_local, &hessian_Js[contribution_index], &hessian_Ms[contribution_index]);            
+          }
+          else
+          {
+            multi_assm.back().add_hessian(hessian_vec_local, &hessian_Js[contribution_index], NULL);            
+          }          
+        }        
+      }
+    }
+    if (!has_contribs) return;
+    pyoomph_elem_pt->get_multi_assembly(multi_assm);
+
+    if (hessian_vectors.size())
+    {
+      for (unsigned int contribution_index=0;contribution_index<unique_contributions.size();contribution_index++)
+      {
+        int resindex;
+        if ((resindex = this->resolve_assembled_residual(pyoomph_elem_pt, contribution_index)) >= 0)
+        {
+          for (auto & hessinfo: contribution_return_indices[contribution_index].hessians)
+          {
+            if (hessinfo.second.jacobian_index>=0)
+            {
+              for (unsigned int i=0;i<n_var;i++)
+              {
+                for (unsigned int j=0;j<n_var;j++)
+                {
+                  matrix[hessinfo.second.jacobian_index](i,j)=hessian_Js[contribution_index](hessinfo.first*n_var+ i,j);
+                }
+              }
+            }
+            if (hessinfo.second.mass_matrix_index>=0)
+            {
+              for (unsigned int i=0;i<n_var;i++)
+              {
+                for (unsigned int j=0;j<n_var;j++)
+                {
+                  matrix[hessinfo.second.mass_matrix_index](i,j)=hessian_Ms[contribution_index](hessinfo.first*n_var+ i,j);
+                }
+              }
+            }
+          }                    
+        }
+      }
+    }
+  }
+
 }
 
 

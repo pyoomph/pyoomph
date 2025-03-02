@@ -395,4 +395,59 @@ namespace pyoomph
       double get_T() const {return T;}
   };
 
+
+
+ // List of the tree residual contribution indices of each generated C code
+  class CustomMultiAssembleHandlerContributionList
+  {
+  public:
+    DynamicBulkElementCode *code;
+    std::vector<int> residual_indices; // index 0 is base state, 1 is mass matrix residual
+    CustomMultiAssembleHandlerContributionList(DynamicBulkElementCode *_code, const std::vector<int> & resinds) : code(_code) { residual_indices = resinds; }
+    CustomMultiAssembleHandlerContributionList() {}
+  };
+
+  class CustomMultiAssembleReturnIndexInfo
+  {
+    public:
+      int residual_index=-1;
+      int jacobian_index=-1;
+      int mass_matrix_index=-1;
+      std::map<double*,CustomMultiAssembleReturnIndexInfo> paramderivs;
+      std::map<int,CustomMultiAssembleReturnIndexInfo>  hessians;
+      bool hessian_require_mass_matrix=false;
+      std::vector<unsigned> hessian_vector_indices;      
+  };
+
+  class CustomMultiAssembleHandler : public oomph::AssemblyHandler
+  {
+    protected:
+      Problem *problem;
+      std::vector<std::string> & what;
+      std::vector<std::string> & contributions;
+      std::vector<std::string> & params;
+      std::vector<double *> parameters;
+      std::vector<int> hessian_vector_indices;
+      std::vector<std::vector<double>> & hessian_vectors;
+      std::vector<std::string> unique_contributions;
+      std::vector<CustomMultiAssembleReturnIndexInfo> contribution_return_indices;
+      unsigned nmatrix,nvector;
+      int resolve_assembled_residual(oomph::GeneralisedElement *const &elem_pt, int residual_mode);
+      std::map<const pyoomph::DynamicBulkElementCode *, CustomMultiAssembleHandlerContributionList> residual_contribution_indices;
+      void setup_residual_contribution_map();
+    public:     
+      CustomMultiAssembleHandler(Problem *const &problem_pt,std::vector<std::string> & _what,std::vector<std::string> & _contributions,std::vector<std::string> & _params,std::vector<std::vector<double>> & _hessian_vectors, std::vector<unsigned> & _hessian_vector_indices,std::vector<int> & return_indices);
+      ~CustomMultiAssembleHandler() {}      
+      unsigned ndof(oomph::GeneralisedElement *const &elem_pt);
+      unsigned long eqn_number(oomph::GeneralisedElement *const &elem_pt, const unsigned &ieqn_local);      
+      void get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals);
+      void get_jacobian(oomph::GeneralisedElement *const &elem_pt,oomph::Vector<double> &residuals,oomph::DenseMatrix<double> &jacobian);            
+      void get_all_vectors_and_matrices(oomph::GeneralisedElement* const& elem_pt,oomph::Vector<oomph::Vector<double>>& vec,oomph::Vector<oomph::DenseMatrix<double>>& matrix);
+      unsigned n_matrix() const {return nmatrix;}
+      unsigned n_vector() const {return nvector;}
+      
+      
+
+  };
+
 }

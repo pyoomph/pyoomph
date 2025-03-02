@@ -1631,8 +1631,11 @@ class Problem(_pyoomph.Problem):
             #eqs.get_current_code_generator().set_remove_underived_modes(self._cartesian_normal_mode_stability.imag_contribution_name,set([1]))
 
     def set_custom_assembler(self,assm:Optional["CustomAssemblyBase"]) -> None:
-        self._custom_assembler=assm
         if self._custom_assembler:
+            self._custom_assembler.finalize()
+            
+        self._custom_assembler=assm
+        if self._custom_assembler:        
             self.use_custom_residual_jacobian=True
             self._custom_assembler._set_problem(self)
             self._custom_assembler.initialize()

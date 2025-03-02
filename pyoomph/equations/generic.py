@@ -677,20 +677,20 @@ class IntegralObservables(Equations):
     The parameter names in the lambda function must match the names of the integral observables. The underscore prevents writing the helper observables to output.
 
     Parameters:
-        _coordinante_system (Optional[BaseCoordinateSystem]): The coordinate system to use. Defaults to None, i.e. the one of the equations or the problem.
+        _coordinate_system (Optional[BaseCoordinateSystem]): The coordinate system to use. Defaults to None, i.e. the one of the equations or the problem.
         **integral_observables (Union[ExpressionOrNum, Callable[..., ExpressionOrNum]]): Integral observables to be added.
     """
-    def __init__(self,_coordinante_system:Optional["BaseCoordinateSystem"]=None, **integral_observables:Union[ExpressionOrNum,Callable[...,ExpressionOrNum]]):
+    def __init__(self,_coordinate_system:Optional["BaseCoordinateSystem"]=None, **integral_observables:Union[ExpressionOrNum,Callable[...,ExpressionOrNum]]):
         super(IntegralObservables, self).__init__()
         self.integral_observables = {k:v for k,v in integral_observables.items() if not callable(v)}
         self.dependent_funcs={k:v for k,v in integral_observables.items() if callable(v)}
-        self._coordinante_system=_coordinante_system
+        self._coordinate_system=_coordinate_system
 
     def define_additional_functions(self):
-        if self._coordinante_system is None:
+        if self._coordinate_system is None:
             dx = self.get_dx()
         else:
-            dx=self.get_dx(coordsys=self._coordinante_system)
+            dx=self.get_dx(coordsys=self._coordinate_system)
         for k,v in self.integral_observables.items():
             #import _pyoomph
             #_pyoomph.set_verbosity_flag(1)
