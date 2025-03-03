@@ -2346,17 +2346,18 @@ namespace pyoomph
 	{
 		if (!finalized) throw_runtime_error("Cannot split non-finalized dofs");
 		auto  dofptr=this->problem->GetDofPtr();		
+		if (dofptr.size()!=split_offsets.back()) throw_runtime_error("Invalid number of dofs. Likely, the dofs has changed meanwhile");
 		std::vector<std::vector<double>> res;
 		if (endindex<0) endindex=split_offsets.size()+(endindex);		
 		if (endindex>=split_offsets.size())  throw_runtime_error("Invalid end index");
 		for (unsigned int i=startindex;i<endindex;i++)
 		{
 			unsigned length=split_offsets[i+1]-split_offsets[i];
-			std::cout << "SPlIT INDEX "<< i << " " << length << " FROM " << split_offsets[i] << " TO " << split_offsets[i+1] <<std::endl;
+			//std::cout << "SPlIT INDEX "<< i << " " << length << " FROM " << split_offsets[i] << " TO " << split_offsets[i+1] <<std::endl;
 			res.push_back(std::vector<double>(length));
 			for (unsigned int vi=0;vi<length;vi++) 
 			{
-				std::cout << "DOFPTR" << " at " << split_offsets[i]+vi << "  " << dofptr[split_offsets[i]+vi] <<std::endl << std::flush;
+				//std::cout << "DOFPTR" << " at " << split_offsets[i]+vi << "  " << dofptr[split_offsets[i]+vi] <<std::endl << std::flush;
 				res.back()[vi]=*dofptr[split_offsets[i]+vi];
 			}
 		}

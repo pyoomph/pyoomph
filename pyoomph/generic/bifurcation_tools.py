@@ -442,42 +442,50 @@ class MultiAssembleRequest:
         self._hessian_vectors.append(V)
         return len(self._hessian_vectors)-1
     
-    def request_base_residuals(self,contribution=""):
+    def R(self,contribution=""):
         self._what.append("residuals")
         self._contributions.append(contribution)
+        return self
         
-    def request_base_jacobian(self,contribution=""):
+    def J(self,contribution=""):
         self._what.append("jacobian")
         self._contributions.append(contribution)
+        return self
         
-    def request_base_mass_matrix(self,contribution=""):
+    def M(self,contribution=""):
         self._what.append("mass_matrix")
         self._contributions.append(contribution)
+        return self
         
-    def request_base_dresiduals_dparameter(self,parameter:Union[str,GlobalParameter],contribution=""):
+    def dRdp(self,parameter:Union[str,GlobalParameter],contribution=""):
         self._what.append("dresiduals_dparameter")
         self._contributions.append(contribution)
         self._parameters.append(parameter)
+        return self
     
-    def request_base_djacobian_dparameter(self,parameter:Union[str,GlobalParameter],contribution=""):
+    def dJdp(self,parameter:Union[str,GlobalParameter],contribution=""):
         self._what.append("djacobian_dparameter")
         self._contributions.append(contribution)
         self._parameters.append(parameter)
+        return self
         
-    def request_base_dmass_matrix_dparameter(self,parameter:Union[str,GlobalParameter],contribution=""):
+    def dMdp(self,parameter:Union[str,GlobalParameter],contribution=""):
         self._what.append("dmass_matrix_dparameter")
         self._contributions.append(contribution)
         self._parameters.append(parameter)
+        return self
         
-    def request_base_hessian_vector_product(self,vector:NPFloatArray,contribution=""):
+    def dJdU(self,vector:NPFloatArray,contribution=""):
         self._what.append("hessian_vector_product")
         self._contributions.append(contribution)
         self._hessian_vector_indices.append(self._resolve_hessian_vector_index(vector))
+        return self
         
-    def request_base_mass_matrix_hessian_vector_product(self,vector:NPFloatArray,contribution=""):
+    def dMdU(self,vector:NPFloatArray,contribution=""):
         self._what.append("mass_matrix_hessian_vector_product")
         self._contributions.append(contribution)
         self._hessian_vector_indices.append(self._resolve_hessian_vector_index(vector))
+        return self
         
         
     def assemble(self):
@@ -617,6 +625,12 @@ class CustomBifurcationTracker(AugmentedAssemblyHandler):
             #exit()
         return eigenvector
 
+    def store_eigenvector(self,eigenvects:Dict[Union[float,complex],NPAnyArray]):
+        self.problem._last_eigenvalues=numpy.array(list(eigenvects.keys()))
+        self.problem._last_eigenvectors=numpy.array([numpy.array(v) for v in eigenvects.values()])   
+        self.problem._last_eigenvalues_m=None
+        self.problem._last_eigenvalues_k=None          
+
 
 class FoldTracker(CustomBifurcationTracker):
     """
@@ -649,27 +663,18 @@ class FoldTracker(CustomBifurcationTracker):
     def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:               
         V,=self.get_augmented_dofs().split(startindex=1,endindex=2) # Get the eigenvector solution
         # Request the residuals and Jacobian of the non-augmented system
-        assembly=self.start_multiassembly()                    
+        assembly=self.start_multiassembly()                                            
         if require_jacobian:
             assert dparameter is None, "dparameter not supported for require_jacobian=True"
             # If we need the augmented Jacobian, we also need dR/dP and dJ_ik/dU_j V_k
-            assembly.request_base_residuals() # We need the base residuals
-            assembly.request_base_jacobian() # and the base jacobian
-            assembly.request_base_dresiduals_dparameter(self.parameter)
-            assembly.request_base_djacobian_dparameter(self.parameter)
-            assembly.request_base_hessian_vector_product(V)
-            R,J,dRdP,dJdP,HV=assembly.assemble() # Assemble all quantities, will be given in the order of the requests
+            R,J,dRdP,dJdP,HV=assembly.R().J().dRdp(self.parameter).dJdp(self.parameter).dJdU(V).assemble() 
         else:
-            if dparameter is not None:            
+            if dparameter:
                 # This happens during arclength continuation in another parameter
-                assembly.request_base_dresiduals_dparameter(dparameter)
-                assembly.request_base_djacobian_dparameter(dparameter)
-                dRdp,dJdp=assembly.assemble() 
+                dRdp,dJdp=assembly.dRdp(dparameter).dJdp(dparameter).assemble()
                 return numpy.hstack([dRdp,dJdp@V,0]) # leave here with the derivative of the residuals with respect to the other parameter
-            
-            assembly.request_base_residuals() # We need the base residuals
-            assembly.request_base_jacobian() # and the base jacobian
-            R,J=assembly.assemble() # Only residuals and Jacobian are requested and required
+                                        
+            R,J=assembly.R().J().assemble() # Only residuals and Jacobian are requested and required
             
         nl=self.nonlinear_length_constraint
         Raug=numpy.hstack([R,J@V,numpy.dot(V,(V if nl else self.V0))-self.eigenscale*(self.eigenscale if nl else 1)]) # Augmented dof vector
@@ -688,10 +693,8 @@ class FoldTracker(CustomBifurcationTracker):
     def actions_after_successful_newton_solve(self)->None:
         V,=self.get_augmented_dofs().split(startindex=1,endindex=2)
         V=V/numpy.linalg.norm(V)
-        self.problem._last_eigenvalues=numpy.array([0])
-        self.problem._last_eigenvectors=numpy.array([numpy.array(V)])   
-        self.problem._last_eigenvalues_m=None
-        self.problem._last_eigenvalues_k=None            
+        self.store_eigenvector({0:numpy.array(V)})
+          
 
 
 class PitchForkTracker(CustomBifurcationTracker):
@@ -732,25 +735,15 @@ class PitchForkTracker(CustomBifurcationTracker):
         assembly=self.start_multiassembly()        
         if require_jacobian:
             assert dparameter is None, "dparameter not supported for require_jacobian=True"
-            assembly.request_base_residuals() # We need the base residuals
-            assembly.request_base_jacobian() # and the base jacobian
-            # If we need the augmented Jacobian, we also need dR/dP and dJ_ik/dU_j V_k
-            assembly.request_base_dresiduals_dparameter(self.parameter)
-            assembly.request_base_djacobian_dparameter(self.parameter)
-            assembly.request_base_hessian_vector_product(V)
-            R,J,dRdP,dJdP,HV=assembly.assemble() # Assemble all quantities, will be given in the order of the requests
+            R,J,dRdP,dJdP,HV=assembly.R().J().dRdp(self.parameter).dJdp(self.parameter).dJdU(V).assemble() # Assemble all quantities, will be given in the order of the requests
         else:
             if dparameter is not None:            
                 # This happens during arclength continuation in another parameter
-                assembly.request_base_dresiduals_dparameter(dparameter)
-                assembly.request_base_djacobian_dparameter(dparameter)
-                dRdp,dJdp=assembly.assemble() 
+                dRdp,dJdp=assembly.dRdp(dparameter).dJdp(dparameter).assemble() 
                 # leave here with the derivative of the residuals with respect to the other parameter
                 return numpy.hstack([dRdp,dJdp@V,0,0]) 
-            
-            assembly.request_base_residuals() # We need the base residuals
-            assembly.request_base_jacobian() # and the base jacobian
-            R,J=assembly.assemble() # Only residuals and Jacobian are requested and required
+                        
+            R,J=assembly.R().J().assemble() # Only residuals and Jacobian are requested and required
             
         nl=self.nonlinear_length_constraint
         Raug=numpy.hstack([R+eps*self.S,J@V,numpy.dot(V,(V if nl else self.V0))-self.eigenscale*(self.eigenscale if nl else 1),numpy.dot(U,self.S)]) 
@@ -770,10 +763,7 @@ class PitchForkTracker(CustomBifurcationTracker):
     def actions_after_successful_newton_solve(self)->None:
         V,=self.get_augmented_dofs().split(startindex=1,endindex=2)
         V=V/numpy.linalg.norm(V)
-        self.problem._last_eigenvalues=numpy.array([0])
-        self.problem._last_eigenvectors=numpy.array([numpy.array(V)])       
-        self.problem._last_eigenvalues_m=None
-        self.problem._last_eigenvalues_k=None 
+        self.store_eigenvector({0:V})        
         
 
 class HopfTracker(CustomBifurcationTracker):
@@ -814,31 +804,15 @@ class HopfTracker(CustomBifurcationTracker):
         if require_jacobian:
             assert dparameter is None, "dparameter not supported for require_jacobian=True"
             # If we need the augmented Jacobian, we also need dR/dP and dJ_ik/dU_j V_k
-            assembly.request_base_residuals() # We need the base residuals
-            assembly.request_base_jacobian() # and the base jacobian
-            assembly.request_base_mass_matrix() # and the mass matrix
-            assembly.request_base_dresiduals_dparameter(self.parameter)
-            assembly.request_base_djacobian_dparameter(self.parameter)
-            assembly.request_base_dmass_matrix_dparameter(self.parameter)
-            assembly.request_base_hessian_vector_product(Vr)
-            assembly.request_base_hessian_vector_product(Vi)
-            assembly.request_base_mass_matrix_hessian_vector_product(Vr)
-            assembly.request_base_mass_matrix_hessian_vector_product(Vi)
-            R,J,M,dRdP,dJdP,dMdP,HVr,HVi,dMdUVr,dMdUVi=assembly.assemble() # Assemble all quantities, will be given in the order of the requests
+            R,J,M,dRdP,dJdP,dMdP,HVr,HVi,dMdUVr,dMdUVi=assembly.R().J().M().dRdp(self.parameter).dJdp(self.parameter).dMdp(self.parameter).dJdU(Vr).dJdU(Vi).dMdU(Vr).dMdU(Vi).assemble() # Assemble all quantities, will be given in the order of the requests
         else:
             if dparameter is not None:
                 # This happens during arclength continuation in another parameter
-                assembly.request_base_dresiduals_dparameter(dparameter)
-                assembly.request_base_djacobian_dparameter(dparameter)
-                assembly.request_base_dmass_matrix_dparameter(dparameter)
-                dRdp,dJdp,dMdp=assembly.assemble() 
+                dRdp,dJdp,dMdp=assembly.dRdp(dparameter).dJdp(dparameter).dMdp(dparameter).assemble() 
                 # leave here with the derivative of the residuals with respect to the other parameter
                 return numpy.hstack([dRdp,-dJdp@Vr+omega*dMdp@Vi,-dJdp@Vi-omega*dMdp@Vr,0,0])
             
-            assembly.request_base_residuals() # We need the base residuals
-            assembly.request_base_jacobian() # and the base jacobian
-            assembly.request_base_mass_matrix() # and the mass matrix
-            R,J,M=assembly.assemble() # Only residuals and Jacobian are requested and required
+            R,J,M=assembly.R().J().M().assemble() # Only residuals and Jacobian are requested and required
         
         nl=self.nonlinear_length_constraint
         Raug=numpy.hstack([R,-J@Vr+omega*M@Vi,-J@Vi-omega*M@Vr,numpy.dot(Vr,Vr if nl else self.C)-self.eigenscale*(self.eigenscale if nl else 1),numpy.dot(Vi,Vr if nl else self.C)]) 
@@ -858,10 +832,7 @@ class HopfTracker(CustomBifurcationTracker):
         
     def actions_after_successful_newton_solve(self)->None:
         Vr,Vi,p,omega=self.get_augmented_dofs().split(startindex=1)
-        self.problem._last_eigenvalues=numpy.array([1j*omega])
-        self.problem._last_eigenvectors=numpy.array([numpy.array(Vr)+numpy.array(Vi)*1j])
-        self.problem._last_eigenvalues_m=None
-        self.problem._last_eigenvalues_k=None
+        self.store_eigenvector({(1j*omega[0]):(numpy.array(Vr)+numpy.array(Vi)*1j)})        
         
 
 class NormalModeBifurcationTracker(CustomBifurcationTracker):
@@ -908,9 +879,9 @@ class NormalModeBifurcationTracker(CustomBifurcationTracker):
         
         
     def define_augmented_dofs(self, dofs):
-        self.problem.reapply_boundary_conditions() # Since we usually come from a m!=1 eigenproblem, we have to reapply the boundary conditions
+        #self.problem.reapply_boundary_conditions() # Since we usually come from a m!=1 eigenproblem, we have to reapply the boundary conditions
         # TODO: This must be corrected! We also need nontrivial dofs at eg. the axis, which will be pinned later
-        raise RuntimeError("Reapply the BCS here correctly")
+        #raise RuntimeError("Reapply the BCS here correctly")
         print("AUG",self.has_imag)
         print(numpy.real(self.eigenvector)*self.eigenscale)
         
@@ -939,14 +910,17 @@ class NormalModeBifurcationTracker(CustomBifurcationTracker):
         else:
             if dparameter is not None:
                 raise RuntimeError("Not implemented")
-            assembly.request_base_residuals()
-            assembly.request_base_jacobian(self.real_contribution)
-            assembly.request_base_mass_matrix(self.real_contribution)
+            raise RuntimeError("Implement here")
+            assembly.R()
+            assembly.J(self.real_contribution)
+            assembly.M(self.real_contribution)
             if self.has_imag:
-                assembly.request_base_jacobian(self.imag_contribution)
-                assembly.request_base_mass_matrix(self.imag_contribution)
+                
+                assembly.J(self.imag_contribution)
+                assembly.M(self.imag_contribution)
                 R,Jr,Mr,Ji,Mi=assembly.assemble()
             else:
+                raise RuntimeError("Implement here")
                 R,Jr,Mr=assembly.assemble()
         nl=self.nonlinear_length_constraint
         if self.has_imag:
@@ -982,24 +956,13 @@ class RealEigenbranchTracker(CustomBifurcationTracker):
         assembly=self.start_multiassembly()
         if require_jacobian:
             assert dparameter is None, "dparameter not supported for require_jacobian=True"
-            assembly.request_base_residuals()
-            assembly.request_base_jacobian()
-            assembly.request_base_mass_matrix()
-            assembly.request_base_hessian_vector_product(V)
-            assembly.request_base_mass_matrix_hessian_vector_product(V)
-            R,J,M,HJV,HMV=assembly.assemble()
+            R,J,M,HJV,HMV=assembly.R().J().M().dJdU(V).dMdU(V).assemble()
         else:
             if dparameter is not None:                
-                assembly.request_base_dresiduals_dparameter(dparameter)
-                assembly.request_base_djacobian_dparameter(dparameter)
-                assembly.request_base_dmass_matrix_dparameter(dparameter)
-                dRdp,dJdp,dMdp=assembly.assemble()
+                dRdp,dJdp,dMdp=assembly.dRdp(dparameter).dJdp(dparameter).dMdp(dparameter).assemble()
                 return numpy.hstack([dRdp,lam*dMdp@V+dJdp@V,0])
-            
-            assembly.request_base_residuals()
-            assembly.request_base_jacobian()
-            assembly.request_base_mass_matrix()
-            R,J,M=assembly.assemble()
+
+            R,J,M=assembly.R().J().M().assemble()
             
         nl=self.nonlinear_length_constraint
         Raug=numpy.hstack([R,lam*M@V+J@V,numpy.dot(V,V if nl else self.V0)-self.eigenscale*(self.eigenscale if nl else 1)])
@@ -1016,10 +979,7 @@ class RealEigenbranchTracker(CustomBifurcationTracker):
 
     def actions_after_successful_newton_solve(self)->None:
         Vr,lam=self.get_augmented_dofs().split(startindex=1)
-        self.problem._last_eigenvalues=numpy.array(lam)
-        self.problem._last_eigenvectors=numpy.array([numpy.array(Vr)])
-        self.problem._last_eigenvalues_m=None
-        self.problem._last_eigenvalues_k=None
+        self.store_eigenvector({lam[0]:numpy.array(Vr)})        
 
 
 
@@ -1048,26 +1008,13 @@ class ComplexEigenbranchTracker(CustomBifurcationTracker):
         assembly=self.start_multiassembly()
         if require_jacobian:
             assert dparameter is None, "dparameter not supported for require_jacobian=True"
-            assembly.request_base_residuals()
-            assembly.request_base_jacobian()
-            assembly.request_base_mass_matrix()
-            assembly.request_base_hessian_vector_product(Vr)            
-            assembly.request_base_hessian_vector_product(Vi)
-            assembly.request_base_mass_matrix_hessian_vector_product(Vi)
-            assembly.request_base_mass_matrix_hessian_vector_product(Vr)
-            R,J,M,HJVr,HJVi,HMVr,HMVi=assembly.assemble()
+            R,J,M,HJVr,HJVi,HMVr,HMVi=assembly.R().J().M().dJdU(Vr).dJdU(Vi).dMdU(Vr).dMdU(Vi).assemble()
         else:
             if dparameter is not None:                
-                assembly.request_base_dresiduals_dparameter(dparameter)
-                assembly.request_base_djacobian_dparameter(dparameter)
-                assembly.request_base_dmass_matrix_dparameter(dparameter)
-                dRdp,dJdp,dMdp=assembly.assemble()
+                dRdp,dJdp,dMdp=assembly.dRdp(dparameter).dJdp(dparameter).dMdp(dparameter).assemble()
                 return numpy.hstack([dRdp,dMdp@(lam*Vr-omega*Vi)+dJdp@Vr,dMdp@(lam*Vi+omega*Vr)+dJdp@Vi, 0,0])
             
-            assembly.request_base_residuals()
-            assembly.request_base_jacobian()
-            assembly.request_base_mass_matrix()
-            R,J,M=assembly.assemble()
+            R,J,M=assembly.R().J().M().assemble()
             
         nl=self.nonlinear_length_constraint
         Raug=numpy.hstack([R,M@(lam*Vr-omega*Vi)+J@Vr,M@(lam*Vi+omega*Vr)+J@Vi, numpy.dot(Vr,Vr if nl else self.V0)-self.eigenscale*(self.eigenscale if nl else 1),numpy.dot(Vi,Vr if nl else self.V0)])
@@ -1086,10 +1033,8 @@ class ComplexEigenbranchTracker(CustomBifurcationTracker):
 
     def actions_after_successful_newton_solve(self)->None:
         Vr,Vi,lam,omg=self.get_augmented_dofs().split(startindex=1)
-        self.problem._last_eigenvalues=numpy.array([lam[0]+1j*omg[0]])
-        self.problem._last_eigenvectors=numpy.array([numpy.array(Vr)+numpy.array(Vi)*1j])                
-        self.problem._last_eigenvalues_m=None
-        self.problem._last_eigenvalues_k=None
+        self.store_eigenvector({lam[0]+1j*omg[0]:numpy.array(Vr)+numpy.array(Vi)*1j})
+        
 
 
 
