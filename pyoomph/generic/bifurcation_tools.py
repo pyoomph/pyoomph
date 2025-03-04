@@ -1,10 +1,12 @@
+import scipy.sparse
 from .problem import Problem
 from ..expressions import GlobalParameter,ExpressionNumOrNone
 from ..typings import *
 import _pyoomph
 import numpy,scipy
 from .assembly import CustomAssemblyBase
-from ..solvers.generic import DefaultMatrixType
+from ..solvers.generic import DefaultMatrixType,EigenMatrixManipulatorBase
+
 from scipy.sparse import csr_matrix      
 
 def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,str],FD_delta:float=1e-5,FD_param_delta:float=1e-5,omega:Optional[float]=None,q:Optional[NPComplexArray]=None,mu0:float=0,omega_epsilon:float=1e-3):
@@ -610,13 +612,50 @@ class CustomBifurcationTracker(AugmentedAssemblyHandler):
                 raise RuntimeError("Eigenvalue index out of range")
             eigenvector=self.problem.get_last_eigenvectors()[eigenvector]
         if normalize:
-            pR,pI=numpy.real(eigenvector),numpy.imag(eigenvector)            
-            def optimize(theta):
-                p=(pR+pI*1j)*numpy.exp(1j*theta)
-                return abs(numpy.dot(numpy.real(p),numpy.imag(p)))
-            eigenvector/=numpy.linalg.norm(numpy.real(eigenvector))
-            theta=scipy.optimize.minimize_scalar(optimize,bounds=(0,2*numpy.pi),method="bounded",options={"xatol":1e-15,"maxiter":100}).x
-            eigenvector=(pR+pI*1j)*numpy.exp(1j*theta)
+            GrGr=numpy.dot(numpy.real(eigenvector),numpy.real(eigenvector))
+            GrGi=numpy.dot(numpy.real(eigenvector),numpy.imag(eigenvector))
+            GiGi=numpy.dot(numpy.imag(eigenvector),numpy.imag(eigenvector))
+            n_phi_samples,n_iter,best_phi,best_GrGr=30,15,0,GrGr            
+            for phi in numpy.linspace(0,2*numpy.pi,n_phi_samples):
+                res=-GiGi*numpy.sin(phi)*numpy.cos(phi) - GrGi*numpy.sin(phi)*numpy.sin(phi) + GrGi*numpy.cos(phi)*numpy.cos(phi) + GrGr*numpy.sin(phi)*numpy.cos(phi)
+                GrGr_new=numpy.dot(numpy.real(eigenvector)*numpy.cos(phi)+numpy.imag(eigenvector)*numpy.sin(phi),numpy.real(eigenvector)*numpy.cos(phi)+numpy.imag(eigenvector)*numpy.sin(phi))
+                success=False
+                for iter in range(n_iter):
+                    J=GiGi*numpy.sin(phi)*numpy.sin(phi) - GiGi*numpy.cos(phi)*numpy.cos(phi) - 4*GrGi*numpy.sin(phi)*numpy.cos(phi) - GrGr*numpy.sin(phi)*numpy.sin(phi) + GrGr*numpy.cos(phi)*numpy.cos(phi)
+                    if numpy.abs(J)<1.0e-10:
+                        break # Singular Jacobian
+                    phi-=res/J
+                    res=-GiGi*numpy.sin(phi)*numpy.cos(phi) - GrGi*numpy.sin(phi)*numpy.sin(phi) + GrGi*numpy.cos(phi)*numpy.cos(phi) + GrGr*numpy.sin(phi)*numpy.cos(phi)
+                    if numpy.abs(res)<1.0e-10:
+                        success=True
+                        break
+                if not success:
+                    continue                
+                # Test whether it maximizes <Re(eigenvector),Re(eigenvector)>
+                GrGr_new=GrGr*numpy.cos(phi)*numpy.cos(phi) + GiGi*numpy.sin(phi)*numpy.sin(phi) - 2*GrGi*numpy.sin(phi)*numpy.cos(phi)
+                if GrGr_new>best_GrGr:      
+                    best_GrGr=GrGr_new
+                    best_phi=phi
+            eigenvector=numpy.exp(1j*best_phi)*eigenvector
+    
+            if False:
+                pR,pI=numpy.real(eigenvector),numpy.imag(eigenvector)            
+                def optimize(theta):
+                    p=(pR+pI*1j)*numpy.exp(1j*theta)
+                    return abs(numpy.dot(numpy.real(p),numpy.imag(p))),abs(numpy.dot(numpy.imag(p),numpy.imag(p)))
+                besttheta,bestval,smallest_im=0,None,None
+                for testtheta in numpy.linspace(0,2*numpy.pi,100):
+                    val,imim=optimize(testtheta)
+                    if (bestval is None or val<bestval) and (smallest_im is None or imim<smallest_im):
+                        bestval=val
+                        besttheta=testtheta
+                        smallest_im=imim
+                eigenvector/=numpy.linalg.norm(numpy.real(eigenvector))
+                #theta=scipy.optimize.minimize_scalar(optimize,bounds=(0,2*numpy.pi),method="bounded",options={"xatol":1e-15,"maxiter":100}).x
+                theta=scipy.optimize.root_scalar(lambda t:optimize(t)[0],x0=besttheta).root
+                eigenvector=(pR+pI*1j)*numpy.exp(1j*theta)
+                eigenvector/=numpy.linalg.norm(numpy.real(eigenvector))
+                
             eigenvector/=numpy.linalg.norm(numpy.real(eigenvector))
             
             #print("Eigenvector ReIm",numpy.dot(numpy.real(eigenvector),numpy.imag(eigenvector)))
@@ -835,10 +874,9 @@ class HopfTracker(CustomBifurcationTracker):
         self.store_eigenvector({(1j*omega[0]):(numpy.array(Vr)+numpy.array(Vi)*1j)})        
         
 
-class NormalModeBifurcationTracker(CustomBifurcationTracker):
-    def __init__(self, problem:Problem,parameter:str,eigenvector:int=0,azimuthal_m:Optional[int]=None,cartesian_k:ExpressionNumOrNone=None,eigenscale:float=1,nonlinear_length_constraint:bool=False):
-        super().__init__(problem)                 
-        self.parameter=parameter
+class _NormalModeBifurcationTrackerBase(CustomBifurcationTracker):
+    def __init__(self, problem:Problem,eigenvector:int=0,azimuthal_m:Optional[int]=None,cartesian_k:ExpressionNumOrNone=None,eigenscale:float=1,nonlinear_length_constraint:bool=False):    
+        super().__init__(problem)
         self.eigenscale=eigenscale
         self.nonlinear_length_constraint=nonlinear_length_constraint
         if self.problem._azimuthal_mode_param_m is not None:
@@ -849,6 +887,7 @@ class NormalModeBifurcationTracker(CustomBifurcationTracker):
                 self.azimuthal_m=azimuthal_m
             else:
                 self.azimuthal_m=self.problem.get_last_eigenmodes_m()[eigenvector]
+            self.problem._azimuthal_mode_param_m.value=self.azimuthal_m
             self.real_contribution=self.problem._azimuthal_stability.real_contribution_name
             self.imag_contribution=self.problem._azimuthal_stability.imag_contribution_name
         elif self._normal_mode_param_k is not None:
@@ -859,79 +898,193 @@ class NormalModeBifurcationTracker(CustomBifurcationTracker):
                 self.cartesian_k=cartesian_k
             else:
                 self.cartesian_k=self.problem.get_last_eigenmodes_k()[eigenvector]
+            self.problem._normal_mode_param_k.value=self.cartesian_k
             self.real_contribution=self.problem._cartesian_normal_mode_stability.real_contribution_name
             self.imag_contribution=self.problem._cartesian_normal_mode_stability.imag_contribution_name
         else:
             raise RuntimeError("Normal mode bifurcation tracking requires either azimuthal mode or Cartesian normal mode by calling setup_for_stability_analysis with the right kwargs first") 
         
+        self.eigenvector=self.get_complex_eigenvector_guess(eigenvector)
+        #print(numpy.dot(numpy.imag(self.eigenvector),numpy.real(self.eigenvector)))
+        #print(numpy.dot(numpy.imag(self.eigenvector),numpy.imag(self.eigenvector)))
+        #print(numpy.dot(numpy.real(self.eigenvector),numpy.real(self.eigenvector)))
         
-        self.has_imag=self.problem._set_solved_residual(self.imag_contribution,raise_error=False)
-        self.problem._set_solved_residual("")
+        
+        
+        self.has_imag=numpy.dot(numpy.imag(self.eigenvector),numpy.imag(self.eigenvector))>1e-15 # TODO: Make it adjustable
+        if not self.has_imag:
+            self.has_imag=self.problem._set_solved_residual(self.imag_contribution,raise_error=False)
+            self.problem._set_solved_residual("")
+            if self.has_imag:
+                raise RuntimeError("Strange, eigenvector is real, but it has imaginary jacobian contribution")
+        self.lambda0=numpy.real(self.problem.get_last_eigenvalues()[eigenvector])
         if self.has_imag: # TODO: Is this really the case? Can't we have a Hopf bifurcation for normal mode expansions? I think so, e.g. on a partial_t(u,2)=div(grad(u))+alpha*u, we can have a Hopf bifurcation
-            self.eigenvector=self.get_complex_eigenvector_guess(eigenvector)
+            #self.eigenvector=self.get_complex_eigenvector_guess(eigenvector)
             self.V0=numpy.real(self.eigenvector)/numpy.linalg.norm(numpy.real(self.eigenvector))
-            self.omega=numpy.imag(self.problem.get_last_eigenvalues()[eigenvector])
+            self.omega=numpy.imag(self.problem.get_last_eigenvalues()[eigenvector])            
         else:
             self.eigenvector=self.get_real_eigenvector_guess(eigenvector)
             self.V0=self.eigenvector/numpy.linalg.norm(self.eigenvector)
             self.omega=0
-        
-        
-        
+            
+        self.base_zero_dofs,self.eigen_zero_dofs=self.get_forced_to_zero_dofs()
+
+    def patch_residuals(self,eigen:bool,R:Union[List[NPFloatArray],NPFloatArray]):
+        if not isinstance(R,list):
+            R=[R]
+        res=[]
+        for r in R:
+            r=numpy.array(r)            
+            r[numpy.array(list(self.eigen_zero_dofs if eigen else self.base_zero_dofs),dtype="int64")]=0.0
+            res.append(r)
+        return res
+    
+    def patch_matrices(self,eigen:bool,J:Union[DefaultMatrixType,List[DefaultMatrixType]],M:Union[DefaultMatrixType,List[DefaultMatrixType]]=[])->Tuple[DefaultMatrixType,...]:
+        if not isinstance(J,list):
+            J=[J]
+        if not isinstance(M,list):
+            M=[M]
+        N=J[0].shape[0]
+        Adiag=numpy.ones(N)
+        Adiag[numpy.array(sorted(list(self.eigen_zero_dofs if eigen else self.base_zero_dofs)),dtype=numpy.int64)] = 0.0
+        Bdiag=1-Adiag
+        A=scipy.sparse.spdiags(Adiag, [0], N, N).tocsr()
+        B=scipy.sparse.spdiags(Bdiag, [0], N, N).tocsr()
+        res=[]
+        for Jmat in J:
+            res.append(A@Jmat+B)
+        for Mmat in M:
+            res.append(A@Mmat)
+        return res
+
+    def get_forced_to_zero_dofs(self):
+        if self.azimuthal:
+            base_zero_dofs=self.problem._equation_system._get_forced_zero_dofs_for_eigenproblem(self.problem.get_eigen_solver(),0,None)                         
+            eigen_zero_dofs=self.problem._equation_system._get_forced_zero_dofs_for_eigenproblem(self.problem.get_eigen_solver(),self.azimuthal_m,None) 
+        else:            
+            base_zero_dofs=self.problem._equation_system._get_forced_zero_dofs_for_eigenproblem(self.problem.get_eigen_solver(),None,0)                         
+            eigen_zero_dofs=self.problem._equation_system._get_forced_zero_dofs_for_eigenproblem(self.problem.get_eigen_solver(),None,self.cartesian_k) 
+        base_zero_dofs=self.problem.dof_strings_to_global_equations(base_zero_dofs)            
+        eigen_zero_dofs=self.problem.dof_strings_to_global_equations(eigen_zero_dofs)
+        return base_zero_dofs,eigen_zero_dofs
+    
     def define_augmented_dofs(self, dofs):
-        #self.problem.reapply_boundary_conditions() # Since we usually come from a m!=1 eigenproblem, we have to reapply the boundary conditions
-        # TODO: This must be corrected! We also need nontrivial dofs at eg. the axis, which will be pinned later
-        #raise RuntimeError("Reapply the BCS here correctly")
-        print("AUG",self.has_imag)
-        print(numpy.real(self.eigenvector)*self.eigenscale)
-        
         dofs.add_vector(0+numpy.real(self.eigenvector)*self.eigenscale)
         if self.has_imag:
-            print(numpy.imag(self.eigenvector)*self.eigenscale)
             dofs.add_vector(numpy.imag(self.eigenvector)*self.eigenscale)
-        print(self.parameter)
-        dofs.add_parameter(self.parameter)
+        if self.parameter is None:
+            dofs.add_scalar(self.lambda0)
+        else:
+            dofs.add_parameter(self.parameter)
         if self.has_imag:
-            print(self.omega)
             dofs.add_scalar(self.omega)
-            
-    def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:
-        print("ENTER HERE",self.has_imag)
+
+    def actions_after_successful_newton_solve(self):
         if self.has_imag:
+            Vr,Vi,lam,omega=self.get_augmented_dofs().split(startindex=1)            
+            lam=lam[0] if self.parameter is None else 0
+            self.store_eigenvector({(lam+1j*omega[0]):(numpy.array(Vr)+numpy.array(Vi)*1j)})
+        else:
+            Vr,lam=self.get_augmented_dofs().split(startindex=1)
+            lam=lam[0] if self.parameter is None else 0
+            self.store_eigenvector({lam:numpy.array(Vr)})            
+            
+            
+class NormalModeBifurcationTracker(_NormalModeBifurcationTrackerBase):
+    def __init__(self, problem:Problem,parameter:str,eigenvector:int=0,azimuthal_m:Optional[int]=None,cartesian_k:ExpressionNumOrNone=None,eigenscale:float=1,nonlinear_length_constraint:bool=False):
+        super().__init__(problem,eigenvector,azimuthal_m,cartesian_k,eigenscale,nonlinear_length_constraint)
+        self.parameter=parameter
+        
+
+                
+    def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:
+        nl=self.nonlinear_length_constraint
+        if not self.has_imag:
+            Vr,p=self.get_augmented_dofs().split(startindex=1)
+            if not require_jacobian:
+                if dparameter is not None:
+                    dRdp,dJRdp=self.start_multiassembly().dRdp(dparameter).dJdp(dparameter,self.real_contribution)
+                    dJRdp,=self.patch_matrices(eigen=True,J=dJRdp)
+                    dRdp,=self.patch_residuals(eigen=False,R=[dRdp])
+                    return numpy.hstack([dRdp,dJRdp@Vr,0.0])                                
+                else:
+                    R,JR=self.start_multiassembly().R().J(self.real_contribution).assemble()
+                    JR,=self.patch_matrices(eigen=True,J=JR)
+                    R,=self.patch_residuals(eigen=False,R=[R])
+                    return numpy.hstack([R,JR@Vr,numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)])                                
+            else:
+                assert dparameter is None, "dparameter not supported for require_jacobian=True"
+                R,J,JR,HJVr,dJRdp=self.start_multiassembly().R().J().J(self.real_contribution).M(self.real_contribution).dJdU(Vr).dJdp(self.parameter).assemble()
+                J,=self.patch_matrices(eigen=False,J=J)
+                R,=self.patch_residuals(eigen=False,R=[R])
+                JR,dJRdP=self.patch_matrices(eigen=True,J=[JR,dJRdP])
+                col=lambda C:self.as_matrix_column(C)
+                row=lambda R:self.as_matrix_row(R)                                
+                Raug=numpy.hstack([R,JRVr,numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)])                                
+                Jaug=scipy.sparse.block_array(
+                    [[J,None,None],
+                     [HJVr,JR,col(dJRdP@Vr)],
+                     [None,row(2*Vr if nl else self.V0),None]]).tocsr()
+                return Raug,Jaug
+        else:
             Vr,Vi,p,omega=self.get_augmented_dofs().split(startindex=1)
             omega=omega[0]
-        else:
-            Vr,p=self.get_augmented_dofs().split(startindex=1)
-        print("ARRIVED HERE")
-        assembly=self.start_multiassembly()
-        if require_jacobian:
-            assert dparameter is None, "dparameter not supported for require_jacobian=True"
-            raise RuntimeError("Not implemented")
-        else:
-            if dparameter is not None:
-                raise RuntimeError("Not implemented")
-            raise RuntimeError("Implement here")
-            assembly.R()
-            assembly.J(self.real_contribution)
-            assembly.M(self.real_contribution)
-            if self.has_imag:
-                
-                assembly.J(self.imag_contribution)
-                assembly.M(self.imag_contribution)
-                R,Jr,Mr,Ji,Mi=assembly.assemble()
-            else:
-                raise RuntimeError("Implement here")
-                R,Jr,Mr=assembly.assemble()
-        nl=self.nonlinear_length_constraint
-        if self.has_imag:
-            Raug=numpy.hstack([R,-Ji@Vi + Jr@Vr - omega*(Mi@Vr + Mr@Vi),Ji@Vr + Jr@Vi + omega*(-Mi@Vi + Mr@Vr),numpy.dot(Vr,Vr if nl else self.V0)-self.eigenscale*(self.eigenscale if nl else 1),numpy.dot(Vi,Vr if nl else self.V0)])
-        else:
-            raise RuntimeError("Check")
-            Raug=numpy.hstack([R,Jr@Vr,numpy.dot(Vr,Vr if nl else self.V0)-self.eigenscale*(self.eigenscale if nl else 1)])
-        if not self.require_jacobian:
-            return Raug        
-        raise RuntimeError("Not implemented")
-        
+            if not require_jacobian:
+                if dparameter is not None:
+                    assm=self.start_multiassembly().dRdp(dparameter).dJdp(dparameter,self.real_contribution).dJdp(dparameter,self.imag_contribution)
+                    assm.dMdp(dparameter,self.real_contribution).dMdp(dparameter,self.imag_contribution)
+                    dRdp,dJRdp,dJIdp,dMRdp,dMIdp=assm.assemble()
+                    dJRdp,dJIdp,dMRdp,dMIdp=self.patch_matrices(eigen=True,J=[dJRdp,dJIdp],M=[dMRdp,dMIdp])                    
+                    d_eq_V_re_dp=-dJIdp*Vi + dJRdp*Vr +  omega*(-dMIdp*Vr - dMRdp*Vi)
+                    d_eq_V_im_dp=dJIdp*Vr + dJRdp*Vi + omega*(-dMIdp*Vi + dMRdp*Vr)                    
+                    return numpy.hstack([dRdp,d_eq_V_re_dp,d_eq_V_im_dp,0,0])                                
+                else:
+                    R,JR,JI,MR,MI=self.start_multiassembly().R().J(self.real_contribution).J(self.imag_contribution).M(self.real_contribution).M(self.imag_contribution).assemble()
+                    R,=self.patch_residuals(eigen=False,R=[R])
+                    JR,JI,MR,MI=self.patch_matrices(eigen=True,J=[JR,JI],M=[MR,MI])                    
+                    eq_V_re=-JI*Vi + JR*Vr +  omega*(-MI*Vr - MR*Vi)
+                    eq_V_im=JI*Vr + JR*Vi  + omega*(-MI*Vi + MR*Vr)
+                    norm_constr=numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)
+                    rot_constr=numpy.dot(Vi,Vr if self.nonlinear_length_constraint else self.V0)
+                    eq_V_re,eq_V_im=self.patch_residuals(eigen=True,R=[eq_V_re,eq_V_im])
+                    #print("MAX RES IN R",numpy.max(numpy.abs(R)))
+                    #print("MAX RES IN eq_V_re",numpy.max(numpy.abs(eq_V_re)))
+                    #print("MAX RES IN eq_V_im",numpy.max(numpy.abs(eq_V_im)))
+                    #print("MAX RES IN norm_constr",numpy.max(numpy.abs(norm_constr)))
+                    #print("MAX RES IN rot_constr",numpy.max(numpy.abs(rot_constr)))
+                    return numpy.hstack([R,eq_V_re,eq_V_im,norm_constr,rot_constr])                                
+            else:                
+                assm=self.start_multiassembly().R().dRdp(self.parameter).J().J(self.real_contribution).J(self.imag_contribution).M(self.real_contribution).M(self.imag_contribution)
+                assm.dJdU(Vr,self.real_contribution).dJdU(Vi,self.real_contribution).dJdU(Vr,self.imag_contribution).dJdU(Vi,self.imag_contribution)
+                assm.dMdU(Vr,self.real_contribution).dMdU(Vi,self.real_contribution).dMdU(Vr,self.imag_contribution).dMdU(Vi,self.imag_contribution)
+                assm.dJdp(self.parameter,self.real_contribution).dJdp(self.parameter,self.imag_contribution).dMdp(self.parameter,self.real_contribution).dMdp(self.parameter,self.imag_contribution)
+                R,dRdp,J,JR,JI,MR,MI, HJRVR,HJRVI,HJIVR,HJIVI, HMRVR,HMRVI,HMIVR,HMIVI,dJRdp,dJIdp,dMRdp,dMIdp=assm.assemble()
+                J,=self.patch_matrices(eigen=False,J=J)
+                JR,JI,dJRdp,dJIdp,MR,MI,dMRdp,dMIdp=self.patch_matrices(eigen=True,J=[JR,JI,dJRdp,dJIdp],M=[MR,MI,dMRdp,dMIdp])                                    
+                #HJRVR,HJRVI,HJIVR,HJIVI, HMRVR,HMRVI,HMIVR,HMIVI=self.patch_matrices(eigen=True,J=[HJRVR,HJRVI,HJIVR,HJIVI],M=[HMRVR,HMRVI,HMIVR,HMIVI])
+                eq_V_re=JR@Vr -JI@Vi  - omega*(MI@Vr + MR@Vi)
+                d_eq_V_re_dU=HJRVR - HJIVI - omega*(HMIVR + HMRVI)
+                d_eq_V_re_dVr=JR  - omega*MI
+                d_eq_V_re_dVi=-JI  - omega*MR
+                d_eq_V_re_dp=dJRdp@Vr -dJIdp@Vi  - omega*(dMIdp@Vr + dMRdp@Vi)
+                eq_V_im=JI@Vr + JR@Vi  + omega*(MR@Vr-MI@Vi)
+                d_eq_V_im_dU=HJIVR + HJRVI  + omega*(HMRVR-HMIVI)
+                d_eq_V_im_dVr=JI  + omega*MR
+                d_eq_V_im_dVi=JR  - omega*MI
+                d_eq_V_im_dp=dJIdp@Vr + dJRdp@Vi  + omega*(dMRdp@Vr-dMIdp@Vi)
+                norm_constr=numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)
+                rot_constr=numpy.dot(Vi,Vr if self.nonlinear_length_constraint else self.V0)
+                Raug=numpy.hstack([R,eq_V_re,eq_V_im,norm_constr,rot_constr])                                
+                col=lambda C:self.as_matrix_column(C)
+                row=lambda R:self.as_matrix_row(R)                
+                Jaug=scipy.sparse.block_array([
+                    [J,None,None,col(dRdp),None],
+                    [d_eq_V_re_dU,d_eq_V_re_dVr,d_eq_V_re_dVi,col(d_eq_V_re_dp),col(-(MI*Vr + MR*Vi))],
+                    [d_eq_V_im_dU,d_eq_V_im_dVr,d_eq_V_im_dVi,col(d_eq_V_im_dp),col(MR*Vr-MI*Vi)],
+                    [None,row(2*Vr if nl else self.V0),None,None,None],
+                    [None,row(Vi) if nl else None,row(Vr if nl else self.V0),None,None]
+                ]).tocsr()
+                return Raug,Jaug        
         
         
 class RealEigenbranchTracker(CustomBifurcationTracker):
@@ -1037,6 +1190,98 @@ class ComplexEigenbranchTracker(CustomBifurcationTracker):
         
 
 
+class NormalModeEigenbranchTracker(_NormalModeBifurcationTrackerBase):
+    def __init__(self, problem,eigenvector:int,azimuthal_m:Optional[int]=None,cartesian_k:ExpressionNumOrNone=None,eigenscale:float=1,nonlinear_length_constraint:bool=False):
+        super().__init__(problem,eigenvector,azimuthal_m,cartesian_k,eigenscale,nonlinear_length_constraint)
+        self.parameter=None # No parameter means essentially take the real part as adjustable parameter
+                
+    def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:
+        nl=self.nonlinear_length_constraint
+        if not self.has_imag:
+            Vr,lamb=self.get_augmented_dofs().split(startindex=1)
+            lamb=lamb[0]
+            if not require_jacobian:
+                if dparameter is not None:
+                    dRdp,dJRdp,dMRdp=self.start_multiassembly().dRdp(dparameter).dJdp(dparameter,self.real_contribution).dMdp(dparameter,self.real_contribution).assemble()
+                    dJRdp,dMRdp=self.patch_matrices(eigen=True,J=dJRdp,M=dMRdp)
+                    dRdp,=self.patch_residuals(eigen=False,R=[dRdp])
+                    return numpy.hstack([dRdp,lamb*dMRdp@Vr+dJRdp@Vr,0.0])                                
+                else:
+                    R,JR,MR=self.start_multiassembly().R().J(self.real_contribution).M(self.real_contribution).assemble()
+                    JR,MR=self.patch_matrices(eigen=True,J=JR,M=MR)
+                    return numpy.hstack([R,lamb*MR@Vr+JR@Vr,numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)])                                
+            else:
+                assert dparameter is None, "dparameter not supported for require_jacobian=True"
+                R,J,JR,MR,HJVr,HMVr=self.start_multiassembly().R().J().J(self.real_contribution).M(self.real_contribution).dJdU(Vr).dMdU(Vr).assemble()
+                R,=self.patch_residuals(eigen=False,R=[R])
+                J,=self.patch_matrices(eigen=False,J=J)
+                JR,MR=self.patch_matrices(eigen=True,J=JR,M=MR)
+                col=lambda C:self.as_matrix_column(C)
+                row=lambda R:self.as_matrix_row(R)                
+                Raug=numpy.hstack([R,lamb*MR@Vr+JR@Vr,numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)])                                
+                Jaug=scipy.sparse.block_array(
+                    [[J,None,None],
+                     [lamb*HMVr+HJVr,lamb*MR+JR,col(MR@Vr)],
+                     [None,row(2*Vr if nl else self.V0),None]]).tocsr()
+                return Raug,Jaug
+        else:
+            Vr,Vi,lamb,omega=self.get_augmented_dofs().split(startindex=1)
+            lamb,omega=lamb[0],omega[0]
+            if not require_jacobian:
+                if dparameter is not None:
+                    assm=self.start_multiassembly().dRdp(dparameter).dJdp(dparameter,self.real_contribution).dJdp(dparameter,self.imag_contribution)
+                    assm.dMdp(dparameter,self.real_contribution).dMdp(dparameter,self.imag_contribution)
+                    dRdp,=self.patch_residuals(eigen=False,R=[dRdp])
+                    dRdp,dJRdp,dJIdp,dMRdp,dMIdp=assm.assemble()
+                    dJRdp,dJIdp,dMRdp,dMIdp=self.patch_matrices(eigen=True,J=[dJRdp,dJIdp],M=[dMRdp,dMIdp])                    
+                    d_eq_V_re_dp=-dJIdp*Vi + dJRdp*Vr + lamb*(-dMIdp*Vi + dMRdp*Vr) + omega*(-dMIdp*Vr - dMRdp*Vi)
+                    d_eq_V_im_dp=dJIdp*Vr + dJRdp*Vi + lamb*(dMIdp*Vr + dMRdp*Vi) + omega*(-dMIdp*Vi + dMRdp*Vr)                    
+                    return numpy.hstack([dRdp,d_eq_V_re_dp,d_eq_V_im_dp,0,0])                                
+                else:
+                    R,JR,JI,MR,MI=self.start_multiassembly().R().J(self.real_contribution).J(self.imag_contribution).M(self.real_contribution).M(self.imag_contribution).assemble()
+                    R,=self.patch_residuals(eigen=False,R=[R])
+                    JR,JI,MR,MI=self.patch_matrices(eigen=True,J=[JR,JI],M=[MR,MI])                    
+                    eq_V_re=-JI*Vi + JR*Vr + lamb*(-MI*Vi + MR*Vr) + omega*(-MI*Vr - MR*Vi)
+                    eq_V_im=JI*Vr + JR*Vi + lamb*(MI*Vr + MR*Vi) + omega*(-MI*Vi + MR*Vr)
+                    norm_constr=numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)
+                    rot_constr=numpy.dot(Vi,Vr if self.nonlinear_length_constraint else self.V0)                    
+                    return numpy.hstack([R,eq_V_re,eq_V_im,norm_constr,rot_constr])                                
+            else:                
+                #import time
+                #start=time.time()
+                assm=self.start_multiassembly().R().J().J(self.real_contribution).J(self.imag_contribution).M(self.real_contribution).M(self.imag_contribution)
+                assm.dJdU(Vr,self.real_contribution).dJdU(Vi,self.real_contribution).dJdU(Vr,self.imag_contribution).dJdU(Vi,self.imag_contribution)
+                assm.dMdU(Vr,self.real_contribution).dMdU(Vi,self.real_contribution).dMdU(Vr,self.imag_contribution).dMdU(Vi,self.imag_contribution)
+                R,J,JR,JI,MR,MI, HJRVR,HJRVI,HJIVR,HJIVI, HMRVR,HMRVI,HMIVR,HMIVI=assm.assemble()
+                #end=time.time()
+                #print("TIME TO ASSEMBLE",end-start)
+                J,=self.patch_matrices(eigen=False,J=J)
+                R,=self.patch_residuals(eigen=False,R=[R])
+                JR,JI,MR,MI=self.patch_matrices(eigen=True,J=[JR,JI],M=[MR,MI])                    
+                eq_V_re=JR@Vr -JI@Vi + lamb*(MR@Vr-MI@Vi) - omega*(MI@Vr + MR@Vi)
+                d_eq_V_re_dU=-HJIVI + HJRVR + lamb*(HMRVR-HMIVI) - omega*(HMIVR + HMRVI)
+                d_eq_V_re_dVr=JR + lamb*MR - omega*MI
+                d_eq_V_re_dVi=-JI - lamb*MI - omega*MR
+                eq_V_im=JI@Vr + JR@Vi + lamb*(MI@Vr + MR@Vi) + omega*(MR@Vr-MI@Vi)
+                d_eq_V_im_dU=HJIVR + HJRVI + lamb*(HMIVR + HMRVI) + omega*(HMRVR-HMIVI)
+                d_eq_V_im_dVr=JI + lamb*MI + omega*MR
+                d_eq_V_im_dVi=JR + lamb*MR - omega*MI
+                norm_constr=numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)
+                rot_constr=numpy.dot(Vi,Vr if self.nonlinear_length_constraint else self.V0)
+                Raug=numpy.hstack([R,eq_V_re,eq_V_im,norm_constr,rot_constr])                                
+                col=lambda C:self.as_matrix_column(C)
+                row=lambda R:self.as_matrix_row(R)                
+                Jaug=scipy.sparse.block_array([
+                    [J,None,None,None,None],
+                    [d_eq_V_re_dU,d_eq_V_re_dVr,d_eq_V_re_dVi,col(-MI*Vi + MR*Vr),col(-MI*Vr - MR*Vi)],
+                    [d_eq_V_im_dU,d_eq_V_im_dVr,d_eq_V_im_dVi,col(MI*Vr + MR*Vi),col(-MI*Vi + MR*Vr)],
+                    [None,row(2*Vr if nl else self.V0),None,None,None],
+                    [None,row(Vi) if nl else None,row(Vr if nl else self.V0),None,None]
+                ]).tocsr()
+                return Raug,Jaug
+    
+
+
 
 
 def EigenbranchTracker(problem:Problem,eigenvector:int=0,eigenscale:float=1,nonlinear_length_constraint:bool=False, complex_threshold:float=1e-8):
@@ -1044,12 +1289,14 @@ def EigenbranchTracker(problem:Problem,eigenvector:int=0,eigenscale:float=1,nonl
     if eigenvector<0 or eigenvector>=len(problem.get_last_eigenvalues()):
         raise RuntimeError("Eigenvalue index out of range")
     normal_mode=False
-    if problem.get_last_eigenmodes_k() is not None and len(problem.get_last_eigenmodes_k())<eigenvector:
+    
+    if problem.get_last_eigenmodes_k() is not None and eigenvector<len(problem.get_last_eigenmodes_k()):
         normal_mode=True 
-    if problem.get_last_eigenmodes_m() is not None and len(problem.get_last_eigenmodes_m())<eigenvector:
+    if problem.get_last_eigenmodes_m() is not None and eigenvector<len(problem.get_last_eigenmodes_m()):
         normal_mode=True
     if normal_mode:
-        raise RuntimeError("Normal modes are not supported yet")
+        return NormalModeEigenbranchTracker(problem,eigenvector,eigenscale=eigenscale,nonlinear_length_constraint=nonlinear_length_constraint)
+        #raise RuntimeError("Normal modes are not supported yet")
     if numpy.abs(numpy.imag(problem.get_last_eigenvalues()[eigenvector]))<complex_threshold:        
         return RealEigenbranchTracker(problem,eigenvector,eigenscale=eigenscale,nonlinear_length_constraint=nonlinear_length_constraint)
     else:

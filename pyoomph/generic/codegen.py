@@ -2939,7 +2939,9 @@ class GlobalLagrangeMultiplier(ODEEquations):
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         must_reapply=False
         if self.set_zero_on_normal_mode_eigensolve:
-            if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
+            pr=self.get_mesh()._problem
+            from ..generic.bifurcation_tools import _NormalModeBifurcationTrackerBase
+            if pr.get_bifurcation_tracking_mode() == "azimuthal" or (pr.get_custom_assembler() is not None and isinstance(pr.get_custom_assembler(),_NormalModeBifurcationTrackerBase)):             
                 #if self.get_mesh()._problem._azimuthal_mode_param_m.value!=0:
                 return False  # Don't do anything in this case. It would mess up everything!
         mesh=eqtree._mesh
