@@ -4155,7 +4155,7 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Invalid mode: "+str(mode))
 
 
-    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True)->PeriodicOrbit:
+    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,FD_param_delta=1e-3,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True)->PeriodicOrbit:
         
         from pyoomph.generic.bifurcation_tools import get_hopf_lyapunov_coefficient    
         
@@ -4179,7 +4179,7 @@ class Problem(_pyoomph.Problem):
         self.timestepper.make_steady()
         #self.solve()
         # Get the Lyapunov coefficient
-        lyap_coeff,sign,al,qR,qI=get_hopf_lyapunov_coefficient(self,param,omega=omega,q=q,FD_delta=FD_delta)
+        lyap_coeff,sign,al,qR,qI=get_hopf_lyapunov_coefficient(self,param,omega=omega,q=q,FD_delta=FD_delta,FD_param_delta=FD_param_delta)
         print("AL",al,"QR MAGNITUDE",numpy.linalg.norm(qR+1j*qI))
         if dparam:
             eps=numpy.sqrt(abs(dparam))        

@@ -514,7 +514,7 @@ void PyReg_Problem(py::module &m)
 		.def("get_current_dofs", [](pyoomph::Problem *self)
 			 { 
 				auto rs=self->get_current_dofs();
-				return std::make_tuple(py::array_t<double>(std::get<0>(rs)), py::array_t<bool>(std::get<1>(rs)));
+				return std::make_tuple(py::array_t<double>(std::get<0>(rs).size(),std::get<0>(rs).data()), std::get<1>(rs));
 				//return self->get_current_dofs(); 
 			})
 		.def("get_history_dofs", [](pyoomph::Problem *self, unsigned t)

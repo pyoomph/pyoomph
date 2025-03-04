@@ -197,7 +197,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
             print("Theta",theta,"<p,q>",numpy.vdot(pRt+1j*pIt,qR+1j*qI),"<p,q*>",numpy.vdot(pRt+1j*pIt,qR-1j*qI))
         #exit()
         #print("pnorm is very small. This is likely an issue with the eigenvalue solver. Please check the eigenvalue solver settings.")
-        raise ValueError("pnorm is very small. This is likely an issue with the eigenvalue solver. Please check the eigenvalue solver settings.")
+        #raise ValueError("pnorm is very small. This is likely an issue with the eigenvalue solver. Please check the eigenvalue solver settings.")
         #p*=numpy.exp(1j*numpy.pi/3)
         #pR=numpy.real(p)
         #pI=numpy.imag(p)
