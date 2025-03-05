@@ -3137,7 +3137,7 @@ namespace pyoomph
     }    
 
     // Floquet mode: We explicitly store the 0th dofs at the last step 
-    if (bspline_order==0) //TODO: Set the floquet mode here also for time mesh mode
+    if (bspline_order==0 || bspline_order<-2) //TODO: Set the floquet mode here also for time mesh mode
     {
       floquet_mode=true;
       Tadd.push_back(std::vector<double>(x0));
@@ -3364,7 +3364,7 @@ namespace pyoomph
           glob_eqs[i]=glob_eq;
       }
       std::vector<double> U0=dof_backup;
-      std::vector<double> Uplus(U0.size());
+      oomph::Vector<double> dU0ds(U0.size());
       
       for (unsigned int ie=0;ie<time_mesh->nelement();ie++) 
       {
@@ -3377,6 +3377,7 @@ namespace pyoomph
           double w =el->dshape_eulerian_at_knot(igl,psi,dpsi);
           for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
           dUds.initialise(0.0);
+          dU0ds.initialise(0.0);
           for (unsigned int in=0;in<el->nnode();in++)
           {
             unsigned index=dynamic_cast<TimeNode*>(el->node_pt(in))->get_index();
@@ -3396,6 +3397,12 @@ namespace pyoomph
                 dUds[i]+=dpsi(in,0)*Tadd[index-1][i];
               }
             }
+            for (unsigned int i=0;i<raw_ndof;i++) 
+            {
+                dU0ds[i]+=dpsi(in,0)*du0ds[index][glob_eqs[i]];
+            }
+
+
           }
 
           current_res.initialise(0.0);
@@ -3414,15 +3421,17 @@ namespace pyoomph
               {
                 residuals[index*raw_ndof+i]+=M(i,j)*dUds[j]/T*psi[in]*w;
               }
-            }   
-            // Phase constraint
-            if (!parameter_pt && T_constraint_mode==1)
-            {
-              for (unsigned int i=0;i<raw_ndof;i++)
+
+              // Phase constraint
+              if (!parameter_pt && T_constraint_mode==1)
               {
-                residuals[raw_ndof*this->n_tsteps()]+=du0ds[index][glob_eqs[i]]**(alldofs[glob_eqs[i]])/Count[glob_eqs[i]]*psi[in]*w;
-              }            
-            }
+                if (T_constraint_mode==1)
+                {
+                  residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]/Count[glob_eqs[i]]*w* *(alldofs[glob_eqs[i]]);
+                }     
+              }
+            }   
+            
 
          
           }              
@@ -3433,11 +3442,16 @@ namespace pyoomph
        
 
       // Fill the connection
-      if (floquet_mode && !parameter_pt)
+      if (floquet_mode)
       {
-        for (unsigned int i=0;i<raw_ndof;i++)
-        {          
-          residuals[(ntsteps-1)*raw_ndof+i]+=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
+        // Flush the last step
+        for (unsigned int i=0;i<raw_ndof;i++) residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;
+        if (!parameter_pt)
+        {
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {          
+            residuals[(ntsteps-1)*raw_ndof+i]+=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
+          }
         }
       }
 
@@ -3977,7 +3991,7 @@ namespace pyoomph
         glob_eqs[i]=glob_eq;
     }
     std::vector<double> U0=dof_backup;
-    std::vector<double> Uplus(U0.size());
+    oomph::Vector<double> dU0ds(U0.size());
     
     for (unsigned int ie=0;ie<time_mesh->nelement();ie++) 
     {
@@ -3990,6 +4004,7 @@ namespace pyoomph
         double w =el->dshape_eulerian_at_knot(igl,psi,dpsi);
         for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
         dUds.initialise(0.0);
+        dU0ds.initialise(0.0);
         for (unsigned int in=0;in<el->nnode();in++)
         {
           unsigned index=dynamic_cast<TimeNode*>(el->node_pt(in))->get_index();
@@ -4008,6 +4023,13 @@ namespace pyoomph
               *(alldofs[glob_eqs[i]])+=psi(in)*Tadd[index-1][i];
               dUds[i]+=dpsi(in,0)*Tadd[index-1][i];
             }
+          }
+          if (T_constraint_mode==1) 
+          {
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {
+              dU0ds[i]+=dpsi(in,0)*du0ds[index][glob_eqs[i]];
+            }            
           }
         }
 
@@ -4035,7 +4057,9 @@ namespace pyoomph
             for (unsigned j=0;j<raw_ndof;j++)          
             {
               residuals[index*raw_ndof+i]+=M(i,j)*dUds[j]/T*psi[in]*w;
-              jacobian(index*raw_ndof+i,Teq)+=-M(i,j)*dUds[j]*psi[in]*w/(T*T);                  
+              jacobian(index*raw_ndof+i,Teq)+=-M(i,j)*dUds[j]*psi[in]*w/(T*T); 
+              
+                               
             }
             for (unsigned in2=0;in2<el->nnode();in2++)
             {
@@ -4052,18 +4076,25 @@ namespace pyoomph
               }
               if (T_constraint_mode==1)
               {
-                jacobian(Teq,index2*raw_ndof+i)+=du0ds[index][glob_eqs[i]]/Count[glob_eqs[i]]*psi[in]*psi[in2]*w;
+                jacobian(raw_ndof*this->n_tsteps(),index2*raw_ndof+i)+=dU0ds[i]/Count[glob_eqs[i]]*w *psi(in2);
               }
+              
+            }
+
+            if (T_constraint_mode==1)
+            {
+              residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]/Count[glob_eqs[i]]*w* *(alldofs[glob_eqs[i]]);
+             
             }
           }   
           // Phase constraint
-          if (T_constraint_mode==1)
-          {
-            for (unsigned int i=0;i<raw_ndof;i++)
-            {
-              residuals[raw_ndof*this->n_tsteps()]+=du0ds[index][glob_eqs[i]]**(alldofs[glob_eqs[i]])/Count[glob_eqs[i]]*psi[in]*w;
-            }            
-          }
+          //if (T_constraint_mode==1)
+          //{
+            //for (unsigned int i=0;i<raw_ndof;i++)
+            //{
+              //residuals[raw_ndof*this->n_tsteps()]+=du0ds[index][glob_eqs[i]]**(alldofs[glob_eqs[i]])/Count[glob_eqs[i]]*psi[in]*w;
+            //}            
+          //}
 
         
 
@@ -4078,11 +4109,21 @@ namespace pyoomph
     // Fill the connection
     if (floquet_mode)
     {
+      // flush the residuals and jacobian in the last time step
+      for (unsigned int i=0;i<raw_ndof;i++) 
+      {
+        residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;
+        for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
+        {
+          jacobian(raw_ndof*(this->n_tsteps()-1)+i,j)=0.0;
+        }
+      }
       for (unsigned int i=0;i<raw_ndof;i++)
       {          
         residuals[(ntsteps-1)*raw_ndof+i]+=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
+        jacobian((ntsteps-1)*raw_ndof+i,(ntsteps-1)*raw_ndof+i)+=1.0/Count[glob_eqs[i]];
+        jacobian((ntsteps-1)*raw_ndof+i,i)+=-1.0/Count[glob_eqs[i]];
       }
-      throw_runtime_error("Floquet mode here");
     }
 
 
@@ -4307,7 +4348,20 @@ namespace pyoomph
       {
         if (time_mesh)
         {
-          throw_runtime_error("TODO Implement here");
+          du0ds.resize(ntsteps);        
+        du0ds[0].resize(Ndof);
+        for (unsigned int i=0;i<Ndof;i++)
+        {
+            du0ds[0][i]=*(alldofs[i]); // Just the U0 solution here, we do it via Gauss-Legendre in the residual/jacobian calculation
+        }
+        for (unsigned int ti=1;ti<ntsteps;ti++)
+        {
+          du0ds[ti].resize(Ndof);
+          for (unsigned int i=0;i<Ndof;i++)
+          {
+            du0ds[ti][i]=Tadd[ti-1][i]; // Just the U0 solution here, we do it via Gauss-Legendre in the residual/jacobian calculation
+          }
+        }                
         }
         else if (floquet_mode)
         {
