@@ -423,7 +423,7 @@ namespace pyoomph
     {
       delete imesh->element_pt(e);
     }
-    imesh->flush_element_and_node_storage();
+    imesh->flush_element_and_node_storage(); //TODO: This keeps the nodes alive
     for (unsigned i = 0; i < dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets.size(); i++)
       delete dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets[i];
     dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets.clear();

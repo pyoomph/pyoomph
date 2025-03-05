@@ -4151,6 +4151,8 @@ class Problem(_pyoomph.Problem):
             self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint)
         elif mode=="BDF2":
             self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
+        elif mode=="Langrange":
+            self._start_orbit_tracking(history_dofs,T,-3,bspline_GL_order,knots,T_constraint)
         else:
             raise ValueError("Invalid mode: "+str(mode))
 
