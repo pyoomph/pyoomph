@@ -38,7 +38,21 @@ This file is strongly based  on the oomph-lib library (see thirdparty/oomph-lib/
 
 using namespace oomph;
 
-#define PYOOMPH_BIFURCATION_HANDLER_DEBUG
+//#define PYOOMPH_BIFURCATION_HANDLER_DEBUG
+
+namespace oomph
+{
+  template<>
+  oomph::GaussLegendre<1, 1>::GaussLegendre()
+  {
+    // Temporary storage for the integration points    
+    for (unsigned i = 0; i < 1; i++)
+    {
+      Knot[i][0] = 0.0;
+      Weight[i] = 2.0;
+    }
+  }
+}
 
 namespace pyoomph
 {
@@ -3096,10 +3110,14 @@ namespace pyoomph
       unsigned get_index() {return index;}
   };
 
+  
+
+  
+
 
   //////// PERIODIC ORBIT TRACKER
 
-  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint), time_mesh(NULL)
+  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint), time_mesh(NULL), multi_shoot_gl(NULL)
   {
     Ndof = problem_pt->ndof();    
     n_element = problem_pt->mesh_pt()->nelement();
@@ -3137,7 +3155,7 @@ namespace pyoomph
     }    
 
     // Floquet mode: We explicitly store the 0th dofs at the last step 
-    if (bspline_order==0 || bspline_order<-2) //TODO: Set the floquet mode here also for time mesh mode
+    if (bspline_order==0 || bspline_order<-2 ) ////TODO: Set the floquet mode here also for time mesh mode
     {
       floquet_mode=true;
       Tadd.push_back(std::vector<double>(x0));
@@ -3184,7 +3202,7 @@ namespace pyoomph
     this->s_knots.back()=1.0;
 
     /// Setup the finite difference information here
-    if (bspline_order<=0)
+    if (bspline_order<=0 && bspline_order>=-2)
     {
       this->FD_ds_order=1; 
       this->FD_ds_weights.resize(this->s_knots.size()-1);
@@ -3218,6 +3236,7 @@ namespace pyoomph
           this->FD_ds_weights[i][1]=-(dt + dtprev) / (dt * dtprev);
           this->FD_ds_weights[i][2]=dt / ((dt + dtprev) * dtprev);
           this->FD_ds_inds[i][0]=i;
+   
           this->FD_ds_inds[i][1]=get_periodic_knot_index(i-1);
           this->FD_ds_inds[i][2]=get_periodic_knot_index(i-2);
         }
@@ -3230,58 +3249,75 @@ namespace pyoomph
           //this->FD_ds_weights[i][1]=-1/ds;
           //std::cout << "FILLING FOR NTSTEPS " << this->n_tsteps() << " ds " << ds <<"" << " ds0 " << get_knot_value(i) << "ds- " << get_knot_value(i-1) <<std::endl;
           
-        } 
-        else
-        {
-          if (gl_order<=0 || gl_order>3) throw_runtime_error("Only Gauss-Legendre quadrature of order 1,2,3 is implemented");
-          if ((s_knots.size()-1)%gl_order!=0) throw_runtime_error("The (number of knots-1) must be a multiple of the Gauss-Legendre order");
-          unsigned Nelem=(s_knots.size()-1)/gl_order;
-          unsigned nnode_per_elem=gl_order+1;
-          time_mesh=new oomph::Mesh;
-
-          for (unsigned int i=0;i<s_knots.size();i++)
-          {                           
-            time_mesh->add_node_pt(new TimeNode(s_knots[i],(floquet_mode ? i : i%(s_knots.size()-1)))); // PERIODIC MODE or FLOQUET MODE
-          }
-
-          for (unsigned int ie=0;ie<Nelem;ie++)
-          {            
-            oomph::QElementBase *el;
-            if (nnode_per_elem==2) el=new oomph::QElement<1,2>;
-            else if (nnode_per_elem==3) el=new oomph::QElement<1,3>;
-            else if (nnode_per_elem==4) el=new oomph::QElement<1,4>;
-            else throw_runtime_error("Only Gauss-Legendre quadrature of order 1,2,3 is implemented");
-            for (unsigned int in=0;in<nnode_per_elem;in++)
-            {
-              el->node_pt(in)=time_mesh->node_pt(ie*gl_order+in);
-            }        
-            time_mesh->element_pt().push_back(el);   
-          }
-          
-          for (unsigned int ie=0;ie<time_mesh->nelement();ie++)
-          {
-            oomph::QElementBase *el=dynamic_cast<oomph::QElementBase*>(time_mesh->element_pt(ie));
-            if (!el) throw_runtime_error("Strange, not a QElementBase");            
-            std::cout << "Element from " << el->vertex_node_pt(0)->x(0) << " to " << el->vertex_node_pt(1)->x(0) << std::endl;
-            for (unsigned int igl=0;igl<el->integral_pt()->nweight();igl++)
-            {
-              oomph::Shape psi(el->nnode());
-              oomph::DShape dpsi(el->nnode(),1);
-              double w=el->integral_pt()->weight(igl);
-              el->dshape_eulerian_at_knot(igl,psi,dpsi);            
-              std::cout << "   GL " << igl << " with weight " << w << " has shapes " << std::endl;
-              for (unsigned int in=0;in<el->nnode();in++)
-              {
-                std::cout << "     " << psi[in] << " " << dpsi(in,0) << std::endl;
-              }
-            }
-          }
-          
-          //throw_runtime_error("Implement Galerkin finite difference for order "+std::to_string(gl_order));
-          //throw_runtime_error("Unknown finite difference mode: "+std::to_string(bspline_order));       
-        }
+        }         
       }
     }
+    else if (bspline_order<0) // Time mesh mode
+    {
+      unsigned order=-bspline_order-2;
+      if (order==0) throw_runtime_error("Multi-shoot order "+std::to_string(order)+" is not implemented");      
+      if ((s_knots.size()-1)%order!=0) throw_runtime_error("The (number of knots-1) must be a multiple of the multi-shoot order");
+      unsigned Nelem=(s_knots.size()-1)/order;
+      unsigned nnode_per_elem=order+1;
+      if (gl_order<=0) gl_order=order;      
+      time_mesh=new oomph::Mesh;
+
+      for (unsigned int i=0;i<s_knots.size();i++)
+      {                           
+        time_mesh->add_node_pt(new TimeNode(s_knots[i],(floquet_mode ? i : i%(s_knots.size()-1)))); // PERIODIC MODE or FLOQUET MODE
+      }
+
+      if (gl_order==1) multi_shoot_gl=new oomph::GaussLegendre<1,1>;
+      else if (gl_order==2) multi_shoot_gl=new oomph::GaussLegendre<1,2>;
+      else if (gl_order==3) multi_shoot_gl=new oomph::GaussLegendre<1,3>;
+      else if (gl_order==4) multi_shoot_gl=new oomph::GaussLegendre<1,4>;
+      else throw_runtime_error("Multi-shoot integration order is only implemented up to 4 is implemented");
+
+      std::cout << "Using multi-shoot of collocation order " << order << " and integration order " << gl_order << std::endl;
+      
+
+      for (unsigned int ie=0;ie<Nelem;ie++)
+      {            
+        oomph::QElementBase *el;
+        if (nnode_per_elem==2) el=new oomph::QElement<1,2>;
+        else if (nnode_per_elem==3) el=new oomph::QElement<1,3>;
+        else if (nnode_per_elem==4) el=new oomph::QElement<1,4>;
+        //else if (nnode_per_elem==5) el=new oomph::QElement<1,5>;
+        else throw_runtime_error("Multi-shoot is only implemented up to order 3 is implemented");
+                
+        
+        for (unsigned int in=0;in<nnode_per_elem;in++)
+        {
+          el->node_pt(in)=time_mesh->node_pt(ie*order+in);
+        }        
+        time_mesh->element_pt().push_back(el);   
+      }
+      
+      /*for (unsigned int ie=0;ie<time_mesh->nelement();ie++)
+      {
+        oomph::QElementBase *el=dynamic_cast<oomph::QElementBase*>(time_mesh->element_pt(ie));
+        if (!el) throw_runtime_error("Strange, not a QElementBase");            
+        std::cout << "Element " << ie << " of " << time_mesh->nelement() <<  " = " << Nelem << " from " << el->vertex_node_pt(0)->x(0) << " to " << el->vertex_node_pt(1)->x(0) << std::endl;
+        std::cout << "NWEIGHT " << el->integral_pt()->nweight() << std::endl;
+        for (unsigned int igl=0;igl<el->integral_pt()->nweight();igl++)
+        {
+          oomph::Shape psi(el->nnode());
+          oomph::DShape dpsi(el->nnode(),1);
+          double w=el->integral_pt()->weight(igl);
+          el->dshape_eulerian_at_knot(igl,psi,dpsi);            
+          std::cout << "   GL " << igl << " with weight " << w << " has shapes " << " at " <<  std::endl;
+          for (unsigned int in=0;in<el->nnode();in++)
+          {
+            std::cout << "     " << psi[in] << " " << dpsi(in,0) << std::endl;
+          }
+        }
+      }
+      */
+      
+      //throw_runtime_error("Implement Galerkin finite difference for order "+std::to_string(gl_order));
+      //throw_runtime_error("Unknown finite difference mode: "+std::to_string(bspline_order));       
+    }
+      
 
     this->update_phase_constraint_information();
     std::cout << "Created PeriodicOrbitHandler with " << bspline_order  << "  BASIS " << basis << std::endl;
@@ -3310,6 +3346,11 @@ namespace pyoomph
     {        
         delete time_mesh;
         time_mesh=NULL;
+    }
+    if (multi_shoot_gl) 
+    {
+        delete multi_shoot_gl;
+        multi_shoot_gl=NULL;
     }
     Problem_pt->GetDofPtr().resize(Ndof);
     Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(),
@@ -3347,13 +3388,13 @@ namespace pyoomph
       return elem_pt->ndof()*nT +1; 
   }
 
-
-  void PeriodicOrbitHandler::get_residuals_time_mesh_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)
+/*
+  void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)
   {
       residuals.initialise(0.0);
       unsigned raw_ndof = elem_pt->ndof();
       DenseMatrix<double> jacobian(raw_ndof), M(raw_ndof);            
-      Vector<double> current_res(raw_ndof),dof_backup(raw_ndof),dUds(raw_ndof);             
+      Vector<double> current_res(raw_ndof),dof_backup(raw_ndof),dUds(raw_ndof),U(raw_ndof);             
       Vector<unsigned> glob_eqs(raw_ndof);
       oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();  
       unsigned ntsteps=this->n_tsteps();
@@ -3363,8 +3404,7 @@ namespace pyoomph
           dof_backup[i]=*(alldofs[glob_eq]);          
           glob_eqs[i]=glob_eq;
       }
-      std::vector<double> U0=dof_backup;
-      oomph::Vector<double> dU0ds(U0.size());
+      oomph::Vector<double> dU0ds(dof_backup.size());
       
       for (unsigned int ie=0;ie<time_mesh->nelement();ie++) 
       {
@@ -3374,18 +3414,25 @@ namespace pyoomph
         {
           oomph::Shape psi(el->nnode());
           oomph::DShape dpsi(el->nnode(),1);
-          double w =el->dshape_eulerian_at_knot(igl,psi,dpsi);
+          double w =el->dshape_eulerian_at_knot(igl,psi,dpsi);          
+          w*=this->n_tsteps()*200;
           for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
+          oomph::Vector<double> loc_coord(1);
+          loc_coord[0] = el->integral_pt()->knot(igl, 0);          
+          double x=el->interpolated_x(loc_coord,0);
+          std::cout << " INTEGRATING " << " ie " << ie << " igl " << igl << " with weight " << w << " at local coord " << loc_coord[0] << " and s= " << x << std::endl;
           dUds.initialise(0.0);
           dU0ds.initialise(0.0);
+          U.initialise(0.0);
           for (unsigned int in=0;in<el->nnode();in++)
           {
             unsigned index=dynamic_cast<TimeNode*>(el->node_pt(in))->get_index();
+            //std::cout << "   NODE " << in << " with index " << index << " HAS " << psi[in] << " and " << dpsi(in,0) << std::endl;
             if (index==0) 
             { 
               for (unsigned int i=0;i<raw_ndof;i++) 
               {
-                *(alldofs[glob_eqs[i]])+=psi(in)*dof_backup[i];
+                U[i]+=psi(in)*dof_backup[i];
                 dUds[i]+=dpsi(in,0)*dof_backup[i];
               }
             }
@@ -3393,49 +3440,66 @@ namespace pyoomph
             { 
               for (unsigned int i=0;i<raw_ndof;i++) 
               {
-                *(alldofs[glob_eqs[i]])+=psi(in)*Tadd[index-1][i];
-                dUds[i]+=dpsi(in,0)*Tadd[index-1][i];
+                U[i]+=psi(in)*Tadd[index-1][glob_eqs[i]];
+                dUds[i]+=dpsi(in,0)*Tadd[index-1][glob_eqs[i]];
               }
             }
-            for (unsigned int i=0;i<raw_ndof;i++) 
+            if (T_constraint_mode==1)
             {
-                dU0ds[i]+=dpsi(in,0)*du0ds[index][glob_eqs[i]];
+              for (unsigned int i=0;i<raw_ndof;i++) 
+              {
+                  dU0ds[i]+=dpsi(in,0)*du0ds[index][glob_eqs[i]];
+              }
             }
 
 
           }
+
+          std::cout << "  GIVES U = "; for (unsigned int i=0;i<raw_ndof;i++) std::cout << U[i] << "  " ;
+          std::cout << " and dUds =" ; for (unsigned int i=0;i<raw_ndof;i++) std::cout << dUds[i] << "  " ; 
+          std::cout << " and dU0ds =" ; for (unsigned int i=0;i<raw_ndof;i++) std::cout << dU0ds[i] << "  " ; 
+          std::cout << std::endl;
+
+          for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=U[i];
 
           current_res.initialise(0.0);
           M.initialise(0.0);
           jacobian.initialise(0.0);  
           if (!parameter_pt) elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);                      
           else elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt,current_res, jacobian, M);
+
+          for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=dof_backup[i];
+
           for (unsigned in=0;in<el->nnode();in++)
           {
             unsigned index=dynamic_cast<TimeNode*>(el->node_pt(in))->get_index();
-          
+            if (floquet_mode && index==ntsteps-1) 
+            {
+              //index=0; 
+              continue;
+            }
             for (unsigned i = 0; i < raw_ndof; i++)
             {
               residuals[index*raw_ndof + i] += current_res[i]*psi[in]*w;              
               for (unsigned j=0;j<raw_ndof;j++)          
               {
-                residuals[index*raw_ndof+i]+=M(i,j)*dUds[j]/T*psi[in]*w;
+                residuals[index*raw_ndof+i]+=M(i,j)/T*dUds[j]*psi[in]*w;
+                //residuals[index*raw_ndof+i]+=M(i,j)/T*0.5*(dUds[j]*psi[in]- U[j]*dpsi(in,0))*w;
               }
-
-              // Phase constraint
-              if (!parameter_pt && T_constraint_mode==1)
-              {
-                if (T_constraint_mode==1)
-                {
-                  residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]/Count[glob_eqs[i]]*w* *(alldofs[glob_eqs[i]]);
-                }     
-              }
+              
             }   
             
-
          
           }              
 
+          // Phase constraint
+          if (!parameter_pt && T_constraint_mode==1)
+          {
+            for (unsigned int i=0;i<raw_ndof;i++)
+            {
+                residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]* U[i]/Count[glob_eqs[i]]*w;
+            }     
+          }
 
         }
       }
@@ -3445,7 +3509,7 @@ namespace pyoomph
       if (floquet_mode)
       {
         // Flush the last step
-        for (unsigned int i=0;i<raw_ndof;i++) residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;
+        //for (unsigned int i=0;i<raw_ndof;i++) residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;
         if (!parameter_pt)
         {
           for (unsigned int i=0;i<raw_ndof;i++)
@@ -3473,7 +3537,155 @@ namespace pyoomph
         residuals[raw_ndof*this->n_tsteps()]=plane_eq;
       }          
   }
+*/
 
+void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)
+  {
+      residuals.initialise(0.0);
+      unsigned raw_ndof = elem_pt->ndof();
+      DenseMatrix<double> jacobian(raw_ndof), M(raw_ndof);            
+      Vector<double> current_res(raw_ndof),dof_backup(raw_ndof),dUds(raw_ndof),U(raw_ndof);             
+      Vector<unsigned> glob_eqs(raw_ndof);
+      oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();  
+      unsigned ntsteps=this->n_tsteps();      
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          dof_backup[i]=*(alldofs[glob_eq]);          
+          glob_eqs[i]=glob_eq;
+      }
+      oomph::Vector<double> dU0ds(dof_backup.size());
+      
+      for (unsigned int ie=0;ie<time_mesh->nelement();ie++) 
+      {
+        oomph::QElementBase * el=dynamic_cast<oomph::QElementBase*>(time_mesh->element_pt(ie));
+        oomph::Shape psi(el->nnode());
+        oomph::DShape dpsi(el->nnode(),1);
+        for (unsigned int inode=0;inode<el->nnode()-1;inode++)
+        {
+          
+          
+          oomph::Vector<double> local_coord0(1);
+          oomph::Vector<double> local_coord1(1);          
+          el->local_coordinate_of_node(inode,local_coord0);
+          el->local_coordinate_of_node(inode+1,local_coord1);
+          double deltaS=el->node_pt(inode+1)->x(0)-el->node_pt(inode)->x(0);
+
+          for (unsigned int igl=0;igl<multi_shoot_gl->nweight();igl++)
+          {          
+              double gl_s=multi_shoot_gl->knot(igl,0);
+              double w=multi_shoot_gl->weight(igl);
+              
+              oomph::Vector<double> local_coord(1);              
+              local_coord[0]=(local_coord0[0]*(1-gl_s)+local_coord1[0]*(1+gl_s))*0.5;
+              el->dshape_eulerian(local_coord,psi,dpsi);
+              
+              for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
+              dUds.initialise(0.0);
+              dU0ds.initialise(0.0);
+              U.initialise(0.0);
+              for (unsigned int in=0;in<el->nnode();in++)
+              {
+                unsigned index=dynamic_cast<TimeNode*>(el->node_pt(in))->get_index();
+                //std::cout << "   NODE " << in << " with index " << index << " HAS " << psi[in] << " and " << dpsi(in,0) << std::endl;
+                if (index==0) 
+                { 
+                  for (unsigned int i=0;i<raw_ndof;i++) 
+                  {
+                    U[i]+=psi(in)*dof_backup[i];
+                    dUds[i]+=dpsi(in,0)*dof_backup[i];
+                  }
+                }
+                else 
+                { 
+                  for (unsigned int i=0;i<raw_ndof;i++) 
+                  {
+                    U[i]+=psi(in)*Tadd[index-1][glob_eqs[i]];
+                    dUds[i]+=dpsi(in,0)*Tadd[index-1][glob_eqs[i]];
+                  }
+                }
+                if (T_constraint_mode==1)
+                {
+                  for (unsigned int i=0;i<raw_ndof;i++) 
+                  {
+                      dU0ds[i]+=dpsi(in,0)*du0ds[index][glob_eqs[i]];
+                  }
+                }
+
+
+              }
+
+
+              for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=U[i];
+
+              current_res.initialise(0.0);
+              M.initialise(0.0);
+              jacobian.initialise(0.0);  
+              if (!parameter_pt) elem_pt->get_jacobian_and_mass_matrix(current_res, jacobian, M);                      
+              else elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt,current_res, jacobian, M);
+
+            
+              unsigned index=dynamic_cast<TimeNode*>(el->node_pt(inode))->get_index();
+                
+              for (unsigned i = 0; i < raw_ndof; i++)
+              {
+                residuals[index*raw_ndof + i] += current_res[i]*w;              
+                for (unsigned j=0;j<raw_ndof;j++)          
+                {
+                  residuals[index*raw_ndof+i]+=M(i,j)/T*dUds[j]*w;
+                }              
+              }   
+                        
+
+              // Phase constraint
+              if (!parameter_pt && T_constraint_mode==1)
+              {
+                for (unsigned int i=0;i<raw_ndof;i++)
+                {
+                    residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]* U[i]/Count[glob_eqs[i]]*deltaS*w;
+                }     
+              }
+
+            }
+
+        }
+      }
+       
+
+      // Fill the connection
+      if (floquet_mode)
+      {
+        // Flush the last step
+        //for (unsigned int i=0;i<raw_ndof;i++) residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;
+        if (!parameter_pt)
+        {
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {          
+            residuals[(ntsteps-1)*raw_ndof+i]=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
+          }
+        }
+      }
+
+
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        *(this->Problem_pt->GetDofPtr()[glob_eqs[i]])=dof_backup[i];
+      }
+
+      if (!parameter_pt && T_constraint_mode==0)
+      {
+        double plane_eq=-d_plane;
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
+          plane_eq+=x*n0[glob_eq]/Count[glob_eq];
+        }      
+        residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+      }          
+  }
+
+  
   void PeriodicOrbitHandler::get_residuals_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)  
   {
       residuals.initialise(0.0);
@@ -3915,7 +4127,11 @@ namespace pyoomph
   {        
       if (!this->basis)
       {                
-        if (time_mesh) this->get_residuals_time_mesh_mode(elem_pt,residuals,NULL);
+        if (time_mesh) 
+        {
+          
+          this->get_residuals_multi_shoot_mode(elem_pt,residuals,NULL);          
+        }
         else if (floquet_mode) this->get_residuals_floquet_mode(elem_pt,residuals,NULL);     
         else this->get_residuals_time_nodal_mode(elem_pt,residuals,NULL);                     
       }      
@@ -3934,7 +4150,7 @@ namespace pyoomph
         {
           if (time_mesh) 
           {
-            this->get_jacobian_time_mesh_mode(elem_pt,resdummy,Jdummy);
+            this->get_jacobian_multi_shoot_mode(elem_pt,resdummy,Jdummy);
           }
           else if (floquet_mode)
           {
@@ -3953,7 +4169,7 @@ namespace pyoomph
 #endif      
   }
 
-  void PeriodicOrbitHandler::get_jacobian_time_mesh_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
+  /*void PeriodicOrbitHandler::get_jacobian_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
   {
     if (!Problem_pt->are_hessian_products_calculated_analytically())
     {
@@ -4002,6 +4218,7 @@ namespace pyoomph
         oomph::Shape psi(el->nnode());
         oomph::DShape dpsi(el->nnode(),1);
         double w =el->dshape_eulerian_at_knot(igl,psi,dpsi);
+        w*=this->n_tsteps();
         for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
         dUds.initialise(0.0);
         dU0ds.initialise(0.0);
@@ -4020,8 +4237,8 @@ namespace pyoomph
           { 
             for (unsigned int i=0;i<raw_ndof;i++) 
             {
-              *(alldofs[glob_eqs[i]])+=psi(in)*Tadd[index-1][i];
-              dUds[i]+=dpsi(in,0)*Tadd[index-1][i];
+              *(alldofs[glob_eqs[i]])+=psi(in)*Tadd[index-1][glob_eqs[i]];
+              dUds[i]+=dpsi(in,0)*Tadd[index-1][glob_eqs[i]];
             }
           }
           if (T_constraint_mode==1) 
@@ -4050,7 +4267,8 @@ namespace pyoomph
         for (unsigned in=0;in<el->nnode();in++)
         {
           unsigned index=dynamic_cast<TimeNode*>(el->node_pt(in))->get_index();
-        
+          if (floquet_mode && index==ntsteps-1) continue;
+          //std::cout << " ie " << ie << " igl " << igl << " in " << in << " index " << index << " psi " << psi[in] << " dpsi " << dpsi(in,0) << " w " << w << std::endl;
           for (unsigned i = 0; i < raw_ndof; i++)
           {
             residuals[index*raw_ndof + i] += current_res[i]*psi[in]*w;                          
@@ -4074,19 +4292,13 @@ namespace pyoomph
                   jacobian(index*raw_ndof+i,index2*raw_ndof+j)+=dMdU_dUdsterm(i,j)/T*psi[in]*psi[in2]*w;
                 }        
               }
-              if (T_constraint_mode==1)
-              {
-                jacobian(raw_ndof*this->n_tsteps(),index2*raw_ndof+i)+=dU0ds[i]/Count[glob_eqs[i]]*w *psi(in2);
-              }
+              
               
             }
 
-            if (T_constraint_mode==1)
-            {
-              residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]/Count[glob_eqs[i]]*w* *(alldofs[glob_eqs[i]]);
-             
-            }
-          }   
+            
+          } 
+          
           // Phase constraint
           //if (T_constraint_mode==1)
           //{
@@ -4099,10 +4311,29 @@ namespace pyoomph
         
 
         
-        }              
+        }
+
+        if (T_constraint_mode==1)
+        {
+            for (unsigned i = 0; i < raw_ndof; i++)
+            {            
+              residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]/Count[glob_eqs[i]]*w* *(alldofs[glob_eqs[i]]);             
+            }
+            for (unsigned in2=0;in2<el->nnode();in2++)
+            {
+              unsigned index2=dynamic_cast<TimeNode*>(el->node_pt(in2))->get_index();
+              if (floquet_mode && index2==ntsteps-1) continue;
+              for (unsigned i = 0; i < raw_ndof; i++)
+              {
+                jacobian(raw_ndof*this->n_tsteps(),index2*raw_ndof+i)+=dU0ds[i]/Count[glob_eqs[i]]*w *psi(in2);
+              }
+            }
+        }                
 
 
       }
+
+     
     }
       
 
@@ -4113,10 +4344,11 @@ namespace pyoomph
       for (unsigned int i=0;i<raw_ndof;i++) 
       {
         residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;
-        for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
+        for (unsigned int j=0;j<raw_ndof*this->n_tsteps();j++)
         {
           jacobian(raw_ndof*(this->n_tsteps()-1)+i,j)=0.0;
         }
+        
       }
       for (unsigned int i=0;i<raw_ndof;i++)
       {          
@@ -4148,6 +4380,203 @@ namespace pyoomph
           jacobian(Teq,i)=n0[glob_eq]/Count[glob_eq];
       }
     }          
+  }
+  */
+
+ void PeriodicOrbitHandler::get_jacobian_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,oomph::DenseMatrix<double> & jacobian)
+  {
+      residuals.initialise(0.0);
+      jacobian.initialise(0.0);
+      unsigned raw_ndof = elem_pt->ndof();
+      DenseMatrix<double> J(raw_ndof), M(raw_ndof);            
+      Vector<double> current_res(raw_ndof),dof_backup(raw_ndof),dUds(raw_ndof),U(raw_ndof);             
+      Vector<unsigned> glob_eqs(raw_ndof);
+      oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();  
+      unsigned ntsteps=this->n_tsteps();    
+      unsigned Teq=raw_ndof*this->n_tsteps();  
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          dof_backup[i]=*(alldofs[glob_eq]);          
+          glob_eqs[i]=glob_eq;
+      }
+      oomph::Vector<double> dU0ds(dof_backup.size());
+
+      pyoomph::BulkElementBase * pyoomph_elem_pt=dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
+      auto *ft=pyoomph_elem_pt->get_code_instance()->get_func_table();
+      bool has_constant_mass_matrix=false;
+      if (ft->current_res_jac>=0) 
+      { 
+        has_constant_mass_matrix=ft->has_constant_mass_matrix_for_sure[ft->current_res_jac];   
+      }      
+
+      std::vector<SinglePassMultiAssembleInfo> multi_assm;
+      multi_assm.push_back(SinglePassMultiAssembleInfo(pyoomph_elem_pt->get_code_instance()->get_func_table()->current_res_jac, &current_res, &J, &M));
+      oomph::DenseMatrix<double> dMdU_dUdsterm(raw_ndof,raw_ndof,0.0);
+      oomph::DenseMatrix<double> dummy_dJdU_dUdsterm(raw_ndof,raw_ndof,0.0);            
+      multi_assm.back().add_hessian(dUds, &dummy_dJdU_dUdsterm, &dMdU_dUdsterm);
+      
+      for (unsigned int ie=0;ie<time_mesh->nelement();ie++) 
+      {
+        oomph::QElementBase * el=dynamic_cast<oomph::QElementBase*>(time_mesh->element_pt(ie));
+        oomph::Shape psi(el->nnode());
+        oomph::DShape dpsi(el->nnode(),1);
+        for (unsigned int inode=0;inode<el->nnode()-1;inode++)
+        {
+          
+          
+          oomph::Vector<double> local_coord0(1);
+          oomph::Vector<double> local_coord1(1);          
+          el->local_coordinate_of_node(inode,local_coord0);
+          el->local_coordinate_of_node(inode+1,local_coord1);
+          double deltaS=el->node_pt(inode+1)->x(0)-el->node_pt(inode)->x(0);
+
+          for (unsigned int igl=0;igl<multi_shoot_gl->nweight();igl++)
+          {          
+              double gl_s=multi_shoot_gl->knot(igl,0);
+              double w=multi_shoot_gl->weight(igl);
+              
+              oomph::Vector<double> local_coord(1);              
+              local_coord[0]=(local_coord0[0]*(1-gl_s)+local_coord1[0]*(1+gl_s))*0.5;
+              el->dshape_eulerian(local_coord,psi,dpsi);
+              
+              for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
+              dUds.initialise(0.0);
+              dU0ds.initialise(0.0);
+              U.initialise(0.0);
+              for (unsigned int in=0;in<el->nnode();in++)
+              {
+                unsigned index=dynamic_cast<TimeNode*>(el->node_pt(in))->get_index();
+                //std::cout << "   NODE " << in << " with index " << index << " HAS " << psi[in] << " and " << dpsi(in,0) << std::endl;
+                if (index==0) 
+                { 
+                  for (unsigned int i=0;i<raw_ndof;i++) 
+                  {
+                    U[i]+=psi(in)*dof_backup[i];
+                    dUds[i]+=dpsi(in,0)*dof_backup[i];
+                  }
+                }
+                else 
+                { 
+                  for (unsigned int i=0;i<raw_ndof;i++) 
+                  {
+                    U[i]+=psi(in)*Tadd[index-1][glob_eqs[i]];
+                    dUds[i]+=dpsi(in,0)*Tadd[index-1][glob_eqs[i]];
+                  }
+                }
+                if (T_constraint_mode==1)
+                {
+                  for (unsigned int i=0;i<raw_ndof;i++) 
+                  {
+                      dU0ds[i]+=dpsi(in,0)*du0ds[index][glob_eqs[i]];
+                  }
+                }
+
+
+              }
+
+
+              for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=U[i];
+
+              current_res.initialise(0.0);                                          
+              M.initialise(0.0);
+              J.initialise(0.0);  
+              if (has_constant_mass_matrix)
+              {
+                elem_pt->get_jacobian_and_mass_matrix(current_res, J, M);
+              }
+              else
+              {            
+                dMdU_dUdsterm.initialise(0.0);
+                dummy_dJdU_dUdsterm.initialise(0.0);
+                pyoomph_elem_pt->get_multi_assembly(multi_assm);
+              }                   
+
+            
+              unsigned index=dynamic_cast<TimeNode*>(el->node_pt(inode))->get_index();
+                
+              for (unsigned i = 0; i < raw_ndof; i++)
+              {
+                residuals[index*raw_ndof + i] += current_res[i]*w;              
+                for (unsigned j=0;j<raw_ndof;j++)          
+                {                 
+                  residuals[index*raw_ndof+i]+=M(i,j)/T*dUds[j]*w;
+                  jacobian(index*raw_ndof+i,Teq)+=-M(i,j)*dUds[j]/(T*T)*w;            
+                }  
+                
+
+                for (unsigned int nn2=0;nn2<el->nnode();nn2++)
+                {
+                  unsigned index2=dynamic_cast<TimeNode*>(el->node_pt(nn2))->get_index();
+                  for (unsigned j=0;j<raw_ndof;j++)
+                  {
+                    jacobian(index*raw_ndof + i,index2*raw_ndof+j) += J(i,j)*psi[nn2]*w;              
+                    jacobian(index*raw_ndof+i,index2*raw_ndof+j)+=M(i,j)/T*dpsi(nn2,0)*w;                  
+                    if (!has_constant_mass_matrix)
+                    {
+                      jacobian(index*raw_ndof+i,index2*raw_ndof+j)+=dMdU_dUdsterm(i,j)/T*dpsi(nn2,0)*w;
+                    }        
+                  }                  
+                }
+                
+              }   
+                        
+
+              // Phase constraint
+              if (T_constraint_mode==1)
+              {
+                for (unsigned int i=0;i<raw_ndof;i++)
+                {
+                    residuals[raw_ndof*this->n_tsteps()]+=dU0ds[i]* U[i]/Count[glob_eqs[i]]*deltaS*w;
+                    for (unsigned int nn2=0;nn2<el->nnode();nn2++)
+                    {
+                      unsigned index2=dynamic_cast<TimeNode*>(el->node_pt(nn2))->get_index();
+                      jacobian(raw_ndof*this->n_tsteps(),index2*raw_ndof+i)+=dU0ds[i]*psi[nn2]/Count[glob_eqs[i]]*deltaS*w;
+                    }
+                }     
+              }
+
+            }
+
+        }
+      }
+       
+
+      // Fill the connection
+      if (floquet_mode)
+      {
+        // Flush the last step
+        //for (unsigned int i=0;i<raw_ndof;i++) residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;        
+          for (unsigned int i=0;i<raw_ndof;i++)
+          {          
+            residuals[(ntsteps-1)*raw_ndof+i]=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
+            jacobian((ntsteps-1)*raw_ndof+i,(ntsteps-1)*raw_ndof+i)=1.0/Count[glob_eqs[i]];
+            jacobian((ntsteps-1)*raw_ndof+i,i)=-1.0/Count[glob_eqs[i]];
+          }
+      }
+
+
+      for (unsigned int i=0;i<raw_ndof;i++)
+      {
+        *(this->Problem_pt->GetDofPtr()[glob_eqs[i]])=dof_backup[i];
+      }
+
+      if (T_constraint_mode==0)
+      {
+        double plane_eq=-d_plane;
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+          unsigned glob_eq=elem_pt->eqn_number(i);
+          double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
+          plane_eq+=x*n0[glob_eq]/Count[glob_eq];
+        }      
+        residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+        for (unsigned int i=0;i<raw_ndof;i++)
+        {
+            unsigned glob_eq=glob_eqs[i];
+            jacobian(raw_ndof*this->n_tsteps(),i)=n0[glob_eq]/Count[glob_eq];
+        }
+      }          
   }
 
 
@@ -4600,16 +5029,48 @@ namespace pyoomph
     {
       if (time_mesh)
       {
-        this->get_jacobian_time_mesh_mode(elem_pt,residuals,jacobian);
-      }
-      else if (floquet_mode) 
-      {
-        this->get_jacobian_floquet_mode(elem_pt,residuals,jacobian);      
+        this->get_jacobian_multi_shoot_mode(elem_pt,residuals,jacobian);
+        /*
+        residuals.initialise(0.0);
+        this->get_residuals(elem_pt, residuals);
+        unsigned raw_ndof=elem_pt->ndof();
+        unsigned tot_ndof=residuals.size();
+        oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
+        for (unsigned int i=0;i<tot_ndof;i++)
+        {
+          //unsigned glob_eq=this->eqn_number(elem_pt,i);
+          unsigned glob_eq;
+          unsigned tindex=i/raw_ndof;
+          unsigned iindex=i%raw_ndof;
+          if (i==tot_ndof-1) glob_eq=T_global_eqn;
+          else glob_eq=tindex*Ndof+elem_pt->eqn_number(iindex);
+          //std::cout << "GLOB EQN " << glob_eq << " of " << tot_ndof << std::endl;
+          double backup=*(alldofs[glob_eq]);
+          double eps=1e-8;
+          *(alldofs[glob_eq])=backup+eps;
+          //std::cout << "GLOB EQN " << glob_eq << " of " << tot_ndof << " BACKUP " << backup << " NEW " << *(alldofs[glob_eq]) << " PTR COMPARISON ";
+          //if (i<raw_ndof) " BASE "; else if(glob_eq==T_global_eqn) std::cout << " T_PERIOD "; else std::cout << " TADD " << &(Tadd[tindex-1][elem_pt->eqn_number(iindex)]) << " VS " << alldofs[glob_eq]<< std::endl;
+          oomph::Vector<double> res_p(raw_ndof*this->n_tsteps()+1,0.0);
+          this->get_residuals(elem_pt, res_p);
+          for (unsigned int j=0;j<tot_ndof;j++)
+          {
+            jacobian(j,i)=(res_p[j]-residuals[j])/eps;
+          }
+          *(alldofs[glob_eq])=backup;         
+        }
+         */
       }
       else 
-      {
-        this->get_jacobian_time_nodal_mode(elem_pt,residuals,jacobian);      
+      { 
+        if (floquet_mode) 
+        {
+          this->get_jacobian_floquet_mode(elem_pt,residuals,jacobian);      
+        } 
+        else 
+        {
+          this->get_jacobian_time_nodal_mode(elem_pt,residuals,jacobian);      
         //return;
+        }
       }
     }
     else
@@ -4657,15 +5118,17 @@ namespace pyoomph
       {
         if (time_mesh)
         {
-          this->get_jacobian_time_mesh_mode(elem_pt,ana_res,ana_J);
+          this->get_jacobian_multi_shoot_mode(elem_pt,ana_res,ana_J);
         }
-        else if (floquet_mode)
-        {
-          this->get_jacobian_floquet_mode(elem_pt,ana_res,ana_J);
-        }
-        else 
-        {
-          this->get_jacobian_time_nodal_mode(elem_pt,ana_res,ana_J);
+        else {
+          if (floquet_mode)
+          {
+            this->get_jacobian_floquet_mode(elem_pt,ana_res,ana_J);
+          }
+          else 
+          {
+            this->get_jacobian_time_nodal_mode(elem_pt,ana_res,ana_J);
+          }
         }
       }
       else
@@ -4674,14 +5137,14 @@ namespace pyoomph
       }
       for (unsigned int i=0;i<raw_ndof*this->n_tsteps()+1;i++)
       {
-        if (std::fabs(ana_res[i]-residuals[i])>1e-4)
+        if (std::fabs(ana_res[i]-residuals[i])>1e-6)
         {
           std::cout << "RESIDUAL MISMATCH " << i << " " << ana_res[i] << " " << residuals[i] << std::endl;
           std::cout << " raw_ndof " <<  raw_ndof<< " n_tsteps " << this->n_tsteps()  << " TOT DOF " << tot_ndof << " VS " << raw_ndof*this->n_tsteps()+1<< std::endl;
         }
         for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
         {
-          if (std::fabs(ana_J(i,j)-jacobian(i,j))>1e-4)
+          if (std::fabs(ana_J(i,j)-jacobian(i,j))>1e-6)
           {
             unsigned glob_eq;
             unsigned tindex=i/raw_ndof;
@@ -4701,7 +5164,10 @@ namespace pyoomph
             std::cout << std::endl;
             std::cout << " raw_ndof " <<  raw_ndof<< " n_tsteps " << this->n_tsteps()  << " TOT DOF " << tot_ndof << " VS " << raw_ndof*this->n_tsteps()+1<< std::endl;
           }
+
+          jacobian(i,j)=ana_J(i,j);
         }
+        
       }
 
 #endif   
@@ -4801,7 +5267,10 @@ namespace pyoomph
     {
       if (time_mesh)
       {
-        throw_runtime_error("TODO:")
+        for (unsigned int i=0;i<s_knots.size()-1;i++)
+        {
+           samples.push_back(std::make_tuple((s_knots[i]+s_knots[i+1])/2,s_knots[i+1]-s_knots[i])); //TODO: Improve here
+        }
       }
       else if (floquet_mode)
       {
@@ -4846,7 +5315,7 @@ namespace pyoomph
   {
       if (!basis)
       {
-        if (time_mesh) this->get_residuals_time_mesh_mode(elem_pt,dres_dparam,parameter_pt);     
+        if (time_mesh) this->get_residuals_multi_shoot_mode(elem_pt,dres_dparam,parameter_pt);     
         else if (floquet_mode) this->get_residuals_floquet_mode(elem_pt,dres_dparam,parameter_pt);     
         else this->get_residuals_time_nodal_mode(elem_pt,dres_dparam,parameter_pt);        
       } 

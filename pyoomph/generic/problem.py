@@ -153,10 +153,10 @@ class PeriodicOrbit:
     """ 
     A class representing a periodic orbit.
     """
-    def __init__(self,problem:"Problem",mode,lyap_coeff,param,omega,pvalue,pdvalue,al,bspline_order,bspline_GL_order,T_constraint):
+    def __init__(self,problem:"Problem",mode,lyap_coeff,param,omega,pvalue,pdvalue,al,order,GL_order,T_constraint):
          self.problem=problem
          self.mode=mode
-         self.bspline_order,self.bspline_GL_order=bspline_order,bspline_GL_order
+         self.order,self.GL_order=order,GL_order
          self.T_constraint=T_constraint
          self.emerging_info={"lyap_coeff":lyap_coeff,"param":param,"omega":omega,"pvalue":pvalue,"dpvalue":pdvalue,"al":al}
          
@@ -253,13 +253,13 @@ class PeriodicOrbit:
             return accus[observables[0]]*T
         
     
-    def change_sampling(self,*,mode:Literal["floquet","central","bspline","BDF2"]="floquet",N:Optional[int]=None, bspline_order:Optional[int]=None,bspline_GL_order:Optional[int]=None,T_constraint:Optional[Literal["plane","phase"]]=None,do_solve:bool=True):
+    def change_sampling(self,*,mode:Literal["floquet","central","bspline","BDF2"]="floquet",N:Optional[int]=None, order:Optional[int]=None,GL_order:Optional[int]=None,T_constraint:Optional[Literal["plane","phase"]]=None,do_solve:bool=True):
         if mode is None:
             mode=self.mode
-        if bspline_order is None:
-            bspline_order=self.bspline_order
-        if bspline_GL_order is None:
-            bspline_GL_order=self.bspline_GL_order
+        if order is None:
+            order=self.order
+        if GL_order is None:
+            GL_order=self.GL_order
         if T_constraint is None:
             T_constraint=self.T_constraint            
         if N is None:
@@ -270,11 +270,11 @@ class PeriodicOrbit:
             history_dofs.append(self.problem.get_current_dofs()[0][:Nbase])
         T=self.get_T()
         self.problem.deactivate_bifurcation_tracking()
-        self.problem.set_current_dofs(history_dofs.pop(0))
-        self.problem.activate_periodic_orbit_handler(T,history_dofs,mode=mode,T_constraint=T_constraint,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order)
+        self.problem.set_current_dofs(history_dofs.pop())
+        self.problem.activate_periodic_orbit_handler(T,history_dofs,mode=mode,T_constraint=T_constraint,order=order,GL_order=GL_order)
         self.mode=mode
-        self.bspline_order=bspline_order
-        self.bspline_GL_order=bspline_GL_order
+        self.order=order
+        self.GL_order=GL_order
         self.T_constraint=T_constraint
         if do_solve:
             self.problem.solve()
@@ -4125,7 +4125,7 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
 
-    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["floquet","bspline","central","BDF2"]="floquet",  bspline_order:int=2,bspline_GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase"):
+    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["multi_shoot","floquet","bspline","central","BDF2"]="multi_shoot",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase"):
         """
         TODO; Add documentation
         """
@@ -4144,20 +4144,22 @@ class Problem(_pyoomph.Problem):
         if mode=="floquet":
             self._start_orbit_tracking(history_dofs,T,0,-1,knots,T_constraint)
         elif mode=="bspline":
-            if bspline_order<1:
-                raise ValueError("Invalid bspline order: "+str(bspline_order))
-            self._start_orbit_tracking(history_dofs,T,bspline_order,bspline_GL_order,knots,T_constraint)
+            if order<1:
+                raise ValueError("Invalid bspline order: "+str(order))
+            self._start_orbit_tracking(history_dofs,T,order,GL_order,knots,T_constraint)
         elif mode=="central":
             self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint)
         elif mode=="BDF2":
             self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
-        elif mode=="Langrange":
-            self._start_orbit_tracking(history_dofs,T,-3,bspline_GL_order,knots,T_constraint)
+        elif mode=="multi_shoot":
+            if order<1:
+                raise ValueError("Invalid multi-shoot collocation order: "+str(order))
+            self._start_orbit_tracking(history_dofs,T,-2-order,GL_order,knots,T_constraint)
         else:
             raise ValueError("Invalid mode: "+str(mode))
 
 
-    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["floquet","central","BDF2","bspline"]="floquet",bspline_order:int=3,bspline_GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,FD_param_delta=1e-3,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True)->PeriodicOrbit:
+    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["multi_shoot","floquet","central","BDF2","bspline"]="multi_shoot",order:int=3,GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,FD_param_delta=1e-3,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True,orbit_amplitude:Optional[float]=None,patch_number_of_nodes:bool=True)->PeriodicOrbit:
         
         from pyoomph.generic.bifurcation_tools import get_hopf_lyapunov_coefficient    
         
@@ -4181,12 +4183,27 @@ class Problem(_pyoomph.Problem):
         self.timestepper.make_steady()
         #self.solve()
         # Get the Lyapunov coefficient
-        lyap_coeff,sign,al,qR,qI=get_hopf_lyapunov_coefficient(self,param,omega=omega,q=q,FD_delta=FD_delta,FD_param_delta=FD_param_delta)
-        print("AL",al,"QR MAGNITUDE",numpy.linalg.norm(qR+1j*qI))
-        if dparam:
-            eps=numpy.sqrt(abs(dparam))        
-        parameter.value+=-eps**2*sign
+        if dparam is not None and orbit_amplitude is not None:
+            parameter.value+=dparam
+            sign=1 if dparam>0 else 0
+            al=orbit_amplitude
+            qR,qI=numpy.real(q),numpy.imag(q)
+            lyap_coeff=0
+        else:
+            lyap_coeff,sign,al,qR,qI=get_hopf_lyapunov_coefficient(self,param,omega=omega,q=q,FD_delta=FD_delta,FD_param_delta=FD_param_delta)
+            print("AL",al,"QR MAGNITUDE",numpy.linalg.norm(qR+1j*qI))
+            if dparam:
+                eps=numpy.sqrt(abs(dparam))        
+            parameter.value+=-eps**2*sign
         u0=self.get_current_dofs()[0]
+        
+        if patch_number_of_nodes and mode=="multi_shoot":            
+            if order<=0:
+                raise RuntimeError("Invalid order for multi-shoot collocation")
+            if NT%order!=0:
+                NT=(((NT)//order)+1)*order
+            
+            
         
         T=2*numpy.pi/omega
         upert=lambda t: u0+2*eps*al*amplitude_factor*numpy.real(numpy.exp(1j*omega*t)*(qR+1j*qI))
@@ -4196,9 +4213,9 @@ class Problem(_pyoomph.Problem):
         for t in numpy.linspace(0,2*numpy.pi/omega,NT,endpoint=False):
             history_dofs.append(upert(t))        
         self.set_current_dofs(history_dofs[0])
-        self.activate_periodic_orbit_handler(T,history_dofs[1:],mode,bspline_order=bspline_order,bspline_GL_order=bspline_GL_order,T_constraint=T_constraint)
+        self.activate_periodic_orbit_handler(T,history_dofs[1:],mode,order=order,GL_order=GL_order,T_constraint=T_constraint)
         history_dofs.append(history_dofs[0])
-        res=PeriodicOrbit(self,mode,lyap_coeff,param,omega,pvalue,parameter.value,al,bspline_order,bspline_GL_order,T_constraint)
+        res=PeriodicOrbit(self,mode,lyap_coeff,param,omega,pvalue,parameter.value,al,order,GL_order,T_constraint)
         if check_collapse_to_stationary:
             avg_dists0=0
             ncnt=0            
@@ -4278,7 +4295,7 @@ class Problem(_pyoomph.Problem):
         gamms=1/(1-valid_eigs)
         
         if ignore_periodic_unity is True:
-            ignore_periodic_unity=1e-7
+            ignore_periodic_unity=1e-5
         if ignore_periodic_unity is not False:
             unity_eigval=numpy.argwhere(numpy.abs(gamms-1)<ignore_periodic_unity).flatten()            
             if unity_eigval.size>0:

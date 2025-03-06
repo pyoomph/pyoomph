@@ -5183,7 +5183,7 @@ namespace pyoomph
 
 	void BulkElementBase::assemble_hessian_tensor(oomph::DenseMatrix<double> &hbuffer)
 	{
-		oomph::DenseMatrix<double> dummy(this->ndof()*this->ndof()*this->ndof(),0.0);// For the mass matrix
+		oomph::DenseMatrix<double> dummy(this->ndof(),this->ndof()*this->ndof(),0.0);// For the mass matrix
 		fill_in_generic_hessian(oomph::Vector<double>(this->ndof(),0.0), dummy, hbuffer, 3);
 	}
 

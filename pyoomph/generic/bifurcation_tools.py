@@ -387,6 +387,10 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         problem.go_to_param(**{param.get_name():param.value+FD_param_delta})
         mu2=numpy.real(problem.get_last_eigenvalues()[0])
         mup=-(mu2-mu1)/FD_param_delta
+        if abs(mup)>1e12*abs(c1):
+            raise ValueError("Likely, the orbit originates like in the van der Pol oscillator. The first Lyapunov coefficient seems to be zero. Please manually specify dparam and the orbit amplitude")
+            
+        
         problem.deactivate_bifurcation_tracking()
         problem.set_current_dofs(u)                            
 

@@ -367,6 +367,7 @@ namespace pyoomph
       void update_phase_constraint_information();
 
       oomph::Mesh * time_mesh;
+      oomph::Integral *multi_shoot_gl;
 
       std::vector<std::vector<double>> FD_ds_weights;
       std::vector<std::vector<unsigned>> FD_ds_inds;
@@ -376,8 +377,8 @@ namespace pyoomph
       void get_residuals_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
       void get_jacobian_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
       void get_residuals_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
-      void get_jacobian_time_mesh_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
-      void get_residuals_time_mesh_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+      void get_jacobian_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_residuals_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
     public:
       unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
       bool is_floquet_mode() {return floquet_mode;}
