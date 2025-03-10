@@ -47,7 +47,10 @@ class NumericalTextOutputFile:
                 return float(p)
             else:
                 return p
-        strargs = map(str, map(params_to_float,[*args]))
+        if len(args)==1 and isinstance(args[0],(list,tuple)):            
+            strargs = map(str, map(params_to_float,args[0]))
+        else:
+            strargs = map(str, map(params_to_float,[*args]))
         line = "\t".join(strargs)+"\n"
         self.file.write(line)
         self.file.flush()

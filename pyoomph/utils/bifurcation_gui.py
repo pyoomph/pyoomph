@@ -125,11 +125,18 @@ class BifurcationGUISolutionBranch(UserList[BifurcationGUISolutionPoint]):
             return self.to_branch_stab_list(obs)
         s=[p.scoord for p in self]
         x=[p.param_value for p in self]
-        y=[p.obs_values[obs] for p in self]
+        if obs is not None:
+            y=[p.obs_values[obs] for p in self]
+        else:
+            y=numpy.array([[p.obs_values[k]  for p in self] for k in self[0].obs_values.keys()]).transpose()
+            
         eigRe=[p.eig_value_Re for p in self]
         eigIm=[p.eig_value_Im for p in self]
         xi=UnivariateSpline(s,x,s=0,k=min(3,len(s)-1))
-        yi=UnivariateSpline(s,y,s=0,k=min(3,len(s)-1))
+        if obs is not None:
+            yi=UnivariateSpline(s,y,s=0,k=min(3,len(s)-1))
+        else:
+            yi=[UnivariateSpline(s,y[:,i],s=0,k=min(3,len(s)-1)) for i in range(y.shape[1])]
         eigRei=UnivariateSpline(s,eigRe,s=0,k=min(3,len(s)-1))
         eigImi=UnivariateSpline(s,eigIm,s=0,k=min(3,len(s)-1))
         segs,stabs=self.to_branch_stab_list(obs)
@@ -217,6 +224,8 @@ class BifurcationGUI:
         self._waitstring=None
         self._modifier_keys={"shift":False}
         self._escape_pressed=False
+        #: Write all observable values to the output files
+        self.output_all_observables=False
         self.custom_key_functions:Dict[str,Callable[[BifurcationGUI],None]]={}
 
     def get_bifurcation_parameter(self):
@@ -308,9 +317,9 @@ class BifurcationGUI:
             bdir=os.path.join(odir,"branch{:03d}".format(ib))
             Path(bdir).mkdir(parents=True,exist_ok=True)
             if self.interpolated_splines:
-                smoothedsegs,stabs=b.smooth_branch_stab_list(self._current_observable,100)
+                smoothedsegs,stabs=b.smooth_branch_stab_list(self._current_observable if not self.output_all_observables else None,100)
             else:
-                smoothedsegs,stabs=b.to_branch_stab_list(self._current_observable)
+                smoothedsegs,stabs=b.to_branch_stab_list(self._current_observable if not self.output_all_observables else None)
             istab=0
             iunstab=0
             for seg,stab in zip(smoothedsegs,stabs):

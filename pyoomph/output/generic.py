@@ -663,13 +663,23 @@ class _ODEFileOutput(_BaseODEOutput):
         self._eqtree=eqtree
         self.first_column=first_column
         self.continue_info=continue_info
+        
+    def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
+        oldname=self.fname
+        self.fname = os.path.join(newdir, os.path.basename(self.fname))        
+        if self.fname!=oldname:
+            self.file.close()
+            if os.path.exists(self.fname):  
+                self.init(eqtree,{"TODO":"Fill further information here"},self._mpi_rank)
+            else:
+                self.init(eqtree,None,self._mpi_rank)
 
     def init(self,eqtree:"EquationTree",continue_info:Optional[Dict[str,Any]]=None,rank:int=0):
         super().init(eqtree,continue_info,rank)
         assert self.fname is not None
-        if self.continue_info is None:
+        if continue_info is None:
             self.file = open(self.fname, "w")
-        else:
+        else:            
             self.file=open(self.fname,"a")
 
         values, fieldinds = self.get_ODE_values()
@@ -740,7 +750,7 @@ class _ODEFileOutput(_BaseODEOutput):
             else:
                 raise RuntimeError(repr(fc))
 
-        if self.continue_info is None:
+        if continue_info is None:
             self.file.write("#"+"\t".join(firstcols+descs)+"\n")
         self.firsttime=True
 
@@ -827,6 +837,9 @@ class GenericOutput(BaseEquations):
 
     def _do_output(self, eqtree:"EquationTree", step:int,stage:str):
         self._outputter[eqtree].output(step)
+        
+    def change_output_directory(self, dir:str,eqtree:"EquationTree"):
+        self._outputter[eqtree].change_output_directory(dir,eqtree)
 
 
 class ODEFileOutput(GenericOutput):

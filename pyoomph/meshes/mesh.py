@@ -1535,6 +1535,9 @@ class ODEStorageMesh(_pyoomph.ODEStorageMesh):
             if n not in inds.keys():
                 raise RuntimeError("The ODE has no value " + str(n))
             entry = vals[inds[n]]
+            # Force tiny onces to zero
+            if abs(entry)<1e-200:
+                entry=0.0
             # Scaling
             if dimensional:
                 S = self._eqtree.get_code_gen().get_scaling(n)

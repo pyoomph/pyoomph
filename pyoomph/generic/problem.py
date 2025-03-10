@@ -137,6 +137,9 @@ class GenericProblemHooks:
     def actions_before_newton_solve(self):
         pass
     
+    def actions_after_newton_step(self):
+        pass
+    
     def before_assigning_equation_numbers(self,dof_selector:Optional["_DofSelector"],before_equation_system:bool):
         pass
     
@@ -164,8 +167,32 @@ class PeriodicOrbit:
         return self
     
     def __exit__(self,exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], traceback: Optional[types.TracebackType]):
-        # TODO: Setup the history dofs for a transient continuation
+        #  Setup the history dofs for a transient continuation
+        N=self.get_num_time_steps()
+        T=self.get_T(dimensional=False)
+        dt=T/N        
+        self._get_handler().backup_dofs()
+        history=[]
+        for s in [0,-1/N,-2/N]:
+            self._get_handler().set_dofs_to_interpolated_values(s) # TODO: We might need the time history for e.g. local expressions, integrals, etc. involving partial_t            
+            history.append(self.problem.get_current_dofs()[0][:self._get_handler().get_base_ndof()])
+        self._get_handler().restore_dofs()
         self.problem.deactivate_bifurcation_tracking()
+        for i,h in enumerate(history):
+            print(i,h)                        
+            self.problem.set_history_dofs(i,h)
+        
+        self.problem.initialise_dt(dt)
+        
+        for i,h in enumerate(history):
+            self.problem.time_pt().set_dt(i,dt)            
+            self.problem.set_history_dofs(i,h)
+        self.problem.time_stepper_pt().set_weights()
+        self.problem.shift_time_values()
+        self.problem.shift_time_values()
+        self.problem.shift_time_values()
+        self.problem.time_stepper_pt().undo_make_steady()
+        
     
     def _get_handler(self)->_pyoomph.PeriodicOrbitHandler:
         handler=self.problem.assembly_handler_pt()
@@ -190,7 +217,19 @@ class PeriodicOrbit:
         """
         return self._get_handler().get_num_time_steps()
     
-    def iterate_over_samples(self,Tstart:Optional[float]=None,Tend:Optional[float]=None,N:Optional[int]=None,set_current_time:bool=True):
+    def output_orbit(self,subdir:str,Tstart:Optional[float]=None,Tend:Optional[float]=None,N:Optional[int]=None,set_current_time:bool=True,endpoint:bool=True):
+        olddir=self.problem.get_output_directory()
+        write_states=self.problem.write_states
+        outstep=self.problem._output_step
+        self.problem.write_states=False
+        self.problem._change_output_directory(self.problem.get_output_directory(subdir))
+        for sample in self.iterate_over_samples(Tstart=Tstart,Tend=Tend,N=N,set_current_time=set_current_time,endpoint=endpoint):
+            self.problem.output(quiet=True)
+        self.problem._change_output_directory(olddir)
+        self.problem.write_states=write_states
+        self.problem._output_step=outstep
+    
+    def iterate_over_samples(self,Tstart:Optional[float]=None,Tend:Optional[float]=None,N:Optional[int]=None,set_current_time:bool=True,endpoint:bool=True):
         tbackup=self.problem.get_current_time(dimensional=False,as_float=True)
         TS=self.problem.get_scaling("temporal")
         T=self.get_T(dimensional=False)
@@ -205,7 +244,7 @@ class PeriodicOrbit:
         else:
             Tend=float(Tend/TS)
         
-        ssamples=numpy.linspace(Tstart,Tend,N,endpoint=True)/T
+        ssamples=numpy.linspace(Tstart,Tend,N,endpoint=endpoint)/T
         print("Backing up dofs")
         self._get_handler().backup_dofs()
         for s in ssamples:
@@ -700,6 +739,16 @@ class Problem(_pyoomph.Problem):
     #This must be used via "with problem.custom_adapt(): ..."
     def custom_adapt(self,skip_init_call:bool=False) -> _CustomAdaptWithHelper:
         return _CustomAdaptWithHelper(self,skip_init_call)
+    
+    def _change_output_directory(self,newdir:str):
+        Path(newdir).mkdir(parents=True,exist_ok=True)
+        self._equation_system._change_output_directory(newdir)
+        if isinstance(self.plotter,(list,tuple)):
+            for p in self.plotter:
+                p._change_output_directory(newdir)
+        elif self.plotter is not None:
+            self.plotter._change_output_directory(newdir)
+        
 
     def get_output_directory(self,relative_path:Optional[str]=None)->str:
         """Return the output directory of the problem. Set it with set_output_directory(). Otherwise, it will default to the name of the invoked script minus the extension .py.
@@ -3014,6 +3063,8 @@ class Problem(_pyoomph.Problem):
                 if self._bifurcation_tracking_parameter_name=="<LAMBDA_TRACKING>":
                     paramstr+=". Lambda tracking at: "+str(complex(self._get_lambda_tracking_real(),self._get_bifurcation_omega()))                                
                 print(paramstr)
+        for h in self._hooks:
+            h.actions_after_newton_step()
 
     def actions_after_adapt(self):
         for m in self._interfacemeshes:
@@ -3516,7 +3567,7 @@ class Problem(_pyoomph.Problem):
             self.minimum_arclength_ds = old_min_ds  # type:ignore
         return newds
 
-    def go_to_param(self, *, reset_pars:bool=True, startstep:Optional[float]=None, call_after_step:Optional[Callable[[float],None]]=None,final_adaptive_solve:Union[bool,int]=False,max_newton_iterations:Optional[int]=None, **kwargs:float)->None:
+    def go_to_param(self, *, reset_pars:bool=True, startstep:Optional[float]=None, call_after_step:Optional[Callable[[float],None]]=None,final_adaptive_solve:Union[bool,int]=False,max_newton_iterations:Optional[int]=None, epsilon:float=1e-6, max_step:Optional[float]=None,**kwargs:float)->None:
         """
         Perform arclength continuation in a parameter until we reach the desired value.
 
@@ -3526,6 +3577,8 @@ class Problem(_pyoomph.Problem):
             call_after_step (Callable[[float],None], optional): A function to call after each step. If it returns "stop", we stop any further continuation. Defaults to None.
             final_adaptive_solve (Union[bool,int], optional): Whether to perform a final adaptive solve. Defaults to False.
             max_newton_iterations (int, optional): The maximum number of Newton iterations. Defaults to None.
+            epsilon: The tolerance for considering as converged to the parameter
+            max_step: The maximum step size for the continuation. Defaults to None.
             **kwargs (float): The parameter name and desired value.
 
         Raises:
@@ -3554,7 +3607,9 @@ class Problem(_pyoomph.Problem):
 
 
         ds = desired_val - self.get_global_parameter(pname).value
-
+        if max_step is not None:
+            if abs(ds) > abs(max_step):
+                ds = abs(max_step) * (1 if ds > 0 else -1)
         if startstep is not None:
             dsold=ds
             ds = float(startstep)
@@ -3562,7 +3617,7 @@ class Problem(_pyoomph.Problem):
                 ds=-ds
             if abs(dsold)<abs(ds):
                 ds=abs(dsold)*(-1 if ds<0 else 1)
-        while abs(desired_val - self.get_global_parameter(pname).value) > 1e-6:
+        while abs(desired_val - self.get_global_parameter(pname).value) > epsilon:
             ds = self.arclength_continuation(pname, ds, max_ds=desired_val - self.get_global_parameter(pname).value,max_newton_iterations=max_newton_iterations)
             #print("AFTER DS WE HAVE NEW DS",ds,"param deriv",self.get_arc_length_parameter_derivative())
             if reset_pars:
@@ -3572,6 +3627,9 @@ class Problem(_pyoomph.Problem):
             if call_after_step is not None:
                 if call_after_step(ds)=="stop":
                     return
+            if max_step is not None:
+                if abs(ds) > abs(max_step):
+                    ds = abs(max_step) * (1 if ds > 0 else -1)
         self.get_global_parameter(pname).value = desired_val
         if self.max_refinement_level > 0 and final_adaptive_solve:
             if isinstance(final_adaptive_solve,bool) and final_adaptive_solve:
@@ -4157,7 +4215,8 @@ class Problem(_pyoomph.Problem):
             self._start_orbit_tracking(history_dofs,T,-2-order,GL_order,knots,T_constraint)
         else:
             raise ValueError("Invalid mode: "+str(mode))
-
+        res=PeriodicOrbit(self,mode,0,None,0,None,None,0,order,GL_order,T_constraint)
+        return res
 
     def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["multi_shoot","floquet","central","BDF2","bspline"]="multi_shoot",order:int=3,GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,FD_param_delta=1e-3,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True,orbit_amplitude:Optional[float]=None,patch_number_of_nodes:bool=True)->PeriodicOrbit:
         

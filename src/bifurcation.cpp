@@ -455,6 +455,11 @@ namespace pyoomph
     {
       // Need to get raw residuals and jacobian
       unsigned raw_ndof = elem_pt->ndof();
+      if (raw_ndof == 0)
+      {
+        residuals.initialise(0.0);
+        return;
+      }
 
       DenseMatrix<double> jacobian(raw_ndof), M(raw_ndof);
       // Get the basic residuals, jacobian and mass matrix
@@ -706,8 +711,14 @@ namespace pyoomph
       {
         pyoomph::BulkElementBase *pyoomph_elem_pt = dynamic_cast<pyoomph::BulkElementBase *>(elem_pt);
         std::vector<SinglePassMultiAssembleInfo> multi_assm;
+        
         residuals.initialise(0.0);
         jacobian.initialise(0.0);
+        if (raw_ndof == 0)
+        {
+          return;
+        }
+          
         oomph::DenseMatrix<double> M(raw_ndof, raw_ndof, 0.0);
 
         oomph::DenseMatrix<double> dJdU_Eig(2 * raw_ndof, raw_ndof, 0.0), dMdU_Eig(2 * raw_ndof, raw_ndof, 0.0);

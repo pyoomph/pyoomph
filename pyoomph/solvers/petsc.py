@@ -274,10 +274,13 @@ class SlepcEigenSolver(GenericEigenSolver):
         E.setOperators(J, M) #type:ignore
         E.setProblemType(SLEPc.EPS.ProblemType.GNHEP) #type:ignore
         
+        if neval==0:
+            neval=1
         #E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
         #ncv=max(2 * neval + 1, 5 + neval)
         ncv=max(2 * neval + 1, 5 + neval)
         mdp=ncv #TODO: Can be smaller for higher
+        
         E.setDimensions(neval,ncv,mdp) #type:ignore
         
         if v0 is not None:

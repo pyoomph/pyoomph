@@ -3264,6 +3264,7 @@ namespace pyoomph
     }
     if (index == -1)
       throw_runtime_error("Cannot set a Dirichlet condition active or not for an unknown field " + name);
+    std::cout << "TOGGLING DIRICHLET ACTIVE AT INDEX " << index << " TO " << active << " CORESPONDING TO " << name <<std::endl;
     dirichlet_active[index] = active;
   }
 

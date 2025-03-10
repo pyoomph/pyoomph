@@ -302,7 +302,9 @@ class BaseEquations(_pyoomph.Equations):
             new_instance._created_at=None
         return new_instance
 
-        
+    def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
+        pass
+    
     def add_weak(self,a:"ExpressionOrNum",b:Union[str,"ExpressionOrNum"],*,dimensional_dx:bool=False,lagrangian:bool=False,coordinate_system:"OptionalCoordinateSystem"=None,destination:Optional[str]=None):
         if isinstance(b,str):
             b=testfunction(b)
@@ -1373,7 +1375,16 @@ class EquationTree:
                 return {".":res}
 
 
-
+    def _change_output_directory(self,newdir:str):
+        if (self._mesh is not None) and (self._equations is not None):            
+            assert self._codegen is not None
+            oldcg = self._equations._get_current_codegen()
+            self._equations._set_current_codegen(self._codegen)
+            self._equations.change_output_directory(newdir,self)
+            self._equations._set_current_codegen(oldcg)
+            
+        for _,c in self._children.items():
+            c._change_output_directory(newdir)
 
     def _before_assigning_equations(self,dof_selector:Optional["_DofSelector"]):                
         if (self._mesh is not None) and (self._equations is not None):            
@@ -2302,6 +2313,10 @@ class CombinedEquations(Equations):
     def setup_remeshing_size(self,remesher:"RemesherBase",preorder:bool):
         for e in self._subelements:
             e.setup_remeshing_size(remesher,preorder)
+            
+    def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
+        for e in self._subelements:
+            e.change_output_directory(newdir,eqtree)
 
     def after_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str,elem_dim:Optional[int]=None):
         for e in self._subelements:
