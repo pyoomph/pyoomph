@@ -25,7 +25,7 @@
 # ========================================================================
  
 import os
-from pathlib import Path
+from pathlib import Path,PurePath
 from ..expressions.generic import Expression,  ExpressionOrNum, GlobalParameter
 from ..expressions.units import unit_to_string
 
@@ -120,6 +120,7 @@ class _TextOutput(_BaseNumpyOutput):
     def __init__(self,mesh:"AnySpatialMesh",*fields:str,ftrunk:str="txtout",in_subdir:bool=True,file_ext:Optional[Union[str,List[str]]]=None,eigenvector:Optional[int]=None,eigenmode:"MeshDataEigenModes"="abs",nondimensional:bool=False,hide_lagrangian:bool=True,hide_underscore:bool=True,reverse_segment_if:Optional[Callable[[List[int],NPFloatArray],bool]]=None,sort_segments_by:Optional[Callable[[List[int],NPFloatArray],float]]=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True,operator:Optional["MeshDataCacheOperatorBase"]=None,tesselate_tri:bool=True):
         super().__init__(mesh)
         self.fname_trunk=ftrunk
+        self._orbit_subdir=None
         self.in_subdir=in_subdir
         self.file_ext=file_ext
         self.fields:List[str]=[*fields]
@@ -154,18 +155,27 @@ class _TextOutput(_BaseNumpyOutput):
             for e in self.file_ext:
                 fname = self.fname_trunk + "_{:06d}".format(step) + "." + e
                 if self.in_subdir:
-                    fname = os.path.join(self.problem.get_output_directory(), self.fname_trunk, fname)
+                    fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), self.fname_trunk, fname)
                 else:
-                    fname = os.path.join(self.problem.get_output_directory(), fname)
+                    fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), fname)
                 res.append(fname)
             return res
         else:
             fname = self.fname_trunk + "_{:06d}".format(step) + "." + self.file_ext
             if self.in_subdir:
-                fname = os.path.join(self.problem.get_output_directory(), self.fname_trunk, fname)
+                fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), self.fname_trunk, fname)
             else:
-                fname = os.path.join(self.problem.get_output_directory(), fname)
+                fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), fname)
             return fname
+
+    def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
+        basedir=self.problem.get_output_directory()
+        if Path(basedir).samefile(newdir):
+            self._orbit_subdir=None
+        else:
+            self._orbit_subdir=Path.relative_to(Path(newdir),Path(basedir))
+            Path(os.path.join(self.problem.get_output_directory(self._orbit_subdir)),self.fname_trunk).mkdir(parents=True, exist_ok=True) 
+        
 
     def output(self,step:int):
         mesh = self.mesh
@@ -1020,6 +1030,11 @@ class _IntegralObservableOutput(_BaseOutputter):
 
             res[n]=rs
         return res
+
+
+    def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
+        print("TODO: Change output path in IntegralObservables")
+        
 
     def _eval_dependent_funcs(self,intres:Dict[str,Expression]) -> Dict[str, float]:
         import pyoomph.equations.generic

@@ -371,6 +371,7 @@ void PyReg_Problem(py::module &m)
 		.def("get_T",&pyoomph::PeriodicOrbitHandler::get_T)
 		.def("get_num_time_steps",&pyoomph::PeriodicOrbitHandler::n_tsteps)
 		.def("get_s_integration_samples",&pyoomph::PeriodicOrbitHandler::get_s_integration_samples)
+		.def("update_phase_constraint_information",&pyoomph::PeriodicOrbitHandler::update_phase_constraint_information)
 		.def("set_dofs_to_interpolated_values", &pyoomph::PeriodicOrbitHandler::set_dofs_to_interpolated_values)	;
 
 /*
@@ -503,7 +504,8 @@ void PyReg_Problem(py::module &m)
 		.def("_get_bifurcation_omega", &pyoomph::Problem::get_bifurcation_omega)
 		.def("_get_lambda_tracking_real", [](pyoomph::Problem * self) {return *self->get_lambda_tracking_real(); })
 		.def("_set_lambda_tracking_real", [](pyoomph::Problem * self,double lr) {*self->get_lambda_tracking_real()=lr; })
-		.def("reset_arc_length_parameters", &pyoomph::Problem::reset_arc_length_parameters)
+		//.def("reset_arc_length_parameters", &pyoomph::Problem::reset_arc_length_parameters)
+		.def("reset_arc_length_parameters", [](pyoomph::Problem * self) {std::cout << "RESET ARCLENGH IS CALLED" <<std::endl ;self->reset_arc_length_parameters(); })
 		.def("_set_dof_direction_arclength", &pyoomph::Problem::set_dof_direction_arclength)		
 		.def("get_parameter_derivative", &pyoomph::Problem::get_parameter_derivative)
 		.def("get_arclength_dof_derivative_vector", &pyoomph::Problem::get_arclength_dof_derivative_vector)

@@ -364,7 +364,7 @@ namespace pyoomph
       unsigned FD_ds_order;
       unsigned T_constraint_mode; // 0: Plane constraint, 1: Period constraint
       std::vector<std::vector<double>> du0ds; // Derivatives of the start orbit for the phase constraint
-      void update_phase_constraint_information();
+      
 
       oomph::Mesh * time_mesh;
       oomph::Integral *multi_shoot_gl;
@@ -380,6 +380,7 @@ namespace pyoomph
       void get_jacobian_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
       void get_residuals_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
     public:
+      void update_phase_constraint_information();
       unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
       bool is_floquet_mode() {return floquet_mode;}
       std::vector<std::tuple<double,double>> get_s_integration_samples(); // Returns tuples of (s,w), so that integral_0^1(f(U(s))*ds) ~= sum( f(U(s_i))*w_i )
