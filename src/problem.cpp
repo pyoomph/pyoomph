@@ -123,6 +123,7 @@ namespace pyoomph
 		}
 		RequiredShapes_merge(&functable->shapes_required_IntegralExprs, merged);
 		RequiredShapes_merge(&functable->shapes_required_LocalExprs, merged);
+		RequiredShapes_merge(&functable->shapes_required_ExtremumExprs, merged);
 		RequiredShapes_merge(&functable->shapes_required_Z2Fluxes, merged);
 		RequiredShapes_merge(&functable->shapes_required_TracerAdvection, merged);
 
@@ -136,6 +137,8 @@ namespace pyoomph
 
 		for (unsigned int i = 0; i < functable->numintegral_expressions; i++)
 			integral_function_map[functable->integral_expressions_names[i]] = i;
+		for (unsigned int i = 0; i < functable->numextremum_expressions; i++)
+			extremum_function_map[functable->extremum_expressions_names[i]] = i;
 	}
 
 	DynamicBulkElementCode::~DynamicBulkElementCode()
@@ -171,6 +174,13 @@ namespace pyoomph
 		if (!integral_function_map.count(n))
 			return -1;
 		return integral_function_map[n];
+	}
+
+	int DynamicBulkElementCode::get_extremum_function_index(std::string n)
+	{
+		if (!extremum_function_map.count(n))
+			return -1;
+		return extremum_function_map[n];
 	}
 
 	unsigned DynamicBulkElementCode::_set_solved_residual(std::string name)

@@ -48,7 +48,7 @@ namespace pyoomph
     std::string filename;
     JITFuncSpec_Table_FiniteElement_t *functable;
     FiniteElementCode *element_class;
-    std::map<std::string, int> integral_function_map;
+    std::map<std::string, int> integral_function_map,extremum_function_map;
     void *so_handle;
 
   public:
@@ -60,6 +60,7 @@ namespace pyoomph
     JITFuncSpec_Table_FiniteElement_t *get_func_table() { return functable; }
     int get_max_dt_order() const { return get_func_table()->max_dt_order; }
     int get_integral_function_index(std::string n);
+    int get_extremum_function_index(std::string n);
     unsigned _set_solved_residual(std::string name);
   };
 
@@ -133,6 +134,7 @@ namespace pyoomph
     std::map<std::string, unsigned> get_elemental_field_indices();
     int get_discontinuous_field_index(std::string name);
     int get_integral_function_index(std::string n) { return dyn->get_integral_function_index(n); }
+    int get_extremum_function_index(std::string n) { return dyn->get_extremum_function_index(n); }
     unsigned resolve_interface_dof_id(std::string n);
     std::string get_space_of_field(std::string name);
     bool has_moving_nodes() {return dyn->functable->moving_nodes;}

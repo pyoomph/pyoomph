@@ -683,6 +683,9 @@ namespace pyoomph
       std::map<std::string, GiNaC::ex> local_expressions;
       std::map<std::string, GiNaC::ex> local_expression_units;
 
+      std::map<std::string, GiNaC::ex> extremum_expressions;
+      std::map<std::string, GiNaC::ex> extremum_expression_units;
+
       std::vector<std::string> nullified_bulk_residuals;
       unsigned integration_order = 0;
       std::vector<bool> extra_steady_routine = {false};     // Time steppings involving explicit dependence of the previous DoFs, e.g. MPT, TPZ etc, require an additional routine for steady solving
@@ -695,6 +698,7 @@ namespace pyoomph
       virtual void write_code_integral_expressions(std::ostream &os);
       virtual void write_code_tracer_advection(std::ostream &os);
       virtual void write_code_local_expressions(std::ostream &os);
+      virtual void write_code_extremum_expressions(std::ostream &os);
       virtual void write_code_header(std::ostream &os);
       virtual void write_code_info(std::ostream &os);
       virtual void write_code_geometric_jacobian(std::ostream &os);
@@ -799,6 +803,10 @@ namespace pyoomph
       virtual std::pair<std::vector<std::string>, int> register_local_expression(std::string name, GiNaC::ex expr);
       virtual std::vector<std::string> get_local_expressions();
       virtual GiNaC::ex get_local_expression_unit_factor(std::string name);
+
+      virtual void register_extremum_expression(std::string name, GiNaC::ex expr);
+      virtual std::vector<std::string> get_extremum_expressions();
+      virtual GiNaC::ex get_extremum_expression_unit_factor(std::string name);
 
       virtual void set_temporal_error(std::string f, double factor);
       // This will resolve the code (either itself, or bulk/otherbulk, external), func=field,nondimfield,scale,testfunction

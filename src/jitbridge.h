@@ -420,6 +420,9 @@ typedef struct JITFuncSpec_Table_FiniteElement
   unsigned numlocal_expressions;
   char **local_expressions_names;
 
+  unsigned numextremum_expressions;
+  char **extremum_expressions_names;
+
   unsigned numtracer_advections;
   char **tracer_advection_names;
 
@@ -466,7 +469,9 @@ typedef struct JITFuncSpec_Table_FiniteElement
   JITFuncSpec_EvalIntegralExpr_FiniteElement EvalIntegralExpression;
   JITFuncSpec_RequiredShapes_FiniteElement_t shapes_required_IntegralExprs; // TODO: Split this into the individual contribs?
   JITFuncSpec_EvalIntegralExpr_FiniteElement EvalLocalExpression;
+  JITFuncSpec_EvalIntegralExpr_FiniteElement EvalExtremumExpression;
   JITFuncSpec_RequiredShapes_FiniteElement_t shapes_required_LocalExprs; // TODO: Split this into the individual contribs?
+  JITFuncSpec_RequiredShapes_FiniteElement_t shapes_required_ExtremumExprs; // TODO: Split this into the individual contribs?
   JITFuncSpec_EvalTracerAdvection_FiniteElement EvalTracerAdvection;
   JITFuncSpec_RequiredShapes_FiniteElement_t shapes_required_TracerAdvection; // TODO: Split this into the individual contribs?
 
@@ -665,6 +670,21 @@ for (unsigned int i=0;i<n_dof;i++) \
       for (unsigned int j=0;j<n_dof;j++)\
       {\
         product[n_dof*n_dof*ivec+ i * n_dof + k] += assm_buffer[i*n_dof*n_dof+j*n_dof+k]*Y[n_dof*ivec+j];\
+      }\
+    }                                                              \
+   } \
+  }
+
+#define SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM_TRANSPOSED(assm_buffer,Y,n_dof,product)\
+  for (unsigned int ivec=0;ivec<numvectors;ivec++) \
+  { \
+   for (unsigned i = 0; i < n_dof; i++)                             \
+   {                                                                \
+    for (unsigned k = 0; k < n_dof; k++)                           \
+    {                                                              \
+      for (unsigned int j=0;j<n_dof;j++)\
+      {\
+        product[n_dof*n_dof*ivec+ i * n_dof + k] += assm_buffer[j*n_dof*n_dof+i*n_dof+k]*Y[n_dof*ivec+j];\
       }\
     }                                                              \
    } \

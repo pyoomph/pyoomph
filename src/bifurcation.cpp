@@ -5365,12 +5365,26 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
 
     unsigned hvindex=0;
     hessian_vector_indices.resize(what.size(),-1);
+    hessian_vector_transposed.resize(what.size(),false);
+    this->transposed_hessians=false;
+    bool has_nontransposed=false;
     for (unsigned int i=0;i<what.size();i++)
     {
-      if (what[i]=="hessian_vector_product" || what[i]=="mass_matrix_hessian_vector_product")
+      if (what[i]=="hessian_vector_product" || what[i]=="mass_matrix_hessian_vector_product" || what[i]=="hessian_vector_product_transposed" || what[i]=="mass_matrix_hessian_vector_product_transposed")
       {
         if (hvindex>=_hessian_vector_indices.size()) throw_runtime_error("You have not provided enough hessian vector indices for the what type '"+what[i]+"'");
         hessian_vector_indices[i]=_hessian_vector_indices[hvindex];
+        hessian_vector_transposed[i]=(what[i]=="hessian_vector_product_transposed" || what[i]=="mass_matrix_hessian_vector_product_transposed");
+        if (hessian_vector_transposed[i])
+        {
+          if (has_nontransposed) throw_runtime_error("Cannot assemble transposed and non-transposed Hessian vector products simultaneously");
+          this->transposed_hessians=true;
+        }
+        else
+        {
+          if (this->transposed_hessians) throw_runtime_error("Cannot assemble transposed and non-transposed Hessian vector products simultaneously");
+          has_nontransposed=true;          
+        }
         if (hessian_vector_indices[i]>=hessian_vectors.size()) throw_runtime_error("Hessian vector index out of bounds");
         hvindex++;
       }      
@@ -5438,19 +5452,21 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
             if (contribution_return_indices[i].paramderivs[parameters[j]].mass_matrix_index!=-1) throw_runtime_error("You have multiple dmass_matrix_dparameter requests for the same parameter and contribution '"+contribution+"'");
             contribution_return_indices[i].paramderivs[parameters[j]].mass_matrix_index=nmatrix++;            
           }
-          else if (what[j]=="hessian_vector_product")
+          else if (what[j]=="hessian_vector_product" || what[j]=="hessian_vector_product_transposed")
           {
             if (hessian_vector_indices[j]<0) throw_runtime_error("You have not provided a hessian vector index for what type of '"+what[j]+"'");
-            if (!contribution_return_indices[i].hessians.count(hessian_vector_indices[j])) contribution_return_indices[i].hessians[hessian_vector_indices[j]]=CustomMultiAssembleReturnIndexInfo();
-            if (contribution_return_indices[i].hessians[hessian_vector_indices[j]].jacobian_index!=-1) throw_runtime_error("You have multiple hessian requests for the same vector and contribution '"+contribution+"'");
-            contribution_return_indices[i].hessians[hessian_vector_indices[j]].jacobian_index=nmatrix++;            
+            std::tuple<int,bool> hindex=std::make_tuple(hessian_vector_indices[j],hessian_vector_transposed[j]);
+            if (!contribution_return_indices[i].hessians.count(hindex)) contribution_return_indices[i].hessians[hindex]=CustomMultiAssembleReturnIndexInfo();
+            if (contribution_return_indices[i].hessians[hindex].jacobian_index!=-1) throw_runtime_error("You have multiple hessian requests for the same vector and contribution '"+contribution+"'");
+            contribution_return_indices[i].hessians[hindex].jacobian_index=nmatrix++;                        
           }
-          else if (what[j]=="mass_matrix_hessian_vector_product")
+          else if (what[j]=="mass_matrix_hessian_vector_product" || what[j]=="mass_matrix_hessian_vector_product_transposed")
           {
             if (hessian_vector_indices[j]<0) throw_runtime_error("You have not provided a hessian vector index for what type of '"+what[j]+"'");
-            if (!contribution_return_indices[i].hessians.count(hessian_vector_indices[j])) contribution_return_indices[i].hessians[hessian_vector_indices[j]]=CustomMultiAssembleReturnIndexInfo();
-            if (contribution_return_indices[i].hessians[hessian_vector_indices[j]].mass_matrix_index!=-1) throw_runtime_error("You have multiple hessian mass matrix requests for the same vector and contribution '"+contribution+"'");
-            contribution_return_indices[i].hessians[hessian_vector_indices[j]].mass_matrix_index=nmatrix++;            
+            std::tuple<int,bool> hindex=std::make_tuple(hessian_vector_indices[j],hessian_vector_transposed[j]);
+            if (!contribution_return_indices[i].hessians.count(hindex)) contribution_return_indices[i].hessians[hindex]=CustomMultiAssembleReturnIndexInfo();
+            if (contribution_return_indices[i].hessians[hindex].mass_matrix_index!=-1) throw_runtime_error("You have multiple hessian mass matrix requests for the same vector and contribution '"+contribution+"'");
+            contribution_return_indices[i].hessians[hindex].mass_matrix_index=nmatrix++;            
             contribution_return_indices[i].hessian_require_mass_matrix=true;
           }
           else
@@ -5459,7 +5475,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
           }
         }
       }
-      for (auto & hc : contribution_return_indices[i].hessians) contribution_return_indices[i].hessian_vector_indices.push_back(hc.first);
+      for (auto & hc : contribution_return_indices[i].hessians) contribution_return_indices[i].hessian_vector_indices.push_back(std::get<0>(hc.first));
     }
 
 
@@ -5475,8 +5491,10 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
       else if (what[i]=="dresiduals_dparameter") return_indices[i]=contribution_return_indices[uci].paramderivs[parameters[i]].residual_index;
       else if (what[i]=="djacobian_dparameter") return_indices[i]=-1-contribution_return_indices[uci].paramderivs[parameters[i]].jacobian_index;
       else if (what[i]=="dmass_matrix_dparameter") return_indices[i]=-1-contribution_return_indices[uci].paramderivs[parameters[i]].mass_matrix_index;
-      else if (what[i]=="hessian_vector_product") return_indices[i]=-1-contribution_return_indices[uci].hessians[hessian_vector_indices[i]].jacobian_index;
-      else if (what[i]=="mass_matrix_hessian_vector_product") return_indices[i]=-1-contribution_return_indices[uci].hessians[hessian_vector_indices[i]].mass_matrix_index;
+      else if (what[i]=="hessian_vector_product") return_indices[i]=-1-contribution_return_indices[uci].hessians[std::make_tuple(hessian_vector_indices[i],false)].jacobian_index;
+      else if (what[i]=="hessian_vector_product_transposed") return_indices[i]=-1-contribution_return_indices[uci].hessians[std::make_tuple(hessian_vector_indices[i],true)].jacobian_index;      
+      else if (what[i]=="mass_matrix_hessian_vector_product") return_indices[i]=-1-contribution_return_indices[uci].hessians[std::make_tuple(hessian_vector_indices[i],false)].mass_matrix_index;
+      else if (what[i]=="mass_matrix_hessian_vector_product_transposed") return_indices[i]=-1-contribution_return_indices[uci].hessians[std::make_tuple(hessian_vector_indices[i],true)].mass_matrix_index;
       else throw_runtime_error("should never arrive here")      ;      
     }
     
@@ -5607,11 +5625,11 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
           if (contribution_return_indices[contribution_index].hessian_require_mass_matrix)
           {
             hessian_Ms[contribution_index].resize(hessian_vectors.size()*n_var,n_var,0.0);
-            multi_assm.back().add_hessian(hessian_vec_local, &hessian_Js[contribution_index], &hessian_Ms[contribution_index]);            
+            multi_assm.back().add_hessian(hessian_vec_local, &hessian_Js[contribution_index], &hessian_Ms[contribution_index],this->transposed_hessians);            
           }
           else
           {
-            multi_assm.back().add_hessian(hessian_vec_local, &hessian_Js[contribution_index], NULL);            
+            multi_assm.back().add_hessian(hessian_vec_local, &hessian_Js[contribution_index], NULL,this->transposed_hessians);            
           }          
         }        
       }
@@ -5634,7 +5652,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
               {
                 for (unsigned int j=0;j<n_var;j++)
                 {
-                  matrix[hessinfo.second.jacobian_index](i,j)=hessian_Js[contribution_index](hessinfo.first*n_var+ i,j);
+                  matrix[hessinfo.second.jacobian_index](i,j)=hessian_Js[contribution_index](std::get<0>(hessinfo.first)*n_var+ i,j);
                 }
               }
             }
@@ -5644,7 +5662,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
               {
                 for (unsigned int j=0;j<n_var;j++)
                 {
-                  matrix[hessinfo.second.mass_matrix_index](i,j)=hessian_Ms[contribution_index](hessinfo.first*n_var+ i,j);
+                  matrix[hessinfo.second.mass_matrix_index](i,j)=hessian_Ms[contribution_index](std::get<0>(hessinfo.first)*n_var+ i,j);
                 }
               }
             }

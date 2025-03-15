@@ -4644,6 +4644,28 @@ namespace pyoomph
 		return functable->EvalLocalExpression(&eleminfo, this->shape_info, index);
 	}
 
+	double BulkElementBase::eval_extremum_expression_at_node(unsigned index, unsigned node_index)
+	{
+		oomph::Vector<double> s;
+		this->local_coordinate_of_node(node_index, s);
+		return eval_extremum_expression_at_s(index, s);
+	}
+
+	double BulkElementBase::eval_extremum_expression_at_s(unsigned index, const oomph::Vector<double> &s)
+	{
+		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
+		if (index >= functable->numextremum_expressions)
+			throw_runtime_error("Cannot evaluate extremum expression at too large index " + std::to_string(index));
+		
+		this->interpolate_hang_values();
+
+		double JLagr;
+		this->fill_shape_info_at_s(s, 0, codeinst->get_func_table()->shapes_required_ExtremumExprs, JLagr, 0);
+		this->prepare_shape_buffer_for_integration(codeinst->get_func_table()->shapes_required_ExtremumExprs, 0);
+      _currently_assembled_element = this;	    
+		return functable->EvalExtremumExpression(&eleminfo, this->shape_info, index);
+	}	
+
 	bool BulkElementBase::eval_tracer_advection_in_s_space(unsigned index, double time_frac, const oomph::Vector<double> &s, oomph::Vector<double> &svelo)
 	{
 		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
@@ -4924,12 +4946,12 @@ namespace pyoomph
 						if (hinf.M_Hessian)
 						{
 							//             std::cout << " AEESMBLE HESS JM " << inf.contribution << "  " << &hinf.Y << "  " <<  std::endl;
-							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], &(hinf.M_Hessian->entry(0, 0)), &(hinf.J_Hessian->entry(0, 0)), n_vec, 2);
+							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], &(hinf.M_Hessian->entry(0, 0)), &(hinf.J_Hessian->entry(0, 0)), n_vec, (hinf.transposed ? 5:  2));
 						}
 						else
 						{
 							//            std::cout << " AEESMBLE HESS J " << inf.contribution << "  " << &hinf.Y << "  " <<  std::endl;
-							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], NULL, &(hinf.J_Hessian->entry(0, 0)), n_vec, 1);
+							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], NULL, &(hinf.J_Hessian->entry(0, 0)), n_vec, (hinf.transposed ? 4:  1));
 						}
 					}
 				}

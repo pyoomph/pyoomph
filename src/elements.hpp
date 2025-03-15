@@ -76,7 +76,8 @@ namespace pyoomph
     oomph::Vector<double> &Y;
     oomph::DenseMatrix<double> *M_Hessian;
     oomph::DenseMatrix<double> *J_Hessian;
-    SinglePassMultiAssembleHessianInfo(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M) : Y(_Y), M_Hessian(M), J_Hessian(J) {}
+    bool transposed;
+    SinglePassMultiAssembleHessianInfo(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M, bool _transposed=false) : Y(_Y), M_Hessian(M), J_Hessian(J), transposed(_transposed) {}
   };
 
   class SinglePassMultiAssembleDParamInfo
@@ -102,9 +103,9 @@ namespace pyoomph
     oomph::DenseMatrix<double> *jacobian = NULL;
     oomph::DenseMatrix<double> *mass_matrix = NULL;
 
-    void add_hessian(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M = NULL)
+    void add_hessian(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M = NULL,bool transposed=false)
     {
-      hessians.push_back(SinglePassMultiAssembleHessianInfo(_Y, J, M));
+      hessians.push_back(SinglePassMultiAssembleHessianInfo(_Y, J, M,transposed));
     }
     
     SinglePassMultiAssembleHessianInfo & get_hessian(unsigned int i) { return  hessians[i]; }
@@ -328,6 +329,9 @@ namespace pyoomph
     double eval_local_expression_at_s(unsigned index, const oomph::Vector<double> &s);
     double eval_local_expression_at_node(unsigned index, unsigned node_index);
     double eval_local_expression_at_midpoint(unsigned index);
+    double eval_extremum_expression_at_s(unsigned index, const oomph::Vector<double> &s);
+    double eval_extremum_expression_at_node(unsigned index, unsigned node_index);
+    
 
     pyoomph::Node * create_interpolated_node(const oomph::Vector<double> & s,bool as_boundary_node);
 

@@ -147,7 +147,16 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
     esolv_kwargs=eigensolve_kwargs.copy()
     if esolver.supports_target():
         esolv_kwargs["target"]=-1j*omega0
-    evalT,evectT,_,_=problem.get_eigen_solver().solve(1,custom_J_and_M=(AT,MT),**esolv_kwargs,shift=-(1j+omega_epsilon)*omega0,v0=numpy.conjugate(q),sort=False,quiet=False)   # TODO: Is MT right here?                 
+        evalT,evectT,_,_=problem.get_eigen_solver().solve(1,custom_J_and_M=(AT,MT),**esolv_kwargs,shift=-(1j+omega_epsilon)*omega0,v0=numpy.conjugate(q),sort=False,quiet=False)   # TODO: Is MT right here?                 
+    else:
+        problem.deactivate_bifurcation_tracking()
+        problem.set_custom_assembler(HopfTracker(problem,param.get_name(),numpy.conjugate(q),omega=-omega0,left_eigenvector=True,eigenscale=1000))
+        problem.solve()
+        evalT=problem.get_last_eigenvalues()
+        evectT=problem.get_last_eigenvectors()
+        problem.set_custom_assembler(None)
+        
+        #raise RuntimeError("Eigenvalue solver does not support target. Please use a different eigenvalue solver.")
     #print("GOT",evalT,evectT)
     #print("Omega0",omega0)
     if numpy.imag(evalT[0])<0 and numpy.abs(numpy.imag(evalT[0])+omega0)<1e-6:                    
@@ -251,7 +260,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
     f0=nodalf(u)
     def d2f(direct):                    
         res_hess=-numpy.array(problem.get_second_order_directional_derivative(direct))        
-        if True:
+        if False:
             fp=nodalf(u+delt*direct)
             fm=nodalf(u-delt*direct)
             problem.set_current_dofs(u)
@@ -274,7 +283,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         problem.set_current_dofs(u)        
         res_hess=0.5*(res_hessp-res_hessm)/(delt*direct_scale)
         
-        if True:        
+        if False:        
             fmm=nodalf(u-2*delt*direct)
             fm=nodalf(u-delt*direct)
             fp=nodalf(u+delt*direct)
@@ -481,14 +490,20 @@ class MultiAssembleRequest:
         self._parameters.append(parameter)
         return self
         
-    def dJdU(self,vector:NPFloatArray,contribution=""):
-        self._what.append("hessian_vector_product")
+    def dJdU(self,vector:NPFloatArray,contribution="",transposed=False):
+        if transposed:
+            self._what.append("hessian_vector_product_transposed")
+        else:
+            self._what.append("hessian_vector_product")
         self._contributions.append(contribution)
         self._hessian_vector_indices.append(self._resolve_hessian_vector_index(vector))
         return self
         
-    def dMdU(self,vector:NPFloatArray,contribution=""):
-        self._what.append("mass_matrix_hessian_vector_product")
+    def dMdU(self,vector:NPFloatArray,contribution="",transposed=False):
+        if transposed:
+            self._what.append("mass_matrix_hessian_vector_product_transposed")
+        else:
+            self._what.append("mass_matrix_hessian_vector_product")
         self._contributions.append(contribution)
         self._hessian_vector_indices.append(self._resolve_hessian_vector_index(vector))
         return self
@@ -821,7 +836,7 @@ class HopfTracker(CustomBifurcationTracker):
         eigenscale: The scale of the eigenvector internally considered. Internally, the eigenvalue will have the magnitude |Re(V)|=eigenscale, in the output, the eigenvector will be normalized to |V|=1
         nonlinear_length_constraint: If False, we demand <Re(V),Re(V0)>=eigenscale, if True, we demand <Re(V),Re(V)>=eigenscale^2. Nonlinear length constraints can require a more sophisticated initial guess, but can be better for arclength continuation along a long branch, where <Re(V),Re(V0)>=0 could in principle occur.
     """
-    def __init__(self,problem:Problem,parameter,eigenvector=0,omega=None,eigenscale:float=1,nonlinear_length_constraint:bool=False):
+    def __init__(self,problem:Problem,parameter,eigenvector=0,omega=None,eigenscale:float=1,nonlinear_length_constraint:bool=False,left_eigenvector:bool=False):
         super().__init__(problem)
         self.parameter=parameter                    
         self.eigenvector=self.get_complex_eigenvector_guess(eigenvector)
@@ -830,9 +845,12 @@ class HopfTracker(CustomBifurcationTracker):
                 self.omega=numpy.imag(self.problem.get_last_eigenvalues()[0])
             else:
                 raise RuntimeError("You need to provide the frequency of the Hopf bifurcation when using a custom eigenvector guess")
+        else:
+            self.omega=omega
         self.C=numpy.real(self.eigenvector)
         self.eigenscale=eigenscale
         self.nonlinear_length_constraint=nonlinear_length_constraint
+        self.left_eigenvector=left_eigenvector
     
     def define_augmented_dofs(self, dofs):
         dofs.add_vector(numpy.real(self.eigenvector)*self.eigenscale)
@@ -847,28 +865,43 @@ class HopfTracker(CustomBifurcationTracker):
         if require_jacobian:
             assert dparameter is None, "dparameter not supported for require_jacobian=True"
             # If we need the augmented Jacobian, we also need dR/dP and dJ_ik/dU_j V_k
-            R,J,M,dRdP,dJdP,dMdP,HVr,HVi,dMdUVr,dMdUVi=assembly.R().J().M().dRdp(self.parameter).dJdp(self.parameter).dMdp(self.parameter).dJdU(Vr).dJdU(Vi).dMdU(Vr).dMdU(Vi).assemble() # Assemble all quantities, will be given in the order of the requests
+            R,J,M,dRdP,dJdP,dMdP,HVr,HVi,dMdUVr,dMdUVi=assembly.R().J().M().dRdp(self.parameter).dJdp(self.parameter).dMdp(self.parameter).dJdU(Vr,transposed=self.left_eigenvector).dJdU(Vi,transposed=self.left_eigenvector).dMdU(Vr,transposed=self.left_eigenvector).dMdU(Vi,transposed=self.left_eigenvector).assemble() # Assemble all quantities, will be given in the order of the requests
         else:
             if dparameter is not None:
                 # This happens during arclength continuation in another parameter
                 dRdp,dJdp,dMdp=assembly.dRdp(dparameter).dJdp(dparameter).dMdp(dparameter).assemble() 
                 # leave here with the derivative of the residuals with respect to the other parameter
-                return numpy.hstack([dRdp,-dJdp@Vr+omega*dMdp@Vi,-dJdp@Vi-omega*dMdp@Vr,0,0])
+                if self.left_eigenvector:
+                    return numpy.hstack([dRdp,-dJdp.transpose()@Vr+omega*dMdp.transpose()@Vi,-dJdp.transpose()@Vi-omega*dMdp.transpose()@Vr,0,0])
+                else:
+                    return numpy.hstack([dRdp,-dJdp@Vr+omega*dMdp@Vi,-dJdp@Vi-omega*dMdp@Vr,0,0])
             
             R,J,M=assembly.R().J().M().assemble() # Only residuals and Jacobian are requested and required
         
         nl=self.nonlinear_length_constraint
-        Raug=numpy.hstack([R,-J@Vr+omega*M@Vi,-J@Vi-omega*M@Vr,numpy.dot(Vr,Vr if nl else self.C)-self.eigenscale*(self.eigenscale if nl else 1),numpy.dot(Vi,Vr if nl else self.C)]) 
+        if self.left_eigenvector:
+            Raug=numpy.hstack([R,-J.transpose()@Vr+omega*M.transpose()@Vi,-J.transpose()@Vi-omega*M.transpose()@Vr,numpy.dot(Vr,Vr if nl else self.C)-self.eigenscale*(self.eigenscale if nl else 1),numpy.dot(Vi,Vr if nl else self.C)]) 
+        else:
+            Raug=numpy.hstack([R,-J@Vr+omega*M@Vi,-J@Vi-omega*M@Vr,numpy.dot(Vr,Vr if nl else self.C)-self.eigenscale*(self.eigenscale if nl else 1),numpy.dot(Vi,Vr if nl else self.C)]) 
         if require_jacobian:            
             col=lambda C:self.as_matrix_column(C)
             row=lambda R:self.as_matrix_row(R)
-            # Augmented Jacobian
-            Jaug=scipy.sparse.block_array(
-                [[J,None,None,col(dRdP),None],
-                 [-HVr+omega*dMdUVi,-J,omega*M,col(-dJdP@Vr+omega*dMdP@Vi),col(M@Vi)],
-                 [-HVi-omega*dMdUVr,-omega*M,-J,col(-dJdP@Vi-omega*dMdP@Vr),col(-M@Vr)],
-                 [None,row(2*Vr if nl else self.C),None,None,None],
-                 [None,row(Vi) if nl else None,row(Vr if nl else self.C),None,None]]).tocsr()            
+            if self.left_eigenvector:
+                #raise NotImplementedError("Left eigenvector not implemented for augmented Jacobian")
+                Jaug=scipy.sparse.block_array(
+                    [[J,None,None,col(dRdP),None],
+                    [-HVr+omega*dMdUVi,-J.transpose(),omega*M.transpose(),col(-dJdP.transpose()@Vr+omega*dMdP.transpose()@Vi),col(M.transpose()@Vi)],
+                    [-HVi-omega*dMdUVr,-omega*M.transpose(),-J.transpose(),col(-dJdP.transpose()@Vi-omega*dMdP.transpose()@Vr),col(-M.transpose()@Vr)],
+                    [None,row(2*Vr if nl else self.C),None,None,None],
+                    [None,row(Vi) if nl else None,row(Vr if nl else self.C),None,None]]).tocsr()            
+            else:
+                # Augmented Jacobian
+                Jaug=scipy.sparse.block_array(
+                    [[J,None,None,col(dRdP),None],
+                    [-HVr+omega*dMdUVi,-J,omega*M,col(-dJdP@Vr+omega*dMdP@Vi),col(M@Vi)],
+                    [-HVi-omega*dMdUVr,-omega*M,-J,col(-dJdP@Vi-omega*dMdP@Vr),col(-M@Vr)],
+                    [None,row(2*Vr if nl else self.C),None,None,None],
+                    [None,row(Vi) if nl else None,row(Vr if nl else self.C),None,None]]).tocsr()            
             return Raug,Jaug
         else:
             return Raug

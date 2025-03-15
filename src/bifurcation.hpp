@@ -421,7 +421,7 @@ namespace pyoomph
       int jacobian_index=-1;
       int mass_matrix_index=-1;
       std::map<double*,CustomMultiAssembleReturnIndexInfo> paramderivs;
-      std::map<int,CustomMultiAssembleReturnIndexInfo>  hessians;
+      std::map<std::tuple<int,bool>,CustomMultiAssembleReturnIndexInfo>  hessians;
       bool hessian_require_mass_matrix=false;
       std::vector<unsigned> hessian_vector_indices;      
   };
@@ -436,6 +436,8 @@ namespace pyoomph
       std::vector<double *> parameters;
       std::vector<int> hessian_vector_indices;
       std::vector<std::vector<double>> & hessian_vectors;
+      std::vector<bool> hessian_vector_transposed;
+      bool transposed_hessians;
       std::vector<std::string> unique_contributions;
       std::vector<CustomMultiAssembleReturnIndexInfo> contribution_return_indices;
       unsigned nmatrix,nvector;

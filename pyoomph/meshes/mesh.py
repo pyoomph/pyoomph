@@ -1064,6 +1064,49 @@ class MeshFromTemplateBase(BaseMesh):
                 pdata = state.numpy_data(lambda: 0, lambda v: v)  # type:ignore
                 tdata = state.numpy_data(lambda: 0, lambda v: v)  # type:ignore
                 tcol._load_state(pdata, tdata)  # type:ignore
+    
+    
+    def _evaluate_extremum_wrapper(self,name:str,sign:int,dimensional:bool=True,as_float:bool=False,return_x:bool=True):
+        flags=0
+        if dimensional:
+            flags|=1
+        val,s,elem=self._evaluate_extremum(name,sign,flags)        
+        #print(val,s,elem)
+        if return_x:
+            x=elem.get_interpolated_position_at_s(0,s,False)
+            #print("X",x)
+            if dimensional:
+                SS=self.get_problem().get_scaling("spatial")
+                x=[xc*SS for xc in x]
+        if not dimensional:
+            val=float(val)
+        else:
+            if as_float:
+                factor, _, _, _ = _pyoomph.GiNaC_collect_units(val)
+                val = float(factor)
+                if return_x:
+                    xn=[]
+                    for xc in x:
+                        factor, _, _, _ = _pyoomph.GiNaC_collect_units(xc)
+                        xn.append(float(factor))
+                    x=xn                
+        if return_x:
+            return val,x
+        else:
+            return val
+                    
+    def evaluate_maximum(self,name:str,dimensional:bool=True,as_float:bool=False,return_x:bool=True):
+        return self._evaluate_extremum_wrapper(name,1,dimensional=dimensional,as_float=as_float,return_x=return_x)
+    
+    @overload
+    def evaluate_minimum(self,name:str,dimensional=...,return_x=...,as_float=...)->Tuple[Expression,List[Expression]]: ...
+    @overload
+    def evaluate_minimum(self,name:str,as_float:Literal[True],dimensional=...,return_x=...)->Tuple[float,List[float]]: ...    
+    @overload
+    def evaluate_minimum(self,name:str,as_float:Literal[True],return_x:Literal[True],dimensional:bool=...)->Tuple[float,List[float]]: ...    
+   
+    def evaluate_minimum(self,name:str,dimensional:bool=True,as_float:bool=False,return_x:bool=True)->Union[ExpressionOrNum,Tuple[ExpressionOrNum,List[ExpressionOrNum]]]:
+        return self._evaluate_extremum_wrapper(name,-1,dimensional=dimensional,as_float=as_float,return_x=return_x)
 
 
 class MeshFromTemplate1d(_pyoomph.TemplatedMeshBase1d, MeshFromTemplateBase):

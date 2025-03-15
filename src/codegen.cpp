@@ -3669,7 +3669,7 @@ namespace pyoomph
 		osh << "  {" << std::endl;
 		osh << "    hessian_buffer=(double*)calloc(n_dof*n_dof*n_dof,sizeof(double));" << std::endl;
 		osh << "  }" << std::endl;
-		osh << "  if (flag==2) " << std::endl;
+		osh << "  if (flag==2 || flag==5) " << std::endl;
 		osh << "  {" << std::endl;
 		osh << "    hessian_M_buffer=(double*)calloc(n_dof*n_dof*n_dof,sizeof(double));" << std::endl;
 		osh << "  }" << std::endl;
@@ -3843,12 +3843,24 @@ namespace pyoomph
 		os << "  }" << std::endl;
 		os << "  else if (flag!=3) " << std::endl;
 		os << "  {" << std::endl;
-		os << "     SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM(hessian_buffer,Y,n_dof,product)" << std::endl;
+		os << "     if (flag==5 || flag==4) " << std::endl;
+		os << "     {" << std::endl;
+		os << "        SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM_TRANSPOSED(hessian_buffer,Y,n_dof,product)" << std::endl;
+		os << "     }" << std::endl;
+		os << "     else" << std::endl;
+		os << "     {" << std::endl;
+		os << "        SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM(hessian_buffer,Y,n_dof,product)" << std::endl;
+		os << "     }" << std::endl;
 		os << "     free(hessian_buffer); " << std::endl;
 		os << "  }" << std::endl;
 		os << "  if (flag==2)" << std::endl;
 		os << "  {" << std::endl;
 		os << "     SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM(hessian_M_buffer,Y,n_dof,Cs)" << std::endl;
+		os << "     free(hessian_M_buffer);" << std::endl;
+		os << "  }" << std::endl;
+		os << "  else if (flag==5)" << std::endl;
+		os << "  {" << std::endl;
+		os << "     SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM_TRANSPOSED(hessian_M_buffer,Y,n_dof,Cs)" << std::endl;
 		os << "     free(hessian_M_buffer);" << std::endl;
 		os << "  }" << std::endl;
 		//		}
@@ -4305,6 +4317,11 @@ namespace pyoomph
 		this->write_code_integral_or_local_expressions(os, local_expressions, local_expression_units, "EvalLocalExpression", "LocalExprs", false);
 	}
 
+	void FiniteElementCode::write_code_extremum_expressions(std::ostream &os)
+	{
+		this->write_code_integral_or_local_expressions(os, extremum_expressions, extremum_expression_units, "EvalExtremumExpression", "ExtremumExprs", false);
+	}
+
 	void FiniteElementCode::write_code_integral_expressions(std::ostream &os)
 	{
 		this->write_code_integral_or_local_expressions(os, integral_expressions, integral_expression_units, "EvalIntegralExpression", "IntegralExprs", true);
@@ -4733,6 +4750,11 @@ namespace pyoomph
 		if (local_expressions.size())
 		{
 			write_code_local_expressions(os);
+			os << std::endl;
+		}
+		if (extremum_expressions.size())
+		{
+			write_code_extremum_expressions(os);
 			os << std::endl;
 		}
 		if (tracer_advection_terms.size())
@@ -6163,6 +6185,25 @@ namespace pyoomph
 		}
 	}
 
+	void FiniteElementCode::register_extremum_expression(std::string name, GiNaC::ex expr)
+	{
+		RemoveSubexpressionsByIndentity sub_to_id(this);
+		this->local_expression_units[name] = 1;
+		GiNaC::ex expanded = sub_to_id(expand_all_and_ensure_nondimensional(expr, "ExtremumExpression", &(this->extremum_expression_units[name])));
+		GiNaC::ex factor, unit, rest;
+		expressions::collect_base_units(this->extremum_expression_units[name], factor, unit, rest);
+		this->extremum_expression_units[name] /= (factor * rest);
+		expanded = (expanded * (factor * rest)).evalm();
+		if (!GiNaC::is_a<GiNaC::matrix>(expanded))
+		{
+			this->extremum_expressions[name] = expanded;			
+		}
+		else
+		{
+			throw_runtime_error("Extremum expressions cannot be vectors or matrices");
+		}
+	}
+
 	std::pair<std::vector<std::string>, int> FiniteElementCode::register_local_expression(std::string name, GiNaC::ex expr)
 	{
 		//			std::cout << "EXPR " << expr << std::endl;
@@ -6253,6 +6294,20 @@ namespace pyoomph
 		}
 	}
 
+
+
+	GiNaC::ex FiniteElementCode::get_extremum_expression_unit_factor(std::string name)
+	{
+		if (this->extremum_expression_units.count(name))
+		{
+			return this->extremum_expression_units[name];
+		}
+		else
+		{
+			return 1;
+		}
+	}
+
 	GiNaC::ex FiniteElementCode::get_local_expression_unit_factor(std::string name)
 	{
 		if (this->local_expression_units.count(name))
@@ -6279,6 +6334,14 @@ namespace pyoomph
 		for (auto &e : this->local_expressions)
 			res.push_back(e.first);
 		return res;
+	}
+
+	std::vector<std::string> FiniteElementCode::get_extremum_expressions()
+	{
+		std::vector<std::string> res;
+		for (auto &e : this->extremum_expressions)
+			res.push_back(e.first);
+		return res;		
 	}
 
 	void FiniteElementCode::write_code_info(std::ostream &os)
@@ -6904,6 +6967,23 @@ namespace pyoomph
 			cleanup << " pyoomph_tested_free(functable->local_expressions_names); functable->local_expressions_names=PYOOMPH_NULL; " << std::endl;
 
 			this->write_required_shapes(init, "  ", "LocalExprs");
+		}
+
+		if (extremum_expressions.size())
+		{
+			init << " functable->numextremum_expressions=" << extremum_expressions.size() << ";" << std::endl;
+			init << " functable->extremum_expressions_names=(char **)malloc(sizeof(char*)*functable->numextremum_expressions);" << std::endl;
+			unsigned ie_index = 0;
+			for (auto &e : extremum_expressions)
+			{
+				init << " SET_INTERNAL_FIELD_NAME(functable->extremum_expressions_names," << ie_index << ",\"" << e.first << "\");" << std::endl;
+				cleanup << " pyoomph_tested_free(functable->extremum_expressions_names["<<ie_index<<"]); functable->extremum_expressions_names["<<ie_index<<"]=PYOOMPH_NULL; " << std::endl;
+				ie_index++;
+			}
+			init << " functable->EvalExtremumExpression=&EvalExtremumExpression;" << std::endl;
+			cleanup << " pyoomph_tested_free(functable->extremum_expressions_names); functable->extremum_expressions_names=PYOOMPH_NULL; " << std::endl;
+
+			this->write_required_shapes(init, "  ", "ExtremumExprs");
 		}
 
 		if (tracer_advection_terms.size())
