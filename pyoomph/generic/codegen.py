@@ -2005,7 +2005,7 @@ class Equations(BaseEquations):
             master._azimuthal_r0_info[2].add("mesh"+zcomponent)
         
 
-    def define_scalar_field(self, name:str, space:"FiniteElementSpaceEnum",scale:Optional[Union["ExpressionOrNum",str]]=None,testscale:Optional[Union["ExpressionOrNum",str]]=None,discontinuous_refinement_exponent:Optional[float]=None):
+    def define_scalar_field(self, name:Union[str,List[str]], space:"FiniteElementSpaceEnum",scale:Optional[Union["ExpressionOrNum",str]]=None,testscale:Optional[Union["ExpressionOrNum",str]]=None,discontinuous_refinement_exponent:Optional[float]=None):
         """
         Define a scalar field on this domain. Must be called within the specified implementation of the method :py:meth:`~BaseEquations.define_fields`.
 
@@ -2016,7 +2016,10 @@ class Equations(BaseEquations):
             testscale (ExpressionNumOrNone): The scale for the test function of the vector field for nondimensionalization. Defaults to None.
             discontinuous_refinement_exponent (Optional[float]): The exponent for the discontinuous refinement. Defaults to None.
         """
-        
+        if not isinstance(name, str):
+            for n in name:
+                self.define_scalar_field(n, space, scale=scale, testscale=testscale,discontinuous_refinement_exponent=discontinuous_refinement_exponent)
+            return
         master = self._get_combined_element()
         if _pyoomph.get_verbosity_flag() != 0:
             print("REGISTER", name, self, master, self == master, space)

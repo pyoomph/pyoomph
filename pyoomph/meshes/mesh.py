@@ -1066,7 +1066,11 @@ class MeshFromTemplateBase(BaseMesh):
                 tcol._load_state(pdata, tdata)  # type:ignore
     
     
-    def _evaluate_extremum_wrapper(self,name:str,sign:int,dimensional:bool=True,as_float:bool=False,return_x:bool=True):
+    def _evaluate_extremum_wrapper(self,name:Union[str,List[str]],sign:int,dimensional:bool=True,as_float:bool=False,return_x:bool=True):
+        if not isinstance(name,str):
+            if return_x:
+                raise RuntimeError("Please set return_x=False for multiple extremum evaluations (or call them one by one)")
+            return [self._evaluate_extremum_wrapper(n,sign,dimensional=dimensional,as_float=as_float,return_x=False) for n in name]
         flags=0
         if dimensional:
             flags|=1
@@ -1095,17 +1099,10 @@ class MeshFromTemplateBase(BaseMesh):
         else:
             return val
                     
-    def evaluate_maximum(self,name:str,dimensional:bool=True,as_float:bool=False,return_x:bool=True):
+    def evaluate_maximum(self,name:Union[str,List[str]],dimensional:bool=True,as_float:bool=False,return_x:bool=False)->Union[ExpressionOrNum,List[ExpressionOrNum],Tuple[ExpressionOrNum,List[ExpressionOrNum]]]:
         return self._evaluate_extremum_wrapper(name,1,dimensional=dimensional,as_float=as_float,return_x=return_x)
-    
-    @overload
-    def evaluate_minimum(self,name:str,dimensional=...,return_x=...,as_float=...)->Tuple[Expression,List[Expression]]: ...
-    @overload
-    def evaluate_minimum(self,name:str,as_float:Literal[True],dimensional=...,return_x=...)->Tuple[float,List[float]]: ...    
-    @overload
-    def evaluate_minimum(self,name:str,as_float:Literal[True],return_x:Literal[True],dimensional:bool=...)->Tuple[float,List[float]]: ...    
-   
-    def evaluate_minimum(self,name:str,dimensional:bool=True,as_float:bool=False,return_x:bool=True)->Union[ExpressionOrNum,Tuple[ExpressionOrNum,List[ExpressionOrNum]]]:
+           
+    def evaluate_minimum(self,name:Union[str,List[str]],dimensional:bool=True,as_float:bool=False,return_x:bool=False)->Union[ExpressionOrNum,List[ExpressionOrNum],Tuple[ExpressionOrNum,List[ExpressionOrNum]]]:
         return self._evaluate_extremum_wrapper(name,-1,dimensional=dimensional,as_float=as_float,return_x=return_x)
 
 

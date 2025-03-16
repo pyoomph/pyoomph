@@ -849,15 +849,26 @@ class PinWhere(PythonDirichletBC):
         if not self.active:
             return
         assert self.mesh is not None
-        if len(self.indexvals) > 0 or len(self.additional_vals) > 0:
-            raise RuntimeError("Cannot use PinWhere yet on non-positional DoFs")
+        if len(self.additional_vals) > 0:
+            raise RuntimeError("Cannot use PinWhere yet on interface fields")
+        
         for n in self.mesh.nodes():
-            for i, val in self.pinnedpositions.items():                
-                xv:List[float] = []
-                for xi in range(n.ndim()):
-                    xv.append(n.x(xi))
-                if self.where(*xv) == False:
-                    continue
+            # Check the where condition
+            xv:List[float] = []
+            for xi in range(n.ndim()):
+                xv.append(n.x(xi))
+            if self.where(*xv) == False:
+                continue
+            
+            for i, val in self.indexvals.items():            
+                if self.unpin_instead:
+                    n.unpin(i)
+                else:
+                    n.pin(i)
+                    if not (isinstance(val, bool) and val == True):                
+                        assert isinstance(val,float)
+                        n.set_value(i, val)
+            for i, val in self.pinnedpositions.items():                                                
                 if self.unpin_instead:
                     n.unpin_position(i)
                 else:
