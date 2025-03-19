@@ -4196,9 +4196,20 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
 
-    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["multi_shoot","floquet","bspline","central","BDF2"]="multi_shoot",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase"):
+    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["multi_shoot","floquet","bspline","central","BDF2"]="multi_shoot",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase")->PeriodicOrbit:
         """
-        TODO; Add documentation
+        Activates periodic orbit tracking based on history dofs. Use :py:meth:`set_current_dofs` to set the first time point of the orbit guess. The other time points must be shipped with the history_dofs argument.
+        
+        Args:
+            T: The guessed period of the orbit
+            history_dofs: The history dofs to use for the orbit tracking. Must be non-empty.
+            mode: The mode of the time discretization.
+            order: The order of the time discretization.
+            GL_order: The Gauss-Legendre order for some time discretization modes. Defaults to -1, meaning a suitable integration order is chosen automatically based on the interpolation order.
+            T_constraint: The constraint for the period. Defaults to "phase".
+            
+        Returns:
+            PeriodicOrbit: The resulting periodic orbit. Note that it still must be solved, i.e. it is only the provided guess at this stage.
         """
         self.deactivate_bifurcation_tracking()        
         self.time_stepper_pt().make_steady()

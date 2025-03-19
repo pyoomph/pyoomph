@@ -40,4 +40,5 @@ holds. For :math:`\vec{x}=\vec{x}_0`, this is trivially fulfilled and therefore,
    :hidden:
 
    orbit/hopf_switch.rst
+   orbit/manual_orbit.rst   
 
