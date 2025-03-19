@@ -942,7 +942,7 @@ namespace pyoomph
 				for (unsigned int l = 0; l < eleminfo.nnode_C2; l++) // C2 nodes
 				{
 
-					// std::cout << "C2NMASTER " << l <<  shape_info->hanginfo_C2[l].nummaster << std::endl;
+					//std::cout << "C2NMASTER " << l <<  shape_info->hanginfo_C2[l].nummaster << std::endl;
 					if (!shape_info->hanginfo_C2[l].nummaster)
 					{
 						// NON HANGING -> HANGING WITH WEIGHT 1 for external element data
@@ -978,12 +978,13 @@ namespace pyoomph
 						   unsigned foffs=f+ ft->buffer_offset_C2_basebulk;
 							if (shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs] >= 0)
 							{
+								int orig_eq=shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs];
 								shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs] = eqn_remap[shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs]];
 								if (shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs] == -666)
 								{
 									std::ostringstream oss;
 									oss << this;
-									oss << " node: " << l << ", master " << m << ", index " << f << ", " << foffs << " of " << ft->numfields_C2_basebulk << std::endl;
+									oss << " node: " << l << ", master " << m << ", index " << f << ", " << foffs << " of " << ft->numfields_C2_basebulk << " Equation to remap is " << orig_eq << std::endl;
 									oss << " AT File  " << codeinst->get_code()->get_file_name();
 									throw_runtime_error("MISSING EXTERNAL C2 DEPENDENCY ON ELEM PTR: " + oss.str());
 								}
@@ -14171,10 +14172,10 @@ namespace pyoomph
 							for (unsigned m = 0; m < nmaster; m++)
 							{
 								auto *const master_nod_pt = hang_pt->master_node_pt(m);
-								int parent_no = from_elem->local_hang_eqn(master_nod_pt, functable->nodal_offset_C2TB_basebulk+k);
+								int parent_no = from_elem->local_hang_eqn(master_nod_pt, functable->nodal_offset_C2_basebulk+k);
 								//			  	 	std::cout << "HANG C2 " << j << "  " << "  " << k << "  " << m << master_nod_pt->eqn_number(k) << std::endl;
 								std::string info = "C2 HANGIG";
-								int my_no = resolve_local_equation_for_external_contributions(master_nod_pt->eqn_number(functable->nodal_offset_C2TB_basebulk+k), from_elem, &info);
+								int my_no = resolve_local_equation_for_external_contributions(master_nod_pt->eqn_number(functable->nodal_offset_C2_basebulk+k), from_elem, &info);
 								if (parent_no >= 0)
 								{
 									eq_map[parent_no] = my_no;
@@ -14183,10 +14184,10 @@ namespace pyoomph
 						}
 						else
 						{
-							int parent_no = from_elem->nodal_local_eqn(el_n_index, functable->nodal_offset_C2TB_basebulk+k);
-							//  		  	 	   std::cout << "C2 " << j << "  " << "  " << k << "  " << n->eqn_number(k) << std::endl;
+							int parent_no = from_elem->nodal_local_eqn(el_n_index, functable->nodal_offset_C2_basebulk+k);
+							  		  	 	   //std::cout << "C2 " << j << "  " << "  " << k << "  " << n->eqn_number(k) << std::endl;
 							std::string info = "C2";
-							int my_no = resolve_local_equation_for_external_contributions(n->eqn_number(functable->nodal_offset_C2TB_basebulk+k), from_elem, &info);
+							int my_no = resolve_local_equation_for_external_contributions(n->eqn_number(functable->nodal_offset_C2_basebulk+k), from_elem, &info);
 							// std::cout << "DONE" << std::endl;
 							if (parent_no >= 0)
 							{

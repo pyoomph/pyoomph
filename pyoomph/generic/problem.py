@@ -3318,6 +3318,7 @@ class Problem(_pyoomph.Problem):
             return self._solve_normal_mode_eigenproblem(n, cartesian_k=normal_mode_k, shift=shift, quiet=quiet,filter=filter,report_accuracy=report_accuracy,v0=v0,target=target,sort=sort)
         if self._dof_selector_used is not self._dof_selector:
             self.reapply_boundary_conditions()
+            self.reapply_boundary_conditions() # Must be done twice to correctly setup the equation remapping
         if self.get_bifurcation_tracking_mode()!="":
             raise RuntimeError("Cannot calculate eigenvalues/vectors when bifurcation tracking is active. You can access the critical eigenvector(s) by get_last_eigenvectors()")
         ntstep=self.ntime_stepper()
@@ -3604,6 +3605,7 @@ class Problem(_pyoomph.Problem):
         if self._dof_selector_used is not self._dof_selector:
             self.reset_arc_length_parameters()
             self.reapply_boundary_conditions()
+            self.reapply_boundary_conditions() # Must be done twice to correctly setup the eqn_remapping
 
 
         ds = desired_val - self.get_global_parameter(pname).value
@@ -3834,6 +3836,7 @@ class Problem(_pyoomph.Problem):
         if last_tracking=="azimuthal":
             self.actions_before_stationary_solve()
             self.reapply_boundary_conditions()
+            self.reapply_boundary_conditions()
             self._last_bc_setting="normal"
             self._azimuthal_mode_param_m.value=0
 
@@ -4009,6 +4012,7 @@ class Problem(_pyoomph.Problem):
 
             if self._dof_selector_used is not self._dof_selector:
                 self.reapply_boundary_conditions()
+                self.reapply_boundary_conditions()
             if isinstance(parameter,_pyoomph.GiNaC_GlobalParam):
                 parameter=parameter.get_name()
             
@@ -4103,6 +4107,7 @@ class Problem(_pyoomph.Problem):
             must_reapply_bcs=self._equation_system._before_eigen_solve(self.get_eigen_solver(), azimuthal_mode)
             if must_reapply_bcs:
                 self.reapply_boundary_conditions() # Equation numbering might have been changed. Update it here!
+                self.reapply_boundary_conditions()
                 self._last_bc_setting="eigen"
             
 
@@ -4156,6 +4161,7 @@ class Problem(_pyoomph.Problem):
             must_reapply_bcs=self._equation_system._before_eigen_solve(self.get_eigen_solver(), normal_k=cartesian_wavenumber_k)
             if must_reapply_bcs:
                 self.reapply_boundary_conditions() # Equation numbering might have been changed. Update it here!
+                self.reapply_boundary_conditions()
                 self._last_bc_setting="eigen"
             base_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),None,None) 
             eigen_zero_dofs=self._equation_system._get_forced_zero_dofs_for_eigenproblem(self.get_eigen_solver(),None,cartesian_wavenumber_k) 
@@ -4706,6 +4712,7 @@ class Problem(_pyoomph.Problem):
 
         if self._dof_selector_used is not self._dof_selector:
             self.reapply_boundary_conditions()
+            self.reapply_boundary_conditions() # Must be done twice to correctly setup the eqn_remappings
 
         #Get rid of the eigen info... It will change!
         self.invalidate_eigendata()
