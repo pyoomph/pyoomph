@@ -207,6 +207,9 @@ class PeriodicOrbit:
         return self._get_handler().get_T()*(self.problem.get_scaling("temporal") if dimensional else 1)
     
     def get_init_ds(self):
+        """
+        Returns a reasonable initial step size for arclength continuation        
+        """
         if abs(self.emerging_info["dpvalue"]-self.emerging_info["pvalue"])<=5e-10:
             return 5e-10*(1 if self.emerging_info["dpvalue"]-self.emerging_info["pvalue"]>0 else -1)            
         return self.emerging_info["dpvalue"]-self.emerging_info["pvalue"]
@@ -262,6 +265,10 @@ class PeriodicOrbit:
         return self.problem.get_floquet_multipliers(n=n,valid_threshold=valid_threshold,shift=shift,ignore_periodic_unity=ignore_periodic_unity,quiet=quiet)
     
     def starts_supercritically(self):
+        """
+        When started at a Hopf bifurcation, this function tells you whether the first Lyaupnov coefficient is negative, corresponding to a supercritical Hopf bifurcation with initially stable orbits
+        """
+        
         return self.emerging_info["lyap_coeff"]<0
     
     def evalulate_observable_time_integral(self,*observables:str):
@@ -4225,6 +4232,37 @@ class Problem(_pyoomph.Problem):
         return res
 
     def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["multi_shoot","floquet","central","BDF2","bspline"]="multi_shoot",order:int=3,GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,FD_param_delta=1e-3,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True,orbit_amplitude:Optional[float]=None,patch_number_of_nodes:bool=True)->PeriodicOrbit:
+        """After solving for a Hopf bifurcation by bifurcation tracking, this method will calculate the first Lyapunov exponent and initializes a good guess for the tracking of the periodic orbits originating at this Hopf bifurcation.
+        
+        It is best to call it like:
+        
+            with problem.switch_to_hopf_orbit(...) as orbit:
+                ...
+                
+        to deactivate orbit tracking after the with-statement.
+
+        Args:
+            eps: A small number to construct the initial guess of the orbit and shift the parameter accordingly. Defaults to 0.01.
+            dparam: Optional parameter shift. If given and orbit_amplitude is also given, eps is ignored. Defaults to None.
+            NT: Number of discrete time steps to consider for the orbit. Defaults to 30.
+            mode: Selects the time discretization and interpolation mode. Defaults to "multi_shoot".
+            order: Selects the order of the time discretization method. Defaults to 3.
+            GL_order: Selects the Gauss-Legendre integration order for some time discretization modes. Defaults to -1, which is auto-select depending on the order.
+            T_constraint: Either use the "plane" or the "phase" constraint as equation for T. Defaults to "phase".
+            amplitude_factor: Additional multiplicative factor for the amplitude of the orbit guess. Defaults to 1.
+            FD_delta: Finite difference step for the third order calculations used in the determination of the first Lyapunov coefficient. Defaults to 1e-5.
+            FD_param_delta: Finite difference step to determine the change of the real part of the eigenvalue with respect to the parameter. Defaults to 1e-3.
+            do_solve: Solve the orbit guess. Defaults to True.
+            solve_kwargs: Additional keywords arguments to pass to the solve method for the initial solve. Defaults to {}.
+            check_collapse_to_stationary: Since an orbit can collapse to the stationary Hopf branch, we can check for it to make sure we are actually on an orbit. Defaults to True.
+            orbit_amplitude: Amplitude for the orbit. If set together with dparam, eps is ignored. Defaults to None.
+            patch_number_of_nodes: Depending on the order, we might have to slightly modify NT to have the right number of time nodes. Defaults to True.
+
+        
+
+        Returns:
+            PeriodicOrbit: The periodic orbit object
+        """
         
         from pyoomph.generic.bifurcation_tools import get_hopf_lyapunov_coefficient    
         
