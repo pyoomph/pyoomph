@@ -201,6 +201,32 @@ namespace pyoomph
     return res;
   }
 
+  unsigned TemplatedMeshBase2d::add_tri_C1TB(Node* & n1, Node* & n2, Node* & n3, Node* & n4)
+  {
+    BulkElementBase::__CurrentCodeInstance = codeinst;
+    if (!n4)
+    {
+      auto * functable=codeinst->get_func_table();
+      unsigned ntot = functable->numfields_C2TB_basebulk + functable->numfields_C2_basebulk + functable->numfields_C1TB_basebulk+ functable->numfields_C1_basebulk;
+      n4=new pyoomph::BoundaryNode(n1->time_stepper_pt(),n1->nlagrangian(), n1->nlagrangian_type(), n1->ndim(), n1->nposition_type(), ntot);
+      for (unsigned t=0;t<n1->time_stepper_pt()->ntstorage();t++)
+      {
+        for (unsigned ni=0;ni<n1->ndim();ni++)
+        {
+          n4->variable_position_pt()->set_value(t,ni,(n1->x(t,ni)+n2->x(t,ni)+n3->x(t,ni))/3.0);
+        }        
+        for (unsigned ni=0;ni<ntot;ni++)
+        {
+          n4->set_value(t,ni,(n1->value(t,ni)+n2->value(t,ni)+n3->value(t,ni))/3.0);
+        }        
+      }
+      this->add_node_pt(n4);
+    }
+    unsigned res=this->add_new_element(new BulkElementTri2dC1TB(),{n1,n2,n3,n4});
+    BulkElementBase::__CurrentCodeInstance = NULL;    
+    return res;
+  }  
+
   void TemplatedMeshBase2d::setup_boundary_element_info(std::ostream &outfile)
   {
     unsigned nbound = nboundary();

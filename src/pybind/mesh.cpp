@@ -827,6 +827,17 @@ void PyReg_Mesh(py::module &m)
 		.def("nodal_interpolate_along_boundary", &pyoomph::Mesh::nodal_interpolate_along_boundary)
 		.def("_evaluate_integral_function", [](pyoomph::Mesh *m, const std::string &n)
 			 { return m->evaluate_integral_function(n); })
+		.def("_evaluate_extremum", [](pyoomph::Mesh *m, const std::string &n,int sign,unsigned flags)
+			 {  
+				pyoomph::BulkElementBase * extreme_element;
+			    oomph::Vector<double> extreme_local_coords;
+				GiNaC::ex resval=m->evaluate_extremum(n,sign,extreme_element,extreme_local_coords,flags); 
+				std::vector<double> s(extreme_local_coords.size());
+				for (unsigned i=0;i<extreme_local_coords.size();i++) s[i]=extreme_local_coords[i];
+				//return std::make_tuple(resval,s,std::unique_ptr<oomph::GeneralisedElement,py::nodelete>(dynamic_cast<oomph::GeneralisedElement*>(extreme_element)));
+				return std::make_tuple(resval,s,dynamic_cast<oomph::GeneralisedElement*>(extreme_element));
+			 
+			 },py::return_value_policy::reference)			
 		.def("ensure_external_data", [](pyoomph::Mesh *m)
 			 { m->ensure_external_data(); })
 		.def("ensure_halos_for_periodic_boundaries", [](pyoomph::Mesh *m)
@@ -1189,6 +1200,7 @@ void PyReg_Mesh(py::module &m)
 			 {  oomph::Tree::max_neighbour_finding_tolerance() = tol; })
 		.def("generate_from_template", &pyoomph::TemplatedMeshBase2d::generate_from_template)
 		.def("add_tri_C1",[](pyoomph::TemplatedMeshBase2d *self,pyoomph::Node *n1,pyoomph::Node *n2,pyoomph::Node *n3){self->add_tri_C1(n1,n2,n3);})
+		.def("add_tri_C1TB",[](pyoomph::TemplatedMeshBase2d *self,pyoomph::Node *n1,pyoomph::Node *n2,pyoomph::Node *n3,pyoomph::Node *n4=NULL){self->add_tri_C1TB(n1,n2,n3,n4);})
 		.def("refinement_possible", &pyoomph::TemplatedMeshBase2d::refinement_possible)
 		.def(
 			"refine_uniformly", [](pyoomph::TemplatedMeshBase2d *self, unsigned int num)

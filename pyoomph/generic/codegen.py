@@ -302,7 +302,9 @@ class BaseEquations(_pyoomph.Equations):
             new_instance._created_at=None
         return new_instance
 
-        
+    def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
+        pass
+    
     def add_weak(self,a:"ExpressionOrNum",b:Union[str,"ExpressionOrNum"],*,dimensional_dx:bool=False,lagrangian:bool=False,coordinate_system:"OptionalCoordinateSystem"=None,destination:Optional[str]=None):
         if isinstance(b,str):
             b=testfunction(b)
@@ -637,9 +639,10 @@ class BaseEquations(_pyoomph.Equations):
         """
         pass
 
-    def define_residuals(self):
+    def define_residuals(self)->Union[Expression,None]:
         """
         Inherit and specify to define residuals for the equations, using :py:meth:`add_residual` or :py:meth:`add_weak`
+        Any returned expression will be also added to the residuals
         """
         pass
 
@@ -835,7 +838,9 @@ class BaseEquations(_pyoomph.Equations):
 
 
 #            raise RuntimeError("Transfer fields here")
-        master.define_residuals()
+        res=master.define_residuals()
+        if res is not None:
+            master.add_residual(res)
         for d,add_res in master._additional_residuals.items():
             master.add_residual(add_res,destination=d if d!="" else None)
         master.define_error_estimators()
@@ -1373,7 +1378,16 @@ class EquationTree:
                 return {".":res}
 
 
-
+    def _change_output_directory(self,newdir:str):
+        if (self._mesh is not None) and (self._equations is not None):            
+            assert self._codegen is not None
+            oldcg = self._equations._get_current_codegen()
+            self._equations._set_current_codegen(self._codegen)
+            self._equations.change_output_directory(newdir,self)
+            self._equations._set_current_codegen(oldcg)
+            
+        for _,c in self._children.items():
+            c._change_output_directory(newdir)
 
     def _before_assigning_equations(self,dof_selector:Optional["_DofSelector"]):                
         if (self._mesh is not None) and (self._equations is not None):            
@@ -1994,7 +2008,7 @@ class Equations(BaseEquations):
             master._azimuthal_r0_info[2].add("mesh"+zcomponent)
         
 
-    def define_scalar_field(self, name:str, space:"FiniteElementSpaceEnum",scale:Optional[Union["ExpressionOrNum",str]]=None,testscale:Optional[Union["ExpressionOrNum",str]]=None,discontinuous_refinement_exponent:Optional[float]=None):
+    def define_scalar_field(self, name:Union[str,List[str]], space:"FiniteElementSpaceEnum",scale:Optional[Union["ExpressionOrNum",str]]=None,testscale:Optional[Union["ExpressionOrNum",str]]=None,discontinuous_refinement_exponent:Optional[float]=None):
         """
         Define a scalar field on this domain. Must be called within the specified implementation of the method :py:meth:`~BaseEquations.define_fields`.
 
@@ -2005,7 +2019,10 @@ class Equations(BaseEquations):
             testscale (ExpressionNumOrNone): The scale for the test function of the vector field for nondimensionalization. Defaults to None.
             discontinuous_refinement_exponent (Optional[float]): The exponent for the discontinuous refinement. Defaults to None.
         """
-        
+        if not isinstance(name, str):
+            for n in name:
+                self.define_scalar_field(n, space, scale=scale, testscale=testscale,discontinuous_refinement_exponent=discontinuous_refinement_exponent)
+            return
         master = self._get_combined_element()
         if _pyoomph.get_verbosity_flag() != 0:
             print("REGISTER", name, self, master, self == master, space)
@@ -2302,6 +2319,10 @@ class CombinedEquations(Equations):
     def setup_remeshing_size(self,remesher:"RemesherBase",preorder:bool):
         for e in self._subelements:
             e.setup_remeshing_size(remesher,preorder)
+            
+    def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
+        for e in self._subelements:
+            e.change_output_directory(newdir,eqtree)
 
     def after_fill_dummy_equations(self,problem:"Problem",eqtree:"EquationTree",pathname:str,elem_dim:Optional[int]=None):
         for e in self._subelements:
@@ -2574,10 +2595,17 @@ class CombinedEquations(Equations):
     def define_residuals(self):
         bck = self._bckup_final_elem()
         self._setup_combined_element()
+        retres=None
         for e in self._subelements:
             if isinstance(e, BaseEquations): #type:ignore
-                e.define_residuals()
+                ret=e.define_residuals()
+                if ret is not None:
+                    if retres is None:
+                        retres=ret
+                    else:
+                        retres+=ret
         self._rstr_final_elem(bck)
+        return retres
 
     def define_error_estimators(self):
         bck = self._bckup_final_elem()
@@ -2939,7 +2967,9 @@ class GlobalLagrangeMultiplier(ODEEquations):
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         must_reapply=False
         if self.set_zero_on_normal_mode_eigensolve:
-            if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
+            pr=self.get_mesh()._problem
+            from ..generic.bifurcation_tools import _NormalModeBifurcationTrackerBase
+            if pr.get_bifurcation_tracking_mode() == "azimuthal" or (pr.get_custom_assembler() is not None and isinstance(pr.get_custom_assembler(),_NormalModeBifurcationTrackerBase)):             
                 #if self.get_mesh()._problem._azimuthal_mode_param_m.value!=0:
                 return False  # Don't do anything in this case. It would mess up everything!
         mesh=eqtree._mesh
@@ -3070,6 +3100,21 @@ class WeakContribution(BaseEquations):
         self.add_residual(weak(self.a,self.b,dimensional_dx=self.dimensional_dx,lagrangian=self.lagrangian,coordinate_system=self.coordinate_system),destination=self.destination)
 
 
+class ResidualContribution(BaseEquations):
+    """
+    A class to add an arbitrary residual contribution to the equations. This is useful to add additional terms to the equations that are not covered by the standard weak formulation. Essentially, it just adds ``r`` to the residuals.
+
+    Args:
+        r: The residual to add (can be e.g. a :py:func:`~pyoomph.expressions.generic.weak` contribution).        
+        destination: The residual destination of the weak contribution. Can be used to define multiple residuals.
+    """
+    def __init__(self,r:Union["ExpressionOrNum",str],destination:Optional[str]=None):
+        super(ResidualContribution, self).__init__()        
+        self.destination=destination
+        self.r=r
+
+    def define_residuals(self):
+        self.add_residual(self.r,destination=self.destination)
 
 class ForceZeroOnEigenSolve(BaseEquations):
     def __init__(self,default:Iterable[str],*,for_nonzero_angular:Optional[Iterable[str]]=None):

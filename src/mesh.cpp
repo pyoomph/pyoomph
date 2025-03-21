@@ -359,6 +359,160 @@ namespace pyoomph
     return cg->get_local_expressions();
   }
 
+  double improve_extremum_by_newton(BulkElementBase *be, unsigned index, oomph::Vector<double> &s)
+  {    
+    double val=be->eval_extremum_expression_at_s(index,s); //Update value
+    if (!be->dim()) return val; // Cannot optimize a point
+    oomph::Vector<double> grad(be->dim());
+    oomph::Vector<double> spert(s.size());
+    oomph::DenseDoubleMatrix hess(be->dim(), be->dim());
+    unsigned maxiter = 10;
+    double eps=1e-8;
+    for (unsigned int it = 0; it < maxiter; it++)
+    {
+      
+      for (unsigned int i =0;i<s.size();i++)  spert[i]=s[i];
+      for (unsigned int i=0;i<s.size();i++)
+      {        
+        spert[i]=s[i]+eps;
+        double valpert=be->eval_extremum_expression_at_s(index,spert);
+        spert[i]=s[i]-eps;
+        double valpertm=be->eval_extremum_expression_at_s(index,spert);
+        grad[i]=(valpert-valpertm)/(2*eps);
+        spert[i]=s[i];
+        hess(i,i)=(valpert-2*val+valpertm)/(eps*eps);           
+        for (unsigned int j=i+1;j<s.size();j++)
+        {          
+            spert[i]+=eps;
+            spert[j]+=eps;
+            double fpp=be->eval_extremum_expression_at_s(index,spert);
+            spert[j]=s[j]-eps;
+            double fpm=be->eval_extremum_expression_at_s(index,spert);
+            spert[i]=s[i]-eps;
+            double fmm=be->eval_extremum_expression_at_s(index,spert);
+            spert[j]=s[j]+eps;
+            double fmp=be->eval_extremum_expression_at_s(index,spert);
+            spert[i]=s[i];
+            spert[j]=s[j];            
+            hess(i,j)=hess(j,i)=1.0/(4*eps*eps)*(fpp-fpm-fmp+fmm);                   
+        }
+      }
+      try
+      {
+        hess.solve(grad);
+      }        
+      catch (oomph::OomphLibError& error)
+      {        
+        error.disable_error_message();
+#ifdef PARANOID
+      oomph::oomph_info << "Error in linear solve for improving extremum!" << std::endl;                   
+#endif
+      }
+    // Add the correction to the local coordinates
+      std::vector<double> old_s(s.size());
+      for (unsigned i = 0; i < s.size(); i++)
+      {
+        //std::cout << "  CHANGING s" << i << "from "  << s[i] << " by  " << grad[i] << std::endl;
+        s[i] -= grad[i];
+      }
+      if (!be->local_coord_is_valid(s))
+      {
+        //std::cout << " PUSHING  S BACK" << std::endl;
+        be->move_local_coord_back_into_element(s);
+      }
+              
+      //std::cout << "CHANGED VALUE FROM " << val << " TO " ;
+      val=be->eval_extremum_expression_at_s(index,s); //Update value
+      //std::cout << val << std::endl;
+    }
+    return val;
+  }
+  
+
+  GiNaC::ex Mesh::evaluate_extremum(std::string name,int sign,BulkElementBase *& extreme_element,oomph::Vector<double> &extreme_local_coords,unsigned flags)
+  {
+    unsigned nelement = this->nelement();
+    if (!nelement)
+    {
+      extreme_element=NULL;
+      return 0;
+    }
+    int index = dynamic_cast<BulkElementBase *>(this->element_pt(0))->get_code_instance()->get_extremum_function_index(name);
+    if (index < 0) throw_runtime_error("Extremum function " + name + " not defined on this mesh");
+    // Get some reference to start with
+    extreme_element=dynamic_cast<BulkElementBase *>(this->element_pt(0));
+    extreme_local_coords.resize(extreme_element->dim());
+    extreme_element->local_coordinate_of_node(0,extreme_local_coords);
+    double extreme_value = sign*extreme_element->eval_extremum_expression_at_s(index,extreme_local_coords);
+    
+    // Go for a Gauss-Legendre sampling (not sure whether it is the best idea)
+    for (unsigned int ne = 0; ne < nelement; ne++)
+    {
+      //std::cout << "ITERATING " << ne << " OF " << nelement  << std::endl << std::flush;
+      BulkElementBase *be = dynamic_cast<BulkElementBase *>(this->element_pt(ne));
+      unsigned nintpt = be->integral_pt()->nweight();
+      for (unsigned int ipt = 0; ipt < nintpt; ipt++)
+      {
+        
+        oomph::Vector<double> s(be->dim());
+        for (unsigned int i = 0; i < be->dim(); i++)
+        {
+          s[i] = be->integral_pt()->knot(ipt, i);
+        }
+        double val = sign*be->eval_extremum_expression_at_s(index,s);
+        if (val > extreme_value)
+        {
+          extreme_value = val;
+          extreme_element=be;
+          extreme_local_coords=s;
+        }
+      }
+      // And also sample the nodes directly
+      for (unsigned int in = 0; in < be->nnode(); in++)
+      {
+        oomph::Vector<double> s;
+        be->local_coordinate_of_node(in,s);
+        double val = sign*be->eval_extremum_expression_at_s(index,s);
+        if (val > extreme_value)
+        {
+          extreme_value = val;
+          extreme_element=be;
+          extreme_local_coords=s;
+        }
+      }
+    }
+
+    extreme_value *= sign;
+    
+    // TODO: Improve the extremum by a Newton or gradient descent or something. Mind leaving the element and mind the boundary
+    //std::cout << "ENTERING IMPROVEMENT  " << extreme_local_coords.size() << std::endl;
+    double improved=improve_extremum_by_newton(extreme_element,index,extreme_local_coords);
+    if (sign*improved<sign*extreme_value)
+    {
+      //std::cout << "IMPROVEMENT FAILED " << improved << "  " << extreme_value << std::endl;
+    }
+    else
+    {
+      //std::cout << "IMPROVEMENT SUCCEEDED " << improved << "  " << extreme_value << std::endl;
+      extreme_value=improved;
+    }
+    
+
+    
+    if (flags & 1)
+    {
+      GiNaC::ex factor_and_unit = dynamic_cast<BulkElementBase *>(this->element_pt(0))->get_code_instance()->get_element_class()->get_extremum_expression_unit_factor(name);
+      return factor_and_unit*extreme_value;
+      
+    }
+    else
+    {
+      return extreme_value;
+    }
+    
+    
+  }
+
   GiNaC::ex Mesh::evaluate_integral_function(std::string name)
   {
     unsigned nelement = this->nelement();
@@ -423,7 +577,7 @@ namespace pyoomph
     {
       delete imesh->element_pt(e);
     }
-    imesh->flush_element_and_node_storage();
+    imesh->flush_element_and_node_storage(); //TODO: This keeps the nodes alive
     for (unsigned i = 0; i < dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets.size(); i++)
       delete dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets[i];
     dynamic_cast<InterfaceMesh *>(imesh)->opposite_interior_facets.clear();
@@ -3264,6 +3418,7 @@ namespace pyoomph
     }
     if (index == -1)
       throw_runtime_error("Cannot set a Dirichlet condition active or not for an unknown field " + name);
+    std::cout << "TOGGLING DIRICHLET ACTIVE AT INDEX " << index << " TO " << active << " CORESPONDING TO " << name <<std::endl;
     dirichlet_active[index] = active;
   }
 
@@ -3276,8 +3431,13 @@ namespace pyoomph
       name = "coordinate_y";
     if (name == "mesh_z")
       name = "coordinate_z";
-    auto *el = dynamic_cast<BulkElementBase *>(this->element_pt(0));
-    auto *ft = el->get_code_instance()->get_func_table();
+    DynamicBulkElementInstance *ci=this->codeinst;
+    if (!ci)
+    {	
+    	auto *el = dynamic_cast<BulkElementBase *>(this->element_pt(0));
+    	ci=el->get_code_instance();
+    }
+    auto *ft = ci->get_func_table();
     for (unsigned int i = 0; i < ft->Dirichlet_set_size; i++)
     {
       if (ft->Dirichlet_names[i] && std::string(ft->Dirichlet_names[i]) == name)
@@ -4315,7 +4475,14 @@ namespace pyoomph
     }
     if (!bulkmesh)
     {
-      throw_runtime_error("bulkmesh was not set");
+      std::ostringstream err_info;      
+      err_info<<"Code: "<<code;
+      if (code)
+      {
+        err_info<<", Func table: "<<code->get_func_table();
+        err_info<<", Func table name: "<<code->get_func_table()->domain_name;
+      }
+      throw_runtime_error("bulkmesh was not set, code: "+err_info.str());
     }
 
     bulkmesh->generate_interface_elements(interfacename, this, code);

@@ -3,6 +3,20 @@ IMPORTANT NOTICE: This file stems from oomph-lib, but has been MODIFIED for pyoo
 MODIFICATIONS ARE INDICATED BY A COMMENT STARTING WITH //FOR PYOOMPH
 (Changed on 15th April 2024):    
 Made Problem::adapt(unsigned&, unsigned&) to a virtual  method
+(Changed on 27th February 2025):
+Made First_el_for_assembly, Last_el_plus_one_for_assembly, Must_recompute_load_balance_for_assembly & recompute_load_balanced_assembly() protected instead of private
+(Changed on 28th February 2025):
+Made void Problem::reset_assembly_handler_to_default() virtual
+(Changed on 2rd March 2025):
+Made void get_derivative_wrt_global_parameter(double* const& parameter_pt,DoubleVector& result) virtual
+(Changed on 21st March 2025):
+Made 
+  void get_dofs(DoubleVector& dofs) const;
+  void get_dofs(const unsigned& t, DoubleVector& dofs) const;
+  void set_dofs(const DoubleVector& dofs);
+  void set_dofs(const unsigned& t, DoubleVector& dofs);
+  void set_dofs(const unsigned& t, Vector<double*>& dof_pt)
+virtual. Noticed that it does not get/set the history of the variable_position_pt of moving nodes.
 *******************************************************************************/
 
 // LIC// ====================================================================
@@ -507,10 +521,7 @@ namespace oomph
     /// pointers in external halo and haloed schemes for all meshes.
     void remove_null_pointers_from_external_halo_node_storage();
 
-    /// Helper function to re-assign the first and last elements to be
-    /// assembled by each processor during parallel assembly for
-    /// non-distributed problem.
-    void recompute_load_balanced_assembly();
+    
 
     /// Boolean to switch on assessment of load imbalance in parallel
     /// assembly of distributed problem
@@ -520,20 +531,9 @@ namespace oomph
     /// Should only be set to true when run in validation mode.
     bool Use_default_partition_in_load_balance;
 
-    /// First element to be assembled by given processor for
-    /// non-distributed problem (only kept up to date when default assignment
-    /// is used)
-    Vector<unsigned> First_el_for_assembly;
+    
 
-    /// Last element (plus one) to be assembled by given processor
-    /// for non-distributed problem (only kept up to date when default
-    /// assignment is used)
-    Vector<unsigned> Last_el_plus_one_for_assembly;
 
-    /// Boolean indicating that the division of elements over processors
-    /// during the assembly process must be re-load-balanced.
-    /// (only used for non-distributed problems)
-    bool Must_recompute_load_balance_for_assembly;
 
     /// Map which stores the correspondence between a root element and
     /// its element number (plus one) within the global mesh at the point
@@ -557,6 +557,29 @@ namespace oomph
 #endif
 
   protected:
+
+    //FOR PYOOMPH : Made First_el_for_assembly, Last_el_plus_one_for_assembly, Must_recompute_load_balance_for_assembly & recompute_load_balanced_assembly() protected instead of private
+    /// First element to be assembled by given processor for
+    /// non-distributed problem (only kept up to date when default assignment
+    /// is used)
+    Vector<unsigned> First_el_for_assembly;
+
+    /// Last element (plus one) to be assembled by given processor
+    /// for non-distributed problem (only kept up to date when default
+    /// assignment is used)
+    Vector<unsigned> Last_el_plus_one_for_assembly;
+
+    /// Boolean indicating that the division of elements over processors
+    /// during the assembly process must be re-load-balanced.
+    /// (only used for non-distributed problems)
+    bool Must_recompute_load_balance_for_assembly;
+
+    /// Helper function to re-assign the first and last elements to be
+    /// assembled by each processor during parallel assembly for
+    /// non-distributed problem.
+    void recompute_load_balanced_assembly();
+
+
     /// Vector of pointers to dofs
     Vector<double*> Dof_pt;
 
@@ -1751,20 +1774,25 @@ namespace oomph
 
     /// Return the vector of dofs, i.e. a vector containing the current
     /// values of all unknowns.
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
     void get_dofs(DoubleVector& dofs) const;
 
     /// Return vector of the t'th history value of all dofs.
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
     void get_dofs(const unsigned& t, DoubleVector& dofs) const;
 
     /// Set the values of the dofs
-    void set_dofs(const DoubleVector& dofs);
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
+    virtual void set_dofs(const DoubleVector& dofs);
 
     /// Set the history values of the dofs
-    void set_dofs(const unsigned& t, DoubleVector& dofs);
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
+    virtual void set_dofs(const unsigned& t, DoubleVector& dofs);
 
     /// Set history values of dofs from the type of vector stored in
     /// problem::Dof_pt.
-    void set_dofs(const unsigned& t, Vector<double*>& dof_pt);
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
+    virtual void set_dofs(const unsigned& t, Vector<double*>& dof_pt);
 
     /// Add lambda x incremenet_dofs[l] to the l-th dof
     void add_to_dofs(const double& lambda, const DoubleVector& increment_dofs);
@@ -1904,8 +1932,8 @@ namespace oomph
 
     /// Get the derivative of the entire residuals vector wrt a
     /// global parameter, used in continuation problems
-    void get_derivative_wrt_global_parameter(double* const& parameter_pt,
-                                             DoubleVector& result);
+    // FOR PYOOMPH : Made virtual
+    virtual void get_derivative_wrt_global_parameter(double* const& parameter_pt,DoubleVector& result);
 
     /// Return the product of the global hessian (derivative of Jacobian
     /// matrix  with respect to all variables) with
@@ -2492,7 +2520,8 @@ namespace oomph
     }
 
     /// Reset the system to the standard non-augemented state
-    void reset_assembly_handler_to_default();
+    // FOR PYOOMPH: Made virtual
+    virtual void reset_assembly_handler_to_default();
 
   private:
     /// Private helper function that actually contains the guts

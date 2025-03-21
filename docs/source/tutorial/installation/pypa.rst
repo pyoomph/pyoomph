@@ -13,7 +13,7 @@ If you get errors, let us know (c.diddens@utwente.nl), and we see whether we can
 
 .. warning::
 
-   If you are using a recent Mac with the M1 (arm64 architecture) processor, you must execute this command in a Rosetta terminal. At https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/ you can find instructions how to create such a Rosetta terminal. Also, please see below regarding the `mkl` module.
+   If you are using a recent Mac with the Apple silicon (arm64 architecture) processor, you must execute this command in a Rosetta terminal. At https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/ you can find instructions how to create such a Rosetta terminal. Also, please see below regarding the `mkl` module.
 
 
 Depending on your system, you have to do additional steps to obtain the full performance:
@@ -54,7 +54,7 @@ On Mac, ``clang`` will be used as high performance compiler. To get ``clang``, i
 
 .. warning::
 
-   If you are using a recent Mac with the M1 processor (arm64 architecture), make sure to not upgrade the package ``mkl``. Also on Macs with an Intel processor, more recent versions can cause a crash. If you by accident upgrade your mkl package, reset it by entering (in a Rosetta 2 terminal for M1 chips):
+   If you are using a recent Mac with an Apple silicon processor (arm64 architecture), make sure to not upgrade the package ``mkl``. Also on Macs with an Intel processor, more recent versions can cause a crash. If you by accident upgrade your mkl package, reset it by entering (in a Rosetta 2 terminal for arm64 chips):
    
    .. code:: bash
    

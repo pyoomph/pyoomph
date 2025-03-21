@@ -1460,6 +1460,8 @@ class MatplotLibColorbar(MatplotLibOverlayBase):
         super().__init__(plotter)
         self._vmin:Optional[float]=None
         self._vmax:Optional[float]=None
+        self._clamp_min:Optional[float]=None
+        self._clamp_max:Optional[float]=None
         self.cb=None
         self.title="Colorbar"
         self.range:Optional["MatplotLibBaseRange"]=None
@@ -1488,6 +1490,13 @@ class MatplotLibColorbar(MatplotLibOverlayBase):
                     self._vmin=min(self._vmin,-self._vmax)
                 else:
                     self._vmin=-self._vmax
+                    
+        if self._clamp_min is not None:
+            if self._vmin is not None:
+                self._vmin=max(self._vmin,self._clamp_min)
+        if self._clamp_max is not None:
+            if self._vmax is not None:
+                self._vmax=min(self._vmax,self._clamp_max)
 
     def discrete_cmap(self, N:Union[int,Sequence[float]], base_cmap:Optional[str]=None)->matplotlib.colors.LinearSegmentedColormap:
         base = matplotlib.pyplot.get_cmap(base_cmap) #type:ignore

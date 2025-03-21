@@ -84,6 +84,7 @@ class PureLiquidWater(PureLiquidProperties):
         self.specific_heat_capacity = 4.187 * kilo * joule / (kilogram * kelvin)
 
         # https://www.engineeringtoolbox.com/water-properties-d_1573.html
+        # TODO: according to Wikipedia, it is 2257 J/g, but likely at T=100°C ???
         self.latent_heat_of_evaporation = 2437.7 * kilo * joule / kilogram
 
 

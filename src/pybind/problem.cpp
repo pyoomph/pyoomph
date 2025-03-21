@@ -41,6 +41,7 @@ namespace py = pybind11;
 #include "../logging.hpp"
 #ifdef __gnu_linux__
 #include <fenv.h>
+#include "problem.hpp"
 #endif
 
 namespace pyoomph
@@ -141,9 +142,11 @@ namespace pyoomph
 }
 
 static py::class_<GiNaC::GiNaCGlobalParameterWrapper> *py_decl_GlobalParam = NULL;
+//static py::class_<pyoomph::DofAugmentations> *py_decl_DofAugmentations=NULL;
 void PyDecl_Problem(py::module &m)
 {
 	py_decl_GlobalParam = new py::class_<GiNaC::GiNaCGlobalParameterWrapper>(m, "GiNaC_GlobalParam");
+//	py_decl_DofAugmentations=new py::class_<pyoomph::DofAugmentations>(m,"DofAugmentations");
 }
 
 void PyReg_Problem(py::module &m)
@@ -187,6 +190,20 @@ void PyReg_Problem(py::module &m)
 		  }
 
 	);
+
+
+	//py_decl_DofAugmentations->
+	py::class_<pyoomph::DofAugmentations>(m,"DofAugmentations")
+		.def("add_vector", &pyoomph::DofAugmentations::add_vector)
+		.def("add_scalar", &pyoomph::DofAugmentations::add_scalar)
+		.def("add_parameter", &pyoomph::DofAugmentations::add_parameter)
+		.def("split", [](pyoomph::DofAugmentations &augs, unsigned startindex,int endindex)
+			{
+				std::vector<std::vector<double>> res=augs.split(startindex,endindex);
+				std::vector<py::array_t<double>> resA(res.size());
+				for (unsigned int i=0;i<res.size();i++) resA[i]=py::cast(res[i]);
+				return resA;
+			},"splits the augmented dof vector into its components. By default, all augmented dofs (without base dofs), but can be controlled by startindex and endindex",py::arg("startindex")=1,py::arg("endindex")=-1);
 
 	py_decl_GlobalParam->def_property(
 						   "value", [](GiNaC::GiNaCGlobalParameterWrapper *self)
@@ -278,6 +295,7 @@ void PyReg_Problem(py::module &m)
 
 	py::class_<pyoomph::CustomResJacInformation>(m, "CustomResJacInfo")
 		.def("require_jacobian", &pyoomph::CustomResJacInformation::require_jacobian)
+		.def("get_parameter_name", &pyoomph::CustomResJacInformation::get_parameter_name)
 		.def("set_custom_residuals", [](pyoomph::CustomResJacInformation &self, py::array_t<double> r)
 			 {
        py::buffer_info binfo = r.request();
@@ -337,12 +355,38 @@ void PyReg_Problem(py::module &m)
 		.def("set_eigenweight", &pyoomph::MyPitchForkHandler::set_eigenweight);
 
 	py::class_<pyoomph::MyHopfHandler, oomph::AssemblyHandler>(m, "HopfHandler")
-		.def("debug_analytical_filling", [](pyoomph::MyHopfHandler *self, oomph::GeneralisedElement *elem, double eps)
+		.def("get_nicely_rotated_eigenfunction", &pyoomph::MyHopfHandler::get_nicely_rotated_eigenfunction)
+		.def("debug_analytical_filling", [](pyoomph::MyHopfHandler *self, oomph::GeneralisedElement *elem, double eps)		
 			 { self->debug_analytical_filling(elem, eps); });
 
 	py::class_<pyoomph::AzimuthalSymmetryBreakingHandler, oomph::AssemblyHandler>(m, "AzimuthalSymmetryBreakingHandler")
 		.def("set_eigenweight", &pyoomph::AzimuthalSymmetryBreakingHandler::set_eigenweight)	
 		.def("set_global_equations_forced_zero", &pyoomph::AzimuthalSymmetryBreakingHandler::set_global_equations_forced_zero);
+
+	py::class_<pyoomph::PeriodicOrbitHandler, oomph::AssemblyHandler>(m, "PeriodicOrbitHandler")
+		.def("backup_dofs", &pyoomph::PeriodicOrbitHandler::backup_dofs)	
+		.def("restore_dofs", &pyoomph::PeriodicOrbitHandler::restore_dofs)	
+		.def("get_base_ndof",&pyoomph::PeriodicOrbitHandler::get_problem_ndof)
+		.def("is_floquet_mode",&pyoomph::PeriodicOrbitHandler::is_floquet_mode)
+		.def("get_T",&pyoomph::PeriodicOrbitHandler::get_T)
+		.def("get_num_time_steps",&pyoomph::PeriodicOrbitHandler::n_tsteps)
+		.def("get_s_integration_samples",&pyoomph::PeriodicOrbitHandler::get_s_integration_samples)
+		.def("update_phase_constraint_information",&pyoomph::PeriodicOrbitHandler::update_phase_constraint_information)
+		.def("set_dofs_to_interpolated_values", &pyoomph::PeriodicOrbitHandler::set_dofs_to_interpolated_values)	;
+
+/*
+	class PythonAssemblyHandlerTrampoline : public pyoomph::PythonAssemblyHandler
+	{
+	public:
+		using pyoomph::PythonAssemblyHandler::PythonAssemblyHandler;
+
+	};
+
+	py::class_<pyoomph::PythonAssemblyHandler,PythonAssemblyHandlerTrampoline,oomph::AssemblyHandler>(m,"PythonAssemblyHandler")	
+		.def(py::init<>());
+		//.def("_after_construction", &pyoomph::PythonAssemblyHandler::_after_construction);
+*/
+
 
 	py::class_<pyoomph::DynamicBulkElementInstance>(m, "DynamicBulkElementInstance")
 		.def("_exchange_mesh", &pyoomph::DynamicBulkElementInstance::set_bulk_mesh)
@@ -429,6 +473,7 @@ void PyReg_Problem(py::module &m)
 		.def_property("_improved_pitchfork_tracking_on_unstructured_meshes", [](pyoomph::Problem &p)
 					  { return p.improved_pitchfork_tracking_on_unstructured_meshes; }, [](pyoomph::Problem &p, bool s)
 					  { p.improved_pitchfork_tracking_on_unstructured_meshes = s; })
+		.def_property("sparse_assembly_method", &pyoomph::Problem::get_sparse_assembly_method,&pyoomph::Problem::set_sparse_assembly_method)
 		.def("adaptive_unsteady_newton_solve", (double(pyoomph::Problem::*)(const double &, const double &)) & pyoomph::Problem::adaptive_unsteady_newton_solve)
 		.def("_adapt", &pyoomph::Problem::_adapt)
 		.def("adaptive_unsteady_newton_solve", (double(pyoomph::Problem::*)(const double &, const double &, const bool &)) & pyoomph::Problem::adaptive_unsteady_newton_solve)
@@ -445,6 +490,12 @@ void PyReg_Problem(py::module &m)
 		.def("_set_arc_length_theta_sqr", &pyoomph::Problem::set_arc_length_theta_sqr)
 		.def("_set_arclength_parameter", &pyoomph::Problem::set_arclength_parameter)
 		.def("_start_bifurcation_tracking", &pyoomph::Problem::start_bifurcation_tracking)
+		.def("_start_orbit_tracking", &pyoomph::Problem::start_orbit_tracking)
+		//.def("_start_custom_augmented_system", &pyoomph::Problem::start_custom_augmented_system)
+		.def("_reset_augmented_dof_vector_to_nonaugmented", &pyoomph::Problem::reset_augmented_dof_vector_to_nonaugmented)
+		.def("_create_dof_augmentation",&pyoomph::Problem::create_dof_augmentation,py::return_value_policy::take_ownership)
+		.def("_get_n_unaugmented_dofs", &pyoomph::Problem::get_n_unaugmented_dofs)		
+		.def("_add_augmented_dofs", &pyoomph::Problem::add_augmented_dofs)
 		.def("_enable_store_local_dof_pt_in_elements", &pyoomph::Problem::enable_store_local_dof_pt_in_elements)
 		.def("after_bifurcation_tracking_step", &pyoomph::Problem::after_bifurcation_tracking_step)
 		.def("get_custom_residuals_jacobian", &pyoomph::Problem::get_custom_residuals_jacobian, py::arg("info"))
@@ -453,8 +504,9 @@ void PyReg_Problem(py::module &m)
 		.def("_get_bifurcation_omega", &pyoomph::Problem::get_bifurcation_omega)
 		.def("_get_lambda_tracking_real", [](pyoomph::Problem * self) {return *self->get_lambda_tracking_real(); })
 		.def("_set_lambda_tracking_real", [](pyoomph::Problem * self,double lr) {*self->get_lambda_tracking_real()=lr; })
-		.def("reset_arc_length_parameters", &pyoomph::Problem::reset_arc_length_parameters)
-		.def("_set_dof_direction_arclength", &pyoomph::Problem::set_dof_direction_arclength)
+		//.def("reset_arc_length_parameters", &pyoomph::Problem::reset_arc_length_parameters)
+		.def("reset_arc_length_parameters", [](pyoomph::Problem * self) {self->reset_arc_length_parameters(); })
+		.def("_set_dof_direction_arclength", &pyoomph::Problem::set_dof_direction_arclength)		
 		.def("get_parameter_derivative", &pyoomph::Problem::get_parameter_derivative)
 		.def("get_arclength_dof_derivative_vector", &pyoomph::Problem::get_arclength_dof_derivative_vector)
 		.def("get_arclength_dof_current_vector", &pyoomph::Problem::get_arclength_dof_current_vector)
@@ -462,7 +514,11 @@ void PyReg_Problem(py::module &m)
 			 {auto * gpd=self->assert_global_parameter(n); return GiNaC::GiNaCGlobalParameterWrapper(gpd); }, py::return_value_policy::reference, py::arg("parameter_name"), "Return a global parameter. If it does not exist, it will be added and initialized with value 0.")
 		.def("get_global_parameter_names", &pyoomph::Problem::get_global_parameter_names)
 		.def("get_current_dofs", [](pyoomph::Problem *self)
-			 { return self->get_current_dofs(); })
+			 { 
+				auto rs=self->get_current_dofs();
+				return std::make_tuple(py::array_t<double>(std::get<0>(rs).size(),std::get<0>(rs).data()), std::get<1>(rs));
+				//return self->get_current_dofs(); 
+			})
 		.def("get_history_dofs", [](pyoomph::Problem *self, unsigned t)
 			 { 
 			   auto rs=self->get_history_dofs(t);			   
@@ -551,6 +607,7 @@ void PyReg_Problem(py::module &m)
 		.def("set_mesh_pt", &pyoomph::Problem::set_mesh_pt, py::keep_alive<1, 2>())
 		.def("add_sub_mesh", &pyoomph::Problem::add_sub_mesh, py::keep_alive<1, 2>())
 		.def("flush_sub_meshes", &pyoomph::Problem::flush_sub_meshes)
+		.def("get_second_order_directional_derivative", &pyoomph::Problem::get_second_order_directional_derivative)
 		.def("nsub_mesh", &pyoomph::Problem::nsub_mesh)
 		.def("adapt", [](pyoomph::Problem &self)
 			 {unsigned nref,nunref; self.adapt(nref,nunref); return std::make_tuple(nref,nunref); })
@@ -569,6 +626,15 @@ void PyReg_Problem(py::module &m)
 		.def("get_ccompiler", &pyoomph::Problem::get_ccompiler)
 		.def("_set_ccompiler", &pyoomph::Problem::set_ccompiler, py::keep_alive<1, 2>())
 		.def("ntime_stepper", &pyoomph::Problem::ntime_stepper)
+		.def("_assemble_multiassembly", [](pyoomph::Problem *p,std::vector<std::string> what,std::vector<std::string> contributions,std::vector<std::string> params,std::vector<std::vector<double>> hessian_vectors,std::vector<unsigned> & hessian_vector_indices)
+			 {
+				std::vector<std::vector<double>> data;
+				std::vector<std::vector<int>> csrdata;
+				std::vector<int> return_indices;
+				unsigned ndof;
+				p->assemble_multiassembly(what,contributions,params,hessian_vectors,hessian_vector_indices,data,csrdata,ndof,return_indices);
+				return std::make_tuple(ndof,data,csrdata,return_indices);
+			 })
 		.def("distribute", [](pyoomph::Problem *self)
 			 {
 #ifdef OOMPH_HAS_MPI

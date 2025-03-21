@@ -23,4 +23,5 @@ This section is devoted to (a set of) ordinary differential equations in the sen
    temporal/changeparams.rst
    temporal/custommath.rst                                             
    temporal/stability.rst       
+   temporal/orbit.rst          
    

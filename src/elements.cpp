@@ -942,7 +942,7 @@ namespace pyoomph
 				for (unsigned int l = 0; l < eleminfo.nnode_C2; l++) // C2 nodes
 				{
 
-					// std::cout << "C2NMASTER " << l <<  shape_info->hanginfo_C2[l].nummaster << std::endl;
+					//std::cout << "C2NMASTER " << l <<  shape_info->hanginfo_C2[l].nummaster << std::endl;
 					if (!shape_info->hanginfo_C2[l].nummaster)
 					{
 						// NON HANGING -> HANGING WITH WEIGHT 1 for external element data
@@ -978,12 +978,13 @@ namespace pyoomph
 						   unsigned foffs=f+ ft->buffer_offset_C2_basebulk;
 							if (shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs] >= 0)
 							{
+								int orig_eq=shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs];
 								shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs] = eqn_remap[shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs]];
 								if (shape_info->hanginfo_C2[l].masters[m].local_eqn[foffs] == -666)
 								{
 									std::ostringstream oss;
 									oss << this;
-									oss << " node: " << l << ", master " << m << ", index " << f << ", " << foffs << " of " << ft->numfields_C2_basebulk << std::endl;
+									oss << " node: " << l << ", master " << m << ", index " << f << ", " << foffs << " of " << ft->numfields_C2_basebulk << " Equation to remap is " << orig_eq << std::endl;
 									oss << " AT File  " << codeinst->get_code()->get_file_name();
 									throw_runtime_error("MISSING EXTERNAL C2 DEPENDENCY ON ELEM PTR: " + oss.str());
 								}
@@ -4644,6 +4645,28 @@ namespace pyoomph
 		return functable->EvalLocalExpression(&eleminfo, this->shape_info, index);
 	}
 
+	double BulkElementBase::eval_extremum_expression_at_node(unsigned index, unsigned node_index)
+	{
+		oomph::Vector<double> s;
+		this->local_coordinate_of_node(node_index, s);
+		return eval_extremum_expression_at_s(index, s);
+	}
+
+	double BulkElementBase::eval_extremum_expression_at_s(unsigned index, const oomph::Vector<double> &s)
+	{
+		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
+		if (index >= functable->numextremum_expressions)
+			throw_runtime_error("Cannot evaluate extremum expression at too large index " + std::to_string(index));
+		
+		this->interpolate_hang_values();
+
+		double JLagr;
+		this->fill_shape_info_at_s(s, 0, codeinst->get_func_table()->shapes_required_ExtremumExprs, JLagr, 0);
+		this->prepare_shape_buffer_for_integration(codeinst->get_func_table()->shapes_required_ExtremumExprs, 0);
+      _currently_assembled_element = this;	    
+		return functable->EvalExtremumExpression(&eleminfo, this->shape_info, index);
+	}	
+
 	bool BulkElementBase::eval_tracer_advection_in_s_space(unsigned index, double time_frac, const oomph::Vector<double> &s, oomph::Vector<double> &svelo)
 	{
 		const JITFuncSpec_Table_FiniteElement_t *functable = codeinst->get_func_table();
@@ -4905,7 +4928,7 @@ namespace pyoomph
 				if (inf.hessians.size())
 				{
 					if (!functable->hessian_generated)
-						throw_runtime_error("You want to calculate Hessian contributions, but analytical Hessian were not set. Please call problem.set_analytic_hessian_products(True) before just-in-time compilation");
+						throw_runtime_error("You want to calculate Hessian contributions, but analytical Hessian were not set. Please call problem.setup_for_stability_analysis(analytic_hessian=True) before just-in-time compilation");
 
 					for (auto &hinf : inf.hessians)
 					{
@@ -4924,12 +4947,12 @@ namespace pyoomph
 						if (hinf.M_Hessian)
 						{
 							//             std::cout << " AEESMBLE HESS JM " << inf.contribution << "  " << &hinf.Y << "  " <<  std::endl;
-							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], &(hinf.M_Hessian->entry(0, 0)), &(hinf.J_Hessian->entry(0, 0)), n_vec, 2);
+							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], &(hinf.M_Hessian->entry(0, 0)), &(hinf.J_Hessian->entry(0, 0)), n_vec, (hinf.transposed ? 5:  2));
 						}
 						else
 						{
 							//            std::cout << " AEESMBLE HESS J " << inf.contribution << "  " << &hinf.Y << "  " <<  std::endl;
-							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], NULL, &(hinf.J_Hessian->entry(0, 0)), n_vec, 1);
+							functable->HessianVectorProduct[inf.contribution](&eleminfo, shape_info, &hinf.Y[0], NULL, &(hinf.J_Hessian->entry(0, 0)), n_vec, (hinf.transposed ? 4:  1));
 						}
 					}
 				}
@@ -5183,7 +5206,7 @@ namespace pyoomph
 
 	void BulkElementBase::assemble_hessian_tensor(oomph::DenseMatrix<double> &hbuffer)
 	{
-		oomph::DenseMatrix<double> dummy(this->ndof()*this->ndof()*this->ndof(),0.0);// For the mass matrix
+		oomph::DenseMatrix<double> dummy(this->ndof(),this->ndof()*this->ndof(),0.0);// For the mass matrix
 		fill_in_generic_hessian(oomph::Vector<double>(this->ndof(),0.0), dummy, hbuffer, 3);
 	}
 
@@ -14149,10 +14172,10 @@ namespace pyoomph
 							for (unsigned m = 0; m < nmaster; m++)
 							{
 								auto *const master_nod_pt = hang_pt->master_node_pt(m);
-								int parent_no = from_elem->local_hang_eqn(master_nod_pt, functable->nodal_offset_C2TB_basebulk+k);
+								int parent_no = from_elem->local_hang_eqn(master_nod_pt, functable->nodal_offset_C2_basebulk+k);
 								//			  	 	std::cout << "HANG C2 " << j << "  " << "  " << k << "  " << m << master_nod_pt->eqn_number(k) << std::endl;
 								std::string info = "C2 HANGIG";
-								int my_no = resolve_local_equation_for_external_contributions(master_nod_pt->eqn_number(functable->nodal_offset_C2TB_basebulk+k), from_elem, &info);
+								int my_no = resolve_local_equation_for_external_contributions(master_nod_pt->eqn_number(functable->nodal_offset_C2_basebulk+k), from_elem, &info);
 								if (parent_no >= 0)
 								{
 									eq_map[parent_no] = my_no;
@@ -14161,10 +14184,10 @@ namespace pyoomph
 						}
 						else
 						{
-							int parent_no = from_elem->nodal_local_eqn(el_n_index, functable->nodal_offset_C2TB_basebulk+k);
-							//  		  	 	   std::cout << "C2 " << j << "  " << "  " << k << "  " << n->eqn_number(k) << std::endl;
+							int parent_no = from_elem->nodal_local_eqn(el_n_index, functable->nodal_offset_C2_basebulk+k);
+							  		  	 	   //std::cout << "C2 " << j << "  " << "  " << k << "  " << n->eqn_number(k) << std::endl;
 							std::string info = "C2";
-							int my_no = resolve_local_equation_for_external_contributions(n->eqn_number(functable->nodal_offset_C2TB_basebulk+k), from_elem, &info);
+							int my_no = resolve_local_equation_for_external_contributions(n->eqn_number(functable->nodal_offset_C2_basebulk+k), from_elem, &info);
 							// std::cout << "DONE" << std::endl;
 							if (parent_no >= 0)
 							{

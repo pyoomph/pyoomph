@@ -25,7 +25,6 @@
 # ========================================================================
  
  
-from re import T
 from ..meshes.mesh import AnyMesh, InterfaceMesh
 from ..generic import Equations, InterfaceEquations
 from ..equations.generic import InitialCondition, SpatialErrorEstimator, FiniteElementSpaceEnum

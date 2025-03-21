@@ -73,10 +73,11 @@ namespace pyoomph
   class SinglePassMultiAssembleHessianInfo
   {
   public:
-    const oomph::Vector<double> &Y;
+    oomph::Vector<double> &Y;
     oomph::DenseMatrix<double> *M_Hessian;
     oomph::DenseMatrix<double> *J_Hessian;
-    SinglePassMultiAssembleHessianInfo(const oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M) : Y(_Y), M_Hessian(M), J_Hessian(J) {}
+    bool transposed;
+    SinglePassMultiAssembleHessianInfo(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M, bool _transposed=false) : Y(_Y), M_Hessian(M), J_Hessian(J), transposed(_transposed) {}
   };
 
   class SinglePassMultiAssembleDParamInfo
@@ -102,10 +103,13 @@ namespace pyoomph
     oomph::DenseMatrix<double> *jacobian = NULL;
     oomph::DenseMatrix<double> *mass_matrix = NULL;
 
-    void add_hessian(const oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M = NULL)
+    void add_hessian(oomph::Vector<double> &_Y, oomph::DenseMatrix<double> *J, oomph::DenseMatrix<double> *M = NULL,bool transposed=false)
     {
-      hessians.push_back(SinglePassMultiAssembleHessianInfo(_Y, J, M));
+      hessians.push_back(SinglePassMultiAssembleHessianInfo(_Y, J, M,transposed));
     }
+    
+    SinglePassMultiAssembleHessianInfo & get_hessian(unsigned int i) { return  hessians[i]; }
+    
     void add_param_deriv(double *const &param, oomph::Vector<double> *dres, oomph::DenseMatrix<double> *dJ = NULL, oomph::DenseMatrix<double> *dM = NULL)
     {
       dparams.push_back(SinglePassMultiAssembleDParamInfo(param, dres, dJ, dM));
@@ -325,6 +329,9 @@ namespace pyoomph
     double eval_local_expression_at_s(unsigned index, const oomph::Vector<double> &s);
     double eval_local_expression_at_node(unsigned index, unsigned node_index);
     double eval_local_expression_at_midpoint(unsigned index);
+    double eval_extremum_expression_at_s(unsigned index, const oomph::Vector<double> &s);
+    double eval_extremum_expression_at_node(unsigned index, unsigned node_index);
+    
 
     pyoomph::Node * create_interpolated_node(const oomph::Vector<double> & s,bool as_boundary_node);
 

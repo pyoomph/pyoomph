@@ -26,7 +26,7 @@
  
  
 
-from .. import var_and_test
+from .. import var_and_test,var
 from ..generic.codegen import  InterfaceEquations,Equations,BaseEquations,ODEEquations,FiniteElementCodeGenerator
 from ..expressions.generic import ExpressionOrNum,ExpressionNumOrNone,FiniteElementSpaceEnum, grad,nondim, scale_factor,test_scale_factor,Expression,assert_valid_finite_element_space, testfunction,find_dominant_element_space
 
@@ -465,10 +465,12 @@ class RemeshMeshSize(BaseEquations):
 
 
 class ProjectExpression(Equations):
-    def __init__(self,scale:ExpressionOrNum=1,space:FiniteElementSpaceEnum="C2",field_type:Literal["scalar","vector"]="scalar",**projs:ExpressionOrNum):
+    def __init__(self,scale:Union[ExpressionOrNum,str]=1,space:FiniteElementSpaceEnum="C2",field_type:Literal["scalar","vector"]="scalar",**projs:ExpressionOrNum):
         super(ProjectExpression, self).__init__()
         self.space:FiniteElementSpaceEnum=space
         self.scale=scale
+        if isinstance(scale,str):
+            self.scale=scale_factor(scale)
         self.field_type=field_type
         self.projs=projs.copy()
 
@@ -675,20 +677,20 @@ class IntegralObservables(Equations):
     The parameter names in the lambda function must match the names of the integral observables. The underscore prevents writing the helper observables to output.
 
     Parameters:
-        _coordinante_system (Optional[BaseCoordinateSystem]): The coordinate system to use. Defaults to None, i.e. the one of the equations or the problem.
+        _coordinate_system (Optional[BaseCoordinateSystem]): The coordinate system to use. Defaults to None, i.e. the one of the equations or the problem.
         **integral_observables (Union[ExpressionOrNum, Callable[..., ExpressionOrNum]]): Integral observables to be added.
     """
-    def __init__(self,_coordinante_system:Optional["BaseCoordinateSystem"]=None, **integral_observables:Union[ExpressionOrNum,Callable[...,ExpressionOrNum]]):
+    def __init__(self,_coordinate_system:Optional["BaseCoordinateSystem"]=None, **integral_observables:Union[ExpressionOrNum,Callable[...,ExpressionOrNum]]):
         super(IntegralObservables, self).__init__()
         self.integral_observables = {k:v for k,v in integral_observables.items() if not callable(v)}
         self.dependent_funcs={k:v for k,v in integral_observables.items() if callable(v)}
-        self._coordinante_system=_coordinante_system
+        self._coordinate_system=_coordinate_system
 
     def define_additional_functions(self):
-        if self._coordinante_system is None:
+        if self._coordinate_system is None:
             dx = self.get_dx()
         else:
-            dx=self.get_dx(coordsys=self._coordinante_system)
+            dx=self.get_dx(coordsys=self._coordinate_system)
         for k,v in self.integral_observables.items():
             #import _pyoomph
             #_pyoomph.set_verbosity_flag(1)
@@ -696,6 +698,41 @@ class IntegralObservables(Equations):
             #_pyoomph.set_verbosity_flag(0)
         for k,v in self.dependent_funcs.items():
             self.add_dependent_integral_function(k,v)
+
+
+
+class ExtremumObservables(Equations):
+    """You can add these to continuum Equations to find minima and maxima of given expressions. 
+    If you want to find the minimum/maximum of a scalar quantity "u", you can add an ``ExtremumObservables("u")`` or, alternatively, give it a name like ``ExtremumObservables(my_name_for_u=var("u"))``.
+    More than one argument can be passed to register multiple extremum observables. For e.g. the maximum of a norm of a vectorial variable v, you can add ``ExtremumObservables(v_norm=square_root(dot(var("v"),var("v"))))``.  
+    
+    Once registered, you can evaluate the extremum values by calling the ``evaluate_maximum`` or ``evaluate_minimum`` method of the corresponding mesh (available via ``problem.get_mesh(...)``)
+
+    Args:
+        Either strings as positional arguments or expressions as keyword arguments.
+    """
+    def __init__(self,*direct_vars:str,**named_extrema):
+        super().__init__()
+        self.named_extrema=named_extrema.copy()
+        for varname in direct_vars:
+            if not isinstance(varname,str):
+                raise ValueError("ExtremumObservables must be either constructed with strings as positional args or expressions as keyword args, i.e. e.g. ExtremumObservables('u') to monitor the extrema of var('u') or ExtremumObservables(u_sqr=var('u')**2) to monitor the extrema of u**2")
+            self.named_extrema[varname]=var(varname)
+        
+
+    def add_extremum_function(self,name,expr):
+        import _pyoomph
+        master = self._get_combined_element()
+        cg = master._assert_codegen()
+        if not (isinstance(expr,int) or isinstance(expr,float) or isinstance(expr,_pyoomph.Expression)) and  callable(expr):
+            expr=expr()
+        if isinstance(expr,(int,float)): # Does not really make sense here
+            expr=_pyoomph.Expression(expr)
+        cg._register_extremum_function(name, expr)        
+        
+    def define_residuals(self):
+        for name,expr in self.named_extrema.items():
+            self.add_extremum_function(name,expr)
 
 class ODEObservables(ODEEquations):
     """

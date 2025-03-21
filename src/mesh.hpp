@@ -82,6 +82,7 @@ namespace pyoomph
 		virtual void fill_dof_types(int *typarr);
 		virtual void ensure_halos_for_periodic_boundaries();
 		virtual GiNaC::ex evaluate_integral_function(std::string name);
+		virtual GiNaC::ex evaluate_extremum(std::string name,int sign,BulkElementBase *& extreme_element,oomph::Vector<double> &extreme_local_coords,unsigned flags);
 		virtual std::vector<std::string> list_integral_functions();
 		virtual std::vector<std::string> list_local_expressions();
 		virtual void fill_internal_facet_buffers(std::vector<BulkElementBase *> &internal_elements, std::vector<int> &internal_face_dir, std::vector<BulkElementBase *> &opposite_elements, std::vector<int> &opposite_face_dir, std::vector<int> &opposite_already_at_index) { throw_runtime_error("Please specify this function for each dimension"); }

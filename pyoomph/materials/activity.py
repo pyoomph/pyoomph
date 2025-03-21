@@ -445,6 +445,7 @@ class UNIFACMultiReturnExpression(CustomMultiReturnExpression):
             self.qs[i]=c.get_molecular_q()
             self.thetas_pure[c.name]=self.unifac_mix.generate_ln_residual_thetas(c, True)            
         
+        self.molefraction_limit_epsilon=1e-9
     
     def get_num_returned_scalars(self, nargs: int) -> int:
         if nargs!=len(self.argument_order)+(1 if self._constant_temperature_in_K is None else 0):
@@ -462,13 +463,27 @@ class UNIFACMultiReturnExpression(CustomMultiReturnExpression):
         reduced_rs_other_exp[:-1]-=reduced_rs_other_exp[-1]
         res= """
             const double T_in_K="""+(str(self._constant_temperature_in_K) if self._constant_temperature_in_K is not None else """arg_list["""+str(T_index)+"""]""")+""";
-            const double V="""+str(self.rs[-1])+"+"+("+".join([str(reduced_rs[i])+"*arg_list["+str(i)+"]" for i in range(T_index)]))+""";
-            const double F="""+str(self.qs[-1])+"+"+("+".join([str(reduced_qs[i])+"*arg_list["+str(i)+"]" for i in range(T_index)]))+""";
+            // Make sure the mole fractions are normalized
+            PYOOMPH_AQUIRE_ARRAY(double, molefracs,"""+ str(T_index)+""");
+            double molar_sum=0.0;
+            const double molefraction_limit_epsilon="""+str(self.molefraction_limit_epsilon)+""";
+            for (int i=0;i<"""+str(T_index)+""";i++) 
+            {
+                if (arg_list[i]<molefraction_limit_epsilon) molefracs[i]=molefraction_limit_epsilon;
+                else if (arg_list[i]>1.0-molefraction_limit_epsilon) molefracs[i]=1.0-molefraction_limit_epsilon;
+                else molefracs[i]=arg_list[i];  
+                molar_sum+=arg_list[i];
+            }
+            if (molar_sum>1.0-molefraction_limit_epsilon) {for (int i=0;i<"""+str(T_index)+""";i++) molefracs[i]*=(1.0-molefraction_limit_epsilon)/molar_sum;}
+            """            
+        res+="""
+            const double V="""+str(self.rs[-1])+"+"+("+".join([str(reduced_rs[i])+"*molefracs["+str(i)+"]" for i in range(T_index)]))+""";
+            const double F="""+str(self.qs[-1])+"+"+("+".join([str(reduced_qs[i])+"*molefracs["+str(i)+"]" for i in range(T_index)]))+""";
             const double F_over_V=F/V;
             """
         if self.server.modified_volume_fraction_exponent!=1:
             res+="""
-            const double V_other_exp="""+(str(reduced_rs_other_exp[-1])+"+"+ "+".join([str(reduced_rs_other_exp[i])+"*arg_list["+str(i)+"]" for i in range(T_index)]))+""";
+            const double V_other_exp="""+(str(reduced_rs_other_exp[-1])+"+"+ "+".join([str(reduced_rs_other_exp[i])+"*molefracs["+str(i)+"]" for i in range(T_index)]))+""";
             const double F_over_V_other_exp=F/V_other_exp;
             """
 
@@ -497,7 +512,7 @@ class UNIFACMultiReturnExpression(CustomMultiReturnExpression):
             res+="double Theta_sg_"+str(sgi)+ " = "
             if counts_matrix[sgn][-1]!=0:
                 res+=str(counts_matrix[sgn][-1])+" + "
-            res+=("+".join(["("+str(counts_matrix[sgn][i])+")"+"*arg_list["+str(i)+"]" for i in range(T_index) if counts_matrix[sgn][i]!=0]))+""";
+            res+=("+".join(["("+str(counts_matrix[sgn][i])+")"+"*molefracs["+str(i)+"]" for i in range(T_index) if counts_matrix[sgn][i]!=0]))+""";
             """
         res+="double Theta_denom = "+ ("+".join("Theta_sg_"+str(sgi) for sgi in range(len(self._allgroups))))+""";
             """

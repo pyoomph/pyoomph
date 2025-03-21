@@ -24,7 +24,7 @@
 #
 # ========================================================================
  
-from .generic import GenericLinearSystemSolver, GenericEigenSolver, EigenSolverWhich
+from .generic import GenericLinearSystemSolver, GenericEigenSolver, EigenSolverWhich,DefaultMatrixType
 from collections import OrderedDict
 import petsc4py #type:ignore
 import sys
@@ -60,15 +60,24 @@ class PETSCSolver(GenericLinearSystemSolver):
     #		if "add_zero_diagonal" in opts.keys():
     #			problem.set_diagonal_zero_entries(True)
     
-    def use_mumps(self):
+    def use_mumps(self,mumps_param14:Optional[int]=None):
         _SetDefaultPetscOption("mat_mumps_icntl_6",5)
         _SetDefaultPetscOption("ksp_type","preonly")
         _SetDefaultPetscOption("pc_type","lu")
         _SetDefaultPetscOption("pc_factor_mat_solver_type","mumps")
+        if mumps_param14 is not None:
+            _SetDefaultPetscOption("mat_mumps_icntl_14",mumps_param14)
         return self    
 
     def set_default_petsc_option(self,name:str,val:Any=None,force:bool=False)->None:
         _SetDefaultPetscOption(name,val, force) #type:ignore
+
+    def get_PETSc(self)->Any:
+        """
+        Returns access to PETSc
+        If defining derived classes that need access to PETSc, get PETSc from here, do not import petsc4py again
+        """
+        return PETSc
 
     def setup_solver(self):        
         opts = PETSc.Options().getAll() #type:ignore
@@ -184,28 +193,39 @@ class SlepcEigenSolver(GenericEigenSolver):
     def set_default_option(self,name:str,val:Any=None,force:bool=False)->None:
         _SetDefaultPetscOption(name,val, force)
     
-    def use_mumps(self):        
+    def use_mumps(self,mumps_param14:Optional[int]=None):        
         _SetDefaultPetscOption("st_ksp_type","preonly")
         _SetDefaultPetscOption("st_pc_type","lu")
         _SetDefaultPetscOption("st_pc_factor_mat_solver_type","mumps")
         _SetDefaultPetscOption("st_mat_mumps_icntl_6",5)
+        if mumps_param14 is not None:
+            _SetDefaultPetscOption("st_mat_mumps_icntl_14",mumps_param14)
         return self
 
-    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
+    def solve(self, neval:int, shift:Union[float,None,complex]=None,sort:bool=True,which:EigenSolverWhich="LM",OPpart:Optional[Literal["r","i"]]=None,v0:Optional[Union[NPComplexArray,NPFloatArray]]=None,target:Optional[complex]=None,custom_J_and_M:Optional[Tuple["DefaultMatrixType"]]=None,with_left_eigenvectors:bool=False,quiet:bool=True)->Tuple[NPComplexArray,NPComplexArray,"DefaultMatrixType","DefaultMatrixType"]:
         if which!="LM":
             raise RuntimeError("Implement which="+str(which))
         if OPpart is not None:
             raise RuntimeError("Implement OPpart="+str(OPpart))
 #        if v0 is not None:
 #            raise RuntimeError("Implement v0="+str(v0))
-        
-        if False:
-            n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
-
-            #print("M value ranges",numpy.amin(M_val),numpy.amax(M_val)) #type:ignore
-            M = PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(M_rs, M_ci, M_val)) #type:ignore
-            J = PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(J_rs, J_ci, -J_val)) #type:ignore
-
+    
+        if with_left_eigenvectors:
+            raise RuntimeError("Implement with_left_eigenvectors")    
+        if custom_J_and_M is not None:
+            Jin=custom_J_and_M[0]
+            Min=custom_J_and_M[1]
+            n=Jin.shape[0]
+            if not isinstance(Jin,DefaultMatrixType):
+                Jin=Jin.tocsr()
+                assert isinstance(Jin,DefaultMatrixType)
+            if not isinstance(Min,DefaultMatrixType):
+                Min=Min.tocsr()
+                assert isinstance(Min,DefaultMatrixType)
+                
+            M=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Min.indptr, Min.indices, Min.data))
+            J=PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(Jin.indptr, Jin.indices, Jin.data))
+            
         else:
             Jin,Min,n,complex_mat=self.get_J_M_n_and_type()
             upscale_to_complex=complex_mat and (PETSc.ScalarType in {numpy.float64,numpy.float128,numpy.float32})
@@ -254,10 +274,13 @@ class SlepcEigenSolver(GenericEigenSolver):
         E.setOperators(J, M) #type:ignore
         E.setProblemType(SLEPc.EPS.ProblemType.GNHEP) #type:ignore
         
+        if neval==0:
+            neval=1
         #E.setProblemType(SLEPc.EPS.ProblemType.PGNHEP)
         #ncv=max(2 * neval + 1, 5 + neval)
         ncv=max(2 * neval + 1, 5 + neval)
         mdp=ncv #TODO: Can be smaller for higher
+        
         E.setDimensions(neval,ncv,mdp) #type:ignore
         
         if v0 is not None:
@@ -283,7 +306,10 @@ class SlepcEigenSolver(GenericEigenSolver):
         self.further_setup(E) #type:ignore
         E.solve() #type:ignore
 
-        Print = PETSc.Sys.Print #type:ignore
+        if quiet:
+            Print = lambda *pargs,**kwargs: None
+        else:
+            Print = PETSc.Sys.Print #type:ignore
         Print()
         Print("******************************")
         Print("*** SLEPc Solution Results ***")
@@ -300,7 +326,7 @@ class SlepcEigenSolver(GenericEigenSolver):
         nconv = E.getConverged() #type:ignore
         Print("Number of converged eigenpairs %d" % nconv) #type:ignore
 
-        Print(M) #type:ignore
+        #Print(M) #type:ignore
 
         evals = []
         evects = []
@@ -316,10 +342,15 @@ class SlepcEigenSolver(GenericEigenSolver):
             #lastev = None
             for i in range(nconv): #type:ignore
                 k = E.getEigenpair(i, vr, vi) #type:ignore
+                #k=E.getEigenvalue(i) #type:ignore
+                #E.getEigenvector(i, vr, vi) #type:ignore
                 error = E.computeError(i) #type:ignore
                 evals.append(k) #type:ignore
-                _vr = vr.getArray() #type:ignore
-                #Print("IN K %9f%+9f j"%(k.real,k.imag))
+                _vr = 0+vr.getArray() #type:ignore
+                #_vi=0+vi.getArray() #type:ignore
+                # TODO: Something seems to be wrong in complex SLEPc. At least here, with complex shift, it can be messed up
+                #Print("IN K %9f%+9f j"%(k.real,k.imag)+" error: %12g" % error) #type:ignore
+                #print("EQ ",k*(Min*_vr)-Jin*_vr)
                 if k.imag != 0.0: #type:ignore
                     #Print("LASTEV "+("None" if lastev is None else "NOTNONE"))
 
@@ -333,9 +364,10 @@ class SlepcEigenSolver(GenericEigenSolver):
                         else:
                             evects.append(0+_vr)
                             #lastev = k
-                        Print(" %9f%+9f j %12g" % (k.real, k.imag, error))
+                        
                     else:
-                        evects.append(_vr+vi.getArray()*1j) #type:ignore
+                        evects.append(0+_vr+vi.getArray()*1j) #type:ignore
+                        Print(" %9f%+9f j %12g" % (k.real, k.imag, error))
                 else:
                     #lastev = None
                     evects.append(0+_vr) #type:ignore
@@ -368,11 +400,26 @@ class SlepcEigenSolver(GenericEigenSolver):
             self._last_basis=numpy.array(self._last_basis)
         else:
             self._last_basis=None
-            
+        
+        M.destroy() #type:ignore
+        J.destroy() #type:ignore    
         E.destroy() #type:ignore
+        
         return numpy.array(evals), numpy.array(evects),Jin,Min #type:ignore
 
+    def get_PETSc(self)->Any:
+        """
+        Returns access to PETSc
+        If defining derived classes that need access to PETSc, get PETSc from here, do not import petsc4py again
+        """
+        return PETSc
 
+    def get_SLEPc(self)->Any:
+        """
+        Returns access to SLEPc
+        If defining derived classes that need access to SLEPc, get SLEPc from here, do not import slepc4py again
+        """        
+        return SLEPc
 
 class FieldSplitPETSCSolver(PETSCSolver):
     def __init__(self,problem:"Problem"):
@@ -380,6 +427,17 @@ class FieldSplitPETSCSolver(PETSCSolver):
         self._fieldsplit_map:Optional[NPIntArray]=None
         self._fieldsplit:Optional[List[Tuple[str,Any]]]=None
         self.default_field_split:Optional[int]=None
+        self._fieldsplit_names:Dict[int,str]={}
+        self.preconditioner_matrix_name=None
+        self._nullspaces=[]
+        
+    def add_constant_nullspace(self,*dofnames):
+        self._nullspaces.append(("constant",dofnames))
+        
+        
+    def set_fieldsplit_names(self,**kargs:int)->None:
+        for k,v in kargs.items():
+            self._fieldsplit_names[v]=k
 
     def define_options(self):
         pass
@@ -402,12 +460,14 @@ class FieldSplitPETSCSolver(PETSCSolver):
                 if tmesh is None:
                     if len(sp)==2 and self.problem._meshdict.get(sp[0], None) is not None:
                         ode=self.problem.get_ode(sp[0])
-                        ode_elem = ode._get_ODE("ODE")                        
+                        #ode_elem = ode._get_ODE("ODE")                        
                         inds=ode.get_code_gen()._code.get_elemental_field_indices()
-                        exit()
-                        print(ode_elem.get_code_instance().get_elemental_field_indices())
-                        exit()
-                        raise RuntimeError("GET ODE")
+                        if sp[-1] in inds.keys():
+                            if not sn in meshblocks.keys():
+                                meshblocks[sn]={}
+                            meshblocks[sn][sp[-1]]=b
+                            allkeys[sn]=True
+                            continue
                     raise RuntimeError("Cannot perform a field split for the unknown field "+n)
                 if not (sn in meshblocks.keys()):
                     meshblocks[sn]={}
@@ -419,9 +479,12 @@ class FieldSplitPETSCSolver(PETSCSolver):
                 wholemesh[n]=b
                 allkeys[n]=True
 
-
+        
         for k in allkeys.keys():
-            mesh=self.problem.get_mesh(k)
+            mesh=self.problem.get_mesh(k,return_None_if_not_found=True)
+            if mesh is None:
+                mesh=self.problem.get_ode(k)
+               
             typesI, names = mesh.describe_global_dofs()
             name_look_up={v:i for i,v in enumerate(names)}
             types:NPIntArray = numpy.array(typesI,dtype=numpy.int32) #type:ignore
@@ -440,6 +503,32 @@ class FieldSplitPETSCSolver(PETSCSolver):
 
 
     def _perform_field_split(self):
+        if len(self._nullspaces)>0:
+            nsvects=[]
+            for ns in self._nullspaces:
+                if ns[0]=="constant":
+                    alldofinds=None
+                    for n in ns[1]:
+                        splt=n.split("/")
+                        mesh=self.problem.get_mesh("/".join(splt[:-1]),return_None_if_not_found=True)
+                        if mesh is None:
+                            mesh=self.problem.get_ode(n)
+                        typesI, names = mesh.describe_global_dofs()
+                        
+                        name_look_up={v:i for i,v in enumerate(names)}
+                        types:NPIntArray = numpy.array(typesI,dtype=numpy.int32)
+                        if alldofinds is None:
+                            alldofinds=types*0
+                        where = numpy.where(types == name_look_up[splt[-1]])[0]
+                        alldofinds[where]=1
+                    nsvects.append(alldofinds)                    
+                else:
+                    raise RuntimeError("Unknown nullspace type "+ns[0])
+                
+            petscvects=[PETSc.Vec().createWithArray(v) for v in nsvects]
+            ns=self.get_PETSc().NullSpace().create(constant=False,vectors=petscvects)
+            self.petsc_mat.setNullSpace(ns) #type:ignore
+            
         if self._fieldsplit_map is None:
             return
         where = numpy.where(self._fieldsplit_map == -1)[0] #type:ignore
@@ -451,21 +540,27 @@ class FieldSplitPETSCSolver(PETSCSolver):
 
         numfields:int=numpy.amax(self._fieldsplit_map)+1 #type:ignore
         fields = []
+        ownerrange=self.petsc_mat.getOwnershipRange()        
+        globsize=self.petsc_mat.getSize()[0]
+        
         for i in range(numfields):
             IS = PETSc.IS() #type:ignore
             subdofs = numpy.where(self._fieldsplit_map == i)[0] #type:ignore
+            if ownerrange[0]>0 or ownerrange[1]<globsize:
+                subdofs=subdofs[(subdofs < ownerrange[1]) & (subdofs >= ownerrange[0])]                               
+            
             subdofs:NPIntArray  = numpy.array(subdofs, dtype="int32") #type:ignore
+            name = self._fieldsplit_names.get(i,str(i))
             IS.createGeneral(subdofs) #type:ignore
-            name = str(i)
+            
             fields.append((name, IS)) #type:ignore
         pc = self.ksp.getPC() #type:ignore
-        print("FIELDSPlIT ",fields)
         pc.setFieldSplitIS(*fields) #type:ignore
         self._fieldsplit=fields
 
-    def assemble_preconditioner(self,name:str,restrict_on_field_split:Optional[int]=None)->Any:        
-        _, n, _, _, _, J_ci, J_rs = self.problem._assemble_residual_jacobian(name)
-        P = PETSc.Mat().createAIJ(size=((n, n), (n, n),), csr=(J_rs, J_ci, J_val)) #type:ignore
+    def assemble_preconditioner(self,name:str,restrict_on_field_split:Optional[int]=None)->Any:               
+        _res, n, _M_nzz, nrow_local, M_values_arr, M_colindex_arr, M_row_start_arr=self.problem._assemble_residual_jacobian(name)
+        P=PETSc.Mat().createAIJ(size=((nrow_local, n), (nrow_local, n),), csr=( M_row_start_arr,M_colindex_arr, M_values_arr)) # TODO: Must be destroyed!
         if restrict_on_field_split is not None:
             assert self._fieldsplit is not None
             ps = self._fieldsplit[restrict_on_field_split][1] #type:ignore
@@ -473,12 +568,16 @@ class FieldSplitPETSCSolver(PETSCSolver):
         return P #type:ignore
 
     def define_preconditioner(self):
-        pass
+        if self.preconditioner_matrix_name is not None:
+            P=self.assemble_preconditioner(self.preconditioner_matrix_name)
+            self.ksp.setOperators(self.petsc_mat,P)
 
     def setup_solver(self):
+        
         self.define_options()
         super().setup_solver()
         self._fieldsplit_map=None
+        self._nullspaces=[]        
         self.define_field_split()
         self._perform_field_split()
         self.define_preconditioner()

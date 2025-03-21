@@ -440,7 +440,7 @@ class HertzKnudsenSchrageMassTransferModel(DifferenceDrivenMassTransferModelLiqu
             raise RuntimeError("sticking_coefficient must be either an expression or a dict mapping component names to expressions")
 
 class LLEMassTransferModel(DifferenceDrivenMassTransferModel):
-    def __init__(self, props_inside: MixtureLiquidProperties, props_outside: MixtureLiquidProperties,*,unifac_model:Optional[str]=None,FD_epsilon:float=1e-9,mass_transfer_factor:Optional[ExpressionNumOrNone]=None, use_log_approach: bool = False, reference_molar_mass:ExpressionNumOrNone=None):
+    def __init__(self, props_inside: MixtureLiquidProperties, props_outside: MixtureLiquidProperties,*,unifac_model:Optional[str]=None,FD_epsilon:Optional[float]=1e-9,mass_transfer_factor:Optional[ExpressionNumOrNone]=None, use_log_approach: bool = False, reference_molar_mass:ExpressionNumOrNone=None):
         super().__init__(props_inside, props_outside)
         from .activity import UNIFACMultiReturnExpression
         if self.props_inside.components != self.props_inside.components:
@@ -449,15 +449,28 @@ class LLEMassTransferModel(DifferenceDrivenMassTransferModel):
             if self.props_inside._unifac_model is None:
                 raise RuntimeError("No UNIFAC model specified in the mixture")
             unifac_model=self.props_inside._unifac_model
-        self.activity_calc=UNIFACMultiReturnExpression(self.props_inside,unifac_model,FD_epsilon=FD_epsilon)
+        if FD_epsilon is None:
+            self.activity_calc=None
+            assert isinstance(self.props_inside, MixtureLiquidProperties)
+            self.activity_table=self.props_inside.activity_coefficients
+        else:
+            self.activity_calc=UNIFACMultiReturnExpression(self.props_inside,unifac_model,FD_epsilon=FD_epsilon)
         if mass_transfer_factor is not None:
             self.default_mass_flux_coefficient=mass_transfer_factor
         self.use_log_approach=use_log_approach
         self.reference_molar_mass=reference_molar_mass
 
     def get_driving_nondimensional_difference_for(self, name: str) -> Expression:
-        muI=log(var("molefrac_"+name)*self.activity_calc.get_activity_coefficient(name)) if self.use_log_approach else var("molefrac_"+name)*self.activity_calc.get_activity_coefficient(name)
-        muO=log(var("molefrac_"+name,domain="|.")*self.activity_calc.get_activity_coefficient(name,domain="|.")) if self.use_log_approach else var("molefrac_"+name,domain="|.")*self.activity_calc.get_activity_coefficient(name,domain="|.")
+        if self.activity_calc is None:
+            gammaI=0+self.activity_table[name]
+            xI=var("molefrac_"+name)
+            gammaO=evaluate_in_domain(0+self.activity_table[name],domain="|.")
+            xO=var("molefrac_"+name,domain="|.")
+            muI=log(xI*gammaI) if self.use_log_approach else xI*gammaI
+            muO=log(xO*gammaO) if self.use_log_approach else xO*gammaO
+        else:
+            muI=log(var("molefrac_"+name)*self.activity_calc.get_activity_coefficient(name)) if self.use_log_approach else var("molefrac_"+name)*self.activity_calc.get_activity_coefficient(name)
+            muO=log(var("molefrac_"+name,domain="|.")*self.activity_calc.get_activity_coefficient(name,domain="|.")) if self.use_log_approach else var("molefrac_"+name,domain="|.")*self.activity_calc.get_activity_coefficient(name,domain="|.")
         res= (muI-muO)
         if self.reference_molar_mass is not None:
             res*=self.reference_molar_mass/self.props_inside.get_pure_component(name).molar_mass

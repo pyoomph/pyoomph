@@ -123,6 +123,7 @@ namespace pyoomph
 		}
 		RequiredShapes_merge(&functable->shapes_required_IntegralExprs, merged);
 		RequiredShapes_merge(&functable->shapes_required_LocalExprs, merged);
+		RequiredShapes_merge(&functable->shapes_required_ExtremumExprs, merged);
 		RequiredShapes_merge(&functable->shapes_required_Z2Fluxes, merged);
 		RequiredShapes_merge(&functable->shapes_required_TracerAdvection, merged);
 
@@ -136,6 +137,8 @@ namespace pyoomph
 
 		for (unsigned int i = 0; i < functable->numintegral_expressions; i++)
 			integral_function_map[functable->integral_expressions_names[i]] = i;
+		for (unsigned int i = 0; i < functable->numextremum_expressions; i++)
+			extremum_function_map[functable->extremum_expressions_names[i]] = i;
 	}
 
 	DynamicBulkElementCode::~DynamicBulkElementCode()
@@ -171,6 +174,13 @@ namespace pyoomph
 		if (!integral_function_map.count(n))
 			return -1;
 		return integral_function_map[n];
+	}
+
+	int DynamicBulkElementCode::get_extremum_function_index(std::string n)
+	{
+		if (!extremum_function_map.count(n))
+			return -1;
+		return extremum_function_map[n];
 	}
 
 	unsigned DynamicBulkElementCode::_set_solved_residual(std::string name)
@@ -766,6 +776,66 @@ namespace pyoomph
 		this->set_dofs(dofs);
 	}
 
+
+    void Problem::get_dofs(const unsigned& t, oomph::DoubleVector& dofs) const
+	{	
+      oomph::Problem::get_dofs(t,dofs);
+	  //std::cout << "GET HISTORY DOFS " << t << std::endl;
+	  for (unsigned i = 0, ni = mesh_pt()->nnode(); i < ni; i++)
+      {
+       pyoomph::Node* node_pt = dynamic_cast<pyoomph::Node*>(mesh_pt()->node_pt(i));
+	   if (!node_pt) continue;
+       for (unsigned j = 0, nj = node_pt->variable_position_pt()->nvalue(); j < nj; j++)
+       {        
+        int eqn_number = node_pt->variable_position_pt()->eqn_number(j);
+        if (eqn_number >= 0)
+        {
+          dofs[eqn_number]=node_pt->variable_position_pt()->value(t, j);
+        }
+       }
+      }	
+	}
+
+	void Problem::set_dofs(const unsigned& t, oomph::DoubleVector& dof_pt) 
+	{
+	 oomph::Problem::set_dofs(t,dof_pt);
+	 //std::cout << "SET HISTORY DOFS " << t << std::endl;
+	 // But oomph-lib forgot the variable position pt of moving nodes...
+     for (unsigned i = 0, ni = mesh_pt()->nnode(); i < ni; i++)
+     {
+      pyoomph::Node* node_pt = dynamic_cast<pyoomph::Node*>(mesh_pt()->node_pt(i));
+	  if (!node_pt) continue;
+      for (unsigned j = 0, nj = node_pt->variable_position_pt()->nvalue(); j < nj; j++)
+      {        
+        int eqn_number = node_pt->variable_position_pt()->eqn_number(j);
+        if (eqn_number >= 0)
+        {
+          node_pt->variable_position_pt()->set_value(t, j, dof_pt[eqn_number]);
+        }
+      }
+     }		 	
+	}
+
+    void Problem::set_dofs(const unsigned& t, oomph::Vector<double*>& dof_pt) 
+	{
+     oomph::Problem::set_dofs(t,dof_pt);
+	 //std::cout << "SET HISTORY DOFS " << t << std::endl;
+	 // But oomph-lib forgot the variable position pt of moving nodes...
+     for (unsigned i = 0, ni = mesh_pt()->nnode(); i < ni; i++)
+     {
+      pyoomph::Node* node_pt = dynamic_cast<pyoomph::Node*>(mesh_pt()->node_pt(i));
+	  if (!node_pt) continue;
+      for (unsigned j = 0, nj = node_pt->variable_position_pt()->nvalue(); j < nj; j++)
+      {        
+        int eqn_number = node_pt->variable_position_pt()->eqn_number(j);
+        if (eqn_number >= 0)
+        {
+          node_pt->variable_position_pt()->set_value(t, j, *(dof_pt[eqn_number]));
+        }
+      }
+     }
+	}
+
 	void Problem::set_history_dofs(unsigned t, const std::vector<double> &inp)
 	{
 		oomph::DoubleVector dofs;
@@ -827,7 +897,7 @@ namespace pyoomph
 		}
 		else
 		{
-			CustomResJacInformation info(false);
+			CustomResJacInformation info(false,"");
 			get_custom_residuals_jacobian(&info);
 			if (!residuals.built())
 			{
@@ -839,6 +909,28 @@ namespace pyoomph
 		}
 	}
 
+	void Problem::get_derivative_wrt_global_parameter(double* const& parameter_pt,oomph::DoubleVector& result)
+	{
+		if (!use_custom_residual_jacobian)
+		{
+			get_derivative_wrt_global_parameter_elemental_assembly(parameter_pt,result);
+		}
+		else
+		{
+			int pindex=this->resolve_parameter_value_ptr(parameter_pt);
+			if (pindex<0) throw_runtime_error("Cannot resolve the double pointer of a global parameter to this problem");			
+			CustomResJacInformation info(false,global_params_by_index[pindex]->get_name());
+			get_custom_residuals_jacobian(&info);
+			if (!result.built())
+			{
+				oomph::LinearAlgebraDistribution dist(this->communicator_pt(), info.residuals.size(), false);
+				result.build(&dist, 0.0);
+			}
+			for (unsigned int i = 0; i < info.residuals.size(); i++)
+				result[i] = info.residuals[i];
+		}
+
+	}
 	void Problem::get_jacobian(oomph::DoubleVector &residuals, oomph::CRDoubleMatrix &jacobian)
 	{
 		if (!use_custom_residual_jacobian)
@@ -847,7 +939,7 @@ namespace pyoomph
 		}
 		else
 		{
-			CustomResJacInformation info(true);
+			CustomResJacInformation info(true,"");
 			get_custom_residuals_jacobian(&info);
 			//       std::cout << "RET FROM PYTH" << std::endl;
 
@@ -953,6 +1045,8 @@ namespace pyoomph
 			Dof_current[i] = curr[i];
 		}
     }
+
+	
 
     void Problem::activate_my_fold_tracking(double *const &parameter_pt, const oomph::DoubleVector &eigenvector, const bool &block_solve)
 	{
@@ -1089,8 +1183,61 @@ namespace pyoomph
 		}
 	}
 
-	std::vector<std::complex<double>> Problem::get_bifurcation_eigenvector()
+    void Problem::set_sparse_assembly_method(const std::string &method)
+    {
+		/*Perform_assembly_using_vectors_of_pairs,
+      Perform_assembly_using_two_vectors,
+      Perform_assembly_using_maps,
+      Perform_assembly_using_lists,
+      Perform_assembly_using_two_arrays*/
+		if (method == "vectors_of_pairs")
+		{
+			Sparse_assembly_method=Perform_assembly_using_vectors_of_pairs;
+		}
+		else if (method == "two_vectors")
+		{
+			Sparse_assembly_method=Perform_assembly_using_two_vectors;
+		}
+		else if (method == "maps")
+		{
+			Sparse_assembly_method=Perform_assembly_using_maps;
+		}
+		else if (method == "lists")
+		{
+			Sparse_assembly_method=Perform_assembly_using_lists;
+		}
+		else if (method == "two_arrays")
+		{
+			Sparse_assembly_method=Perform_assembly_using_two_arrays;
+		}
+		else
+		{
+			throw_runtime_error("Unknown sparse assembly method: " + method);
+		}
+    }
+
+
+	std::string Problem::get_sparse_assembly_method()
 	{
+		switch (Sparse_assembly_method)
+		{
+		case Perform_assembly_using_vectors_of_pairs:
+			return "vectors_of_pairs";
+		case Perform_assembly_using_two_vectors:
+			return "two_vectors";
+		case Perform_assembly_using_maps:
+			return "maps";
+		case Perform_assembly_using_lists:
+			return "lists";
+		case Perform_assembly_using_two_arrays:
+			return "two_arrays";
+		default:
+			return "unknown";
+		}
+	}
+
+    std::vector<std::complex<double>> Problem::get_bifurcation_eigenvector()
+    {
 		if (bifurcation_tracking_mode == "")
 			return std::vector<std::complex<double>>();
 		oomph::Vector<oomph::DoubleVector> be;
@@ -1108,6 +1255,54 @@ namespace pyoomph
 		}
 		return res;
 	}
+
+	void Problem::start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode)
+	
+	{
+		reset_assembly_handler_to_default();
+		this->assembly_handler_pt() = new PeriodicOrbitHandler(this, T,history,bspline_order,gl_order,knots,T_constraint_mode);
+	}
+
+	void Problem::reset_assembly_handler_to_default()
+	{
+		/*if (dynamic_cast<pyoomph::PythonAssemblyHandler *>(assembly_handler_pt()))
+		{
+      		dynamic_cast<pyoomph::PythonAssemblyHandler *>(assembly_handler_pt())->finalize(this);
+			assembly_handler_pt()=new oomph::AssemblyHandler(); // Dummy to be deleted by the super call
+			oomph::Problem::reset_assembly_handler_to_default();
+		}
+		else
+		{*/
+			oomph::Problem::reset_assembly_handler_to_default();
+		//}
+	}
+
+	void Problem::reset_augmented_dof_vector_to_nonaugmented()
+	{
+		if (n_unaugmented_dofs == 0)
+			return;		
+		this->GetDofPtr().resize(n_unaugmented_dofs);
+    	this->GetDofDistributionPt()->build(this->communicator_pt(),n_unaugmented_dofs, false);    
+    	this->GetSparcseAssembleWithArraysPA().resize(0);
+		n_unaugmented_dofs=0;
+	}
+
+	/*void Problem::start_custom_augmented_system(oomph::AssemblyHandler *handler)
+	{
+		
+		reset_assembly_handler_to_default();
+		if (dynamic_cast<pyoomph::PythonAssemblyHandler *>(handler))
+		{
+			dynamic_cast<pyoomph::PythonAssemblyHandler *>(handler)->initialize(this);
+			this->assembly_handler_pt() = handler;
+		}		
+		else
+		{
+			throw_runtime_error("Cannot set a non-python assembly handler");
+		}
+		
+	}*/
+
 
 	void Problem::start_bifurcation_tracking(const std::string param, const std::string typus, const bool &blocksolve, const std::vector<double> &eigenv1, const std::vector<double> &eigenv2, const double &omega, std::map<std::string, std::string> special_residual_forms)
 	{
@@ -1265,6 +1460,54 @@ namespace pyoomph
 		}
 	}
 
+	std::vector<double> Problem::get_second_order_directional_derivative(std::vector<double> dir)
+	{
+		if (dof_distribution_pt()->nrow_local()!=dir.size()) throw_runtime_error("Mismatch in size of dir vector and the number of DoFs");
+		
+		/*
+		oomph::DoubleVectorWithHaloEntries d1;
+		oomph::Vector<oomph::DoubleVectorWithHaloEntries> d2(1);
+		oomph::Vector<oomph::DoubleVectorWithHaloEntries> res(1);
+    	d1.build(dof_distribution_pt(), 0.0);
+    	d2[0].build(dof_distribution_pt(), 0.0);
+		res[0].build(dof_distribution_pt(), 0.0);
+		for (unsigned int i=0;i<dir.size();i++) 
+		{
+			d1[i]=dir[i];
+			d2[0][i]=dir[i];
+		}
+		this->get_hessian_vector_products(d1,d2,res);
+		std::vector<double> result(this->ndof(), 0.0);
+		for (unsigned int i=0;i<this->ndof();i++) result[i]=0.5*res[0][i];
+		return result;
+		*/
+
+		std::vector<double> result(this->ndof(), 0.0);
+		const unsigned long n_elements = mesh_pt()->nelement();
+		for (unsigned int ne = 0; ne < n_elements; ne++)
+		{
+			BulkElementBase *elem_pt = dynamic_cast<BulkElementBase *>(mesh_pt()->element_pt(ne));
+			const unsigned nvar = assembly_handler_pt()->ndof(elem_pt);
+			oomph::DenseMatrix<double> hessian_buffer(nvar, nvar * nvar, 0.0);
+			elem_pt->assemble_hessian_tensor(hessian_buffer);
+			for (unsigned int i = 0; i < nvar; i++)
+			{
+				unsigned iG = assembly_handler_pt()->eqn_number(elem_pt, i);
+				for (unsigned int j = 0; j < nvar; j++)
+				{
+					unsigned jG = assembly_handler_pt()->eqn_number(elem_pt, j);
+					for (unsigned int k = 0; k < nvar; k++)
+					{
+						double hval = hessian_buffer(i, k * nvar + j);						
+						unsigned kG = assembly_handler_pt()->eqn_number(elem_pt, k);
+						result[iG]+=hval*dir[jG]*dir[kG];
+					}
+				}
+			}
+		}
+		return result;
+	}
+
 	SparseRank3Tensor Problem::assemble_hessian_tensor(bool symmetric)
 	{
 		SparseRank3Tensor result(this->ndof(), symmetric);
@@ -1296,6 +1539,825 @@ namespace pyoomph
 		return result;
 	}
 
+
+//#define PYOOMPH_PERIODIC_ORBIT_BAND_MATRIX  
+#ifdef PYOOMPH_PERIODIC_ORBIT_BAND_MATRIX  
+	class PeriodicOrbitAssemblyBlockDenseMatrix : public oomph::DenseMatrix<double>
+	{
+		private:
+			unsigned NT;
+			unsigned base_ndof;
+			//std::map<unsigned,std::map<unsigned,oomph::DenseMatrix<double>>> block_data;
+			double ***block_data;
+		public:
+			PeriodicOrbitAssemblyBlockDenseMatrix(unsigned _NT) : oomph::DenseMatrix<double>(), NT(_NT), base_ndof(0), block_data(NULL)
+			{
+				block_data=new double**[NT+1]();
+				for (unsigned i = 0; i < NT+1; i++)
+				{
+					block_data[i]=new double*[NT+1]();					
+				}
+
+			}
+
+			void clear_block_data()
+			{
+					for (unsigned i = 0; i < NT+1; i++)
+					{
+						for (unsigned j = 0; j < NT+1; j++)
+						{
+							if (block_data[i][j])delete block_data[i][j];
+						}
+						delete block_data[i];
+					}
+			}
+
+			~PeriodicOrbitAssemblyBlockDenseMatrix()
+			{
+				if (block_data)
+				{
+					clear_block_data();
+					delete block_data;
+				}
+			}
+			
+			void resize(const unsigned long& n)
+    		{				
+      			oomph::DenseMatrix<double>::resize(n); //TODO: Remove
+				N=n;
+				M=n;
+				if ((n-1)%NT!=0) throw_runtime_error("Invalid size for block matrix");
+				//if (base_ndof!=(n-1)/NT) block_data.clear();							
+				if (block_data)
+				{
+					clear_block_data();
+					delete block_data;
+				}
+				block_data=new double**[NT+1]();
+				for (unsigned i = 0; i < NT+1; i++)
+				{
+					block_data[i]=new double*[NT+1]();					
+				}
+				base_ndof=(n-1)/NT;				
+    		}
+        		
+    		void initialise(const double& val)
+    		{
+				oomph::DenseMatrix<double>::initialise(val); //TODO: Remove
+				if (val!=0.0) throw_runtime_error("Cannot initialise block matrix with non-zero value");
+				if (block_data) clear_block_data();
+    		}
+			
+    		void resize(const unsigned long& n, const unsigned long& m)
+			{
+				throw_runtime_error("Cannot resize block matrix like this");
+			}
+    
+    		void resize(const unsigned long& n,const unsigned long& m,const double& initial_value)
+			{
+				throw_runtime_error("Cannot resize block matrix like this");
+			}
+
+    		inline double& entry(const unsigned long& i, const unsigned long& j) override
+			{		
+				unsigned ib=i/base_ndof;
+				unsigned jb=j/base_ndof;
+				unsigned ioff=i%base_ndof;
+				unsigned joff=j%base_ndof;
+				if (!block_data[ib]) block_data[ib]=new double*[NT+1]();
+				if (!block_data[ib][jb]) block_data[ib][jb]=new double[base_ndof*base_ndof]();
+				return block_data[ib][jb][ioff*base_ndof+joff];
+			}
+    
+    		inline double get_entry(const unsigned long& i, const unsigned long& j) const
+    		{      
+				unsigned ib=i/base_ndof;
+				unsigned jb=j/base_ndof;
+				unsigned ioff=i%base_ndof;
+				unsigned joff=j%base_ndof;
+				if (!block_data[ib]) return 0.0;
+				if (!block_data[ib][jb]) return 0.0;
+				return block_data[ib][jb][ioff*base_ndof+joff];			
+			}
+				
+			inline double operator()(const unsigned long& i, const unsigned long& j) const
+    		{
+      			return (this)->get_entry(i, j);
+    		}
+    
+    		inline double& operator()(const unsigned long& i, const unsigned long& j)
+    		{
+      			return (this)->entry(i, j);
+    		}
+
+			const double ***get_block_data() const
+			{
+				return (const double ***)block_data;
+			}
+			unsigned get_numblocks() const
+			{
+				return NT+1;
+			}
+
+			unsigned get_nbasedof() const
+			{
+				return base_ndof;
+			}
+
+	};
+
+
+
+
+	class PeriodicOrbitAssemblyBlockBandMatrix : public oomph::DenseMatrix<double>
+	{
+		/* 
+			A periodic band matrix (consisting of NTxNT blocks) with bandwidth b
+			Also, an additional row and column is added at the end (for the period constraint)
+		*/
+		protected:
+			unsigned NT; // Number of blocks
+			unsigned bandwidth; // Bandwidth
+			unsigned base_ndof; // Number of dofs per block
+			oomph::Vector<double> data;
+		public:
+			PeriodicOrbitAssemblyBlockBandMatrix(unsigned _NT,unsigned _b) : oomph::DenseMatrix<double>(), NT(_NT), bandwidth(_b), base_ndof(0), data()
+			{
+				
+			}
+
+			~PeriodicOrbitAssemblyBlockBandMatrix()
+			{
+				//if (data) delete data;
+			}
+
+			void resize(const unsigned long& n)
+    		{		
+				// TODO: Potentially do not realloc here if N==M==n 
+      			oomph::DenseMatrix<double>::resize(n); //TODO: Remove
+				N=n;
+				M=n;
+				if ((n-1)%NT!=0) throw_runtime_error("Invalid size for block matrix");
+				base_ndof=(n-1)/NT;
+				data.resize(((2*bandwidth+1)*base_ndof*base_ndof+1)*NT+n);						
+    		}
+        		
+    		void initialise(const double& val)
+    		{
+				std::cout << "INITIALISE " << val << std::endl;
+				oomph::DenseMatrix<double>::initialise(val); //TODO: Remove
+				data.initialise(val);
+    		}
+			
+    		void resize(const unsigned long& n, const unsigned long& m)
+			{
+				throw_runtime_error("Cannot resize block matrix like this");
+			}
+    
+    		void resize(const unsigned long& n,const unsigned long& m,const double& initial_value)
+			{
+				throw_runtime_error("Cannot resize block matrix like this");
+			}
+
+			inline unsigned get_dataindex(const unsigned long& i, const unsigned long& j) const
+			{
+				std::cout << "GET DATA INDEX " << i << " " << j << std::endl;
+				unsigned ib=i/base_ndof;
+				if (ib>=NT) 
+				{
+					throw_runtime_error("TODO TIME COL");
+				}
+				unsigned jb=j/base_ndof;
+				if (jb>=NT) 
+				{
+					throw_runtime_error("TODO TIME ROW");
+				}
+				int diff=(int)jb-(int)ib;
+				if (diff>(int)bandwidth)
+				{
+					throw_runtime_error("TODO BANDWIDTH1");
+				}
+				else if  (-diff>(int)bandwidth)
+				{
+					throw_runtime_error("TODO BANDWIDTH2");
+				}
+				unsigned offset=ib*((2*bandwidth+1)*base_ndof*base_ndof+1); // row block offset
+				int blockindexj=bandwidth+diff;
+				offset+=(bandwidth+diff)*base_ndof*base_ndof; // column block offset
+				unsigned ioff=i%base_ndof;
+				unsigned joff=j%base_ndof;
+
+				return offset+(ioff*base_ndof+joff);
+			}
+
+			inline double& entry(const unsigned long& i, const unsigned long& j) override
+			{		
+				return data[get_dataindex(i,j)];
+			}
+    
+    		inline double get_entry(const unsigned long& i, const unsigned long& j) const override
+    		{      
+				return data[get_dataindex(i,j)];
+			}
+				
+			 double operator()(const unsigned long& i, const unsigned long& j) const override
+    		{
+      			return (this)->get_entry(i, j);
+    		}
+    
+    		 double& operator()(const unsigned long& i, const unsigned long& j) override
+    		{
+				std::cout << "OPERATOR " << i << " " << j << std::endl;
+      			return (this)->entry(i, j);
+    		}
+
+			
+
+	};
+
+#endif
+
+ 	void Problem::sparse_assemble_row_or_column_compressed_for_periodic_orbit(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residuals,bool compressed_row_flag)
+  	{    
+		// Periodic orbits would have very huge elemental Jacobians, so we must assemble them with block jacobians
+		
+    	const unsigned long n_elements = mesh_pt()->nelement();
+    	unsigned long el_lo = 0;
+    	unsigned long el_hi = n_elements - 1;
+
+#ifdef OOMPH_HAS_MPI    
+		if (!Problem_has_been_distributed)
+		{
+		el_lo = First_el_for_assembly[Communicator_pt->my_rank()];
+		el_hi = Last_el_plus_one_for_assembly[Communicator_pt->my_rank()] - 1;
+		}
+#endif
+
+		unsigned ndof = this->ndof();
+		const unsigned n_vector = residuals.size();    
+		const unsigned n_matrix = column_or_row_index.size();    
+		std::cout << "Sparse assembly for periodic orbit:"  << n_vector << "  " << n_matrix << std::endl;
+		if (n_vector != 1 || n_matrix != 1)
+		{
+			throw_runtime_error("Periodic orbit assembly only supports one vector and one matrix");
+		}
+		//oomph::AssemblyHandler* const assembly_handler_pt = this->assembly_handler_pt();
+		PeriodicOrbitHandler* const assembly_handler_pt = dynamic_cast<PeriodicOrbitHandler*>(this->assembly_handler_pt());
+		if (!assembly_handler_pt)
+		{
+			throw_runtime_error("Periodic orbit assembly only supports PeriodicOrbitHandler");
+		}
+
+#ifdef OOMPH_HAS_MPI
+    	bool doing_residuals = false;
+		if (dynamic_cast<oomph::ParallelResidualsHandler*>(this->assembly_handler_pt()) != 0)
+		{
+			doing_residuals = true;
+		}
+#endif
+
+#ifdef PARANOID
+		if (row_or_column_start.size() != n_matrix)
+		{
+		std::ostringstream error_stream;
+		error_stream << "Error: " << std::endl
+					<< "row_or_column_start.size() "
+					<< row_or_column_start.size() << " does not equal "
+					<< "column_or_row_index.size() "
+					<< column_or_row_index.size() << std::endl;
+		throw OomphLibError(
+			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
+		}
+
+		if (value.size() != n_matrix)
+		{
+		std::ostringstream error_stream;
+		error_stream
+			<< "Error in Problem::sparse_assemble_row_or_column_compressed "
+			<< std::endl
+			<< "value.size() " << value.size() << " does not equal "
+			<< "column_or_row_index.size() " << column_or_row_index.size()
+			<< std::endl
+			<< std::endl
+			<< std::endl;
+		throw OomphLibError(
+			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
+		}
+#endif
+
+		//oomph::Vector<oomph::Vector<std::map<unsigned, double>>> matrix_data_map(n_matrix);
+		/*for (unsigned m = 0; m < n_matrix; m++)
+		{
+			matrix_data_map[m].resize(ndof);
+		}*/
+		oomph::Vector<std::map<unsigned, double>> matrix_data_map(ndof);		
+
+		for (unsigned v = 0; v < n_vector; v++)
+		{
+			residuals[v] = new double[ndof];
+			for (unsigned i = 0; i < ndof; i++)
+			{
+				residuals[v][i] = 0;
+			}
+		}
+
+
+#ifdef OOMPH_HAS_MPI
+    	double t_assemble_start = 0.0;
+		if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+		{
+		Elemental_assembly_time.resize(n_elements);
+		}
+#endif
+
+
+    	{
+
+
+      		//oomph::Vector<oomph::Vector<double>> el_residuals(n_vector);
+      		//oomph::Vector<oomph::DenseMatrix<double>> el_jacobian(n_matrix);
+			oomph::Vector<double> el_residuals;
+	#ifdef PYOOMPH_PERIODIC_ORBIT_BAND_MATRIX
+			//PeriodicOrbitAssemblyBlockDenseMatrix el_jacobian(assembly_handler_pt->n_tsteps());
+			PeriodicOrbitAssemblyBlockBandMatrix el_jacobian(assembly_handler_pt->n_tsteps(),3); // TODO: Bandwidth
+	#else
+			oomph::DenseMatrix<double> el_jacobian;
+    #endif
+
+      		for (unsigned long e = el_lo; e <= el_hi; e++)
+      		{
+#ifdef OOMPH_HAS_MPI
+				if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+				{
+					t_assemble_start = oomph::TimingHelpers::timer();
+				}
+#endif
+        		oomph::GeneralisedElement* elem_pt = mesh_pt()->element_pt(e);
+
+#ifdef OOMPH_HAS_MPI
+        		if (!elem_pt->is_halo())
+        		{
+#endif
+          			const unsigned nvar = assembly_handler_pt->ndof(elem_pt);
+					/*for (unsigned v = 0; v < n_vector; v++)
+					{
+						el_residuals[v].resize(nvar);
+					}
+					for (unsigned m = 0; m < n_matrix; m++)
+					{
+						el_jacobian[m].resize(nvar);
+					}*/
+					el_residuals.resize(nvar);
+					el_jacobian.resize(nvar);
+
+          
+					//assembly_handler_pt->get_all_vectors_and_matrices(elem_pt, el_residuals, el_jacobian);
+					assembly_handler_pt->get_jacobian(elem_pt, el_residuals, el_jacobian);
+
+#ifdef PYOOMPH_PERIODIC_ORBIT_BAND_MATRIX
+					
+						//throw_runtime_error("TODO: Fill it in")		
+					
+#else
+					
+					for (unsigned i = 0; i < nvar; i++)
+					{
+						unsigned eqn_number = assembly_handler_pt->eqn_number(elem_pt, i);
+						residuals[0][eqn_number] += el_residuals[i];
+						for (unsigned j = 0; j < nvar; j++)
+						{
+							double value = el_jacobian(i, j);
+							if (std::fabs(value) > Numerical_zero_for_sparse_assembly)
+							{
+								unsigned unknown = assembly_handler_pt->eqn_number(elem_pt, j);	
+								if (compressed_row_flag)
+								{
+									matrix_data_map[eqn_number][unknown] += value;
+								}							
+								else
+								{	
+									matrix_data_map[unknown][eqn_number] += value;
+								}
+							}
+						}
+					}
+#endif
+
+#ifdef OOMPH_HAS_MPI
+        		} // endif halo element
+#endif
+
+
+#ifdef OOMPH_HAS_MPI        
+				if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+				{
+					Elemental_assembly_time[e] =oomph::TimingHelpers::timer() - t_assemble_start;
+				}
+#endif
+      		} // End of loop over the elements
+    	} // End of map assembly
+
+
+#ifdef OOMPH_HAS_MPI
+    	if ((!doing_residuals) && (!Problem_has_been_distributed) && Must_recompute_load_balance_for_assembly)
+    	{
+      		recompute_load_balanced_assembly();
+    	}
+
+    
+    	if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+    	{
+      		Must_recompute_load_balance_for_assembly = false;
+    	}
+#endif
+
+
+    
+    	//for (unsigned m = 0; m < n_matrix; m++)
+    	{
+			const unsigned m=0;
+      
+			row_or_column_start[m] = new int[ndof + 1];      
+			unsigned long entry_count = 0;
+			row_or_column_start[m][0] = entry_count;
+
+			
+			nnz[m] = 0;
+			for (unsigned long i_global = 0; i_global < ndof; i_global++)
+			{
+				//nnz[m] += matrix_data_map[m][i_global].size();
+				nnz[m] += matrix_data_map[i_global].size();
+			}
+      
+			column_or_row_index[m] = new int[nnz[m]];
+			value[m] = new double[nnz[m]];
+
+
+			for (unsigned long i_global = 0; i_global < ndof; i_global++)
+			{
+				row_or_column_start[m][i_global] = entry_count;
+				//if (matrix_data_map[m][i_global].empty())
+				if (matrix_data_map[i_global].empty())
+				{
+					continue;
+				}
+				//for (std::map<unsigned, double>::iterator it =matrix_data_map[m][i_global].begin();it != matrix_data_map[m][i_global].end();++it)
+				for (std::map<unsigned, double>::iterator it =matrix_data_map[i_global].begin();it != matrix_data_map[i_global].end();++it)
+				{
+					column_or_row_index[m][entry_count] = it->first;
+					value[m][entry_count] = it->second;				
+					entry_count++;
+				}
+			}
+      		row_or_column_start[m][ndof] = entry_count;
+    	}
+
+		if (Pause_at_end_of_sparse_assembly)
+		{
+			oomph::oomph_info << "Pausing at end of sparse assembly." << std::endl;
+			oomph::pause("Check memory usage now.");
+		}
+  	}
+
+    void Problem::sparse_assemble_row_or_column_compressed(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residual,bool compressed_row_flag)
+	{
+		if (dynamic_cast<PeriodicOrbitHandler*>(this->assembly_handler_pt()))
+		{
+			sparse_assemble_row_or_column_compressed_for_periodic_orbit(column_or_row_index,row_or_column_start,value,nnz,residual,compressed_row_flag);
+		}
+		else
+		{
+			oomph::Problem::sparse_assemble_row_or_column_compressed(column_or_row_index,row_or_column_start,value,nnz,residual,compressed_row_flag);
+		}
+		
+	}
+
+
+
+ 	void Problem::sparse_assemble_row_or_column_compressed_base_problem(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residuals,bool compressed_row_flag)
+  	{    				
+    	const unsigned long n_elements = mesh_pt()->nelement();
+    	unsigned long el_lo = 0;
+    	unsigned long el_hi = n_elements - 1;
+
+#ifdef OOMPH_HAS_MPI    
+		if (!Problem_has_been_distributed)
+		{
+		if (Communicator_pt->nproc() > 1) throw_runtime_error("This likely does not work in parallel");
+		el_lo = First_el_for_assembly[Communicator_pt->my_rank()];
+		el_hi = Last_el_plus_one_for_assembly[Communicator_pt->my_rank()] - 1;
+		} else throw_runtime_error("This likely does not work in distributed parallel");
+#endif
+
+		unsigned ndof = this->get_n_unaugmented_dofs();
+		if (this->get_n_unaugmented_dofs()==0) throw_runtime_error("This only works if you have augmented dofs");
+		const unsigned n_vector = residuals.size();    
+		const unsigned n_matrix = column_or_row_index.size();    		
+		oomph::AssemblyHandler* const assembly_handler_pt = this->assembly_handler_pt();
+				
+#ifdef OOMPH_HAS_MPI
+    	bool doing_residuals = false;
+		if (dynamic_cast<oomph::ParallelResidualsHandler*>(this->assembly_handler_pt()) != 0)
+		{
+			doing_residuals = true;
+		}
+#endif
+
+#ifdef PARANOID
+		if (row_or_column_start.size() != n_matrix)
+		{
+		std::ostringstream error_stream;
+		error_stream << "Error: " << std::endl
+					<< "row_or_column_start.size() "
+					<< row_or_column_start.size() << " does not equal "
+					<< "column_or_row_index.size() "
+					<< column_or_row_index.size() << std::endl;
+		throw OomphLibError(
+			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
+		}
+
+		if (value.size() != n_matrix)
+		{
+		std::ostringstream error_stream;
+		error_stream
+			<< "Error in Problem::sparse_assemble_row_or_column_compressed "
+			<< std::endl
+			<< "value.size() " << value.size() << " does not equal "
+			<< "column_or_row_index.size() " << column_or_row_index.size()
+			<< std::endl
+			<< std::endl
+			<< std::endl;
+		throw OomphLibError(
+			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
+		}
+#endif
+
+		oomph::Vector<oomph::Vector<std::map<unsigned, double>>> matrix_data_map(n_matrix);
+		for (unsigned m = 0; m < n_matrix; m++)
+		{
+			matrix_data_map[m].resize(ndof);
+		}		
+
+		for (unsigned v = 0; v < n_vector; v++)
+		{
+			residuals[v] = new double[ndof];
+			for (unsigned i = 0; i < ndof; i++)
+			{
+				residuals[v][i] = 0;
+			}
+		}
+
+
+#ifdef OOMPH_HAS_MPI
+    	double t_assemble_start = 0.0;
+		if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+		{
+		Elemental_assembly_time.resize(n_elements);
+		}
+#endif
+
+
+    	{
+
+
+      		oomph::Vector<oomph::Vector<double>> el_residuals(n_vector);
+      		oomph::Vector<oomph::DenseMatrix<double>> el_jacobian(n_matrix);
+			//oomph::Vector<double> el_residuals;
+	
+      		for (unsigned long e = el_lo; e <= el_hi; e++)
+      		{
+#ifdef OOMPH_HAS_MPI
+				if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+				{
+					t_assemble_start = oomph::TimingHelpers::timer();
+				}
+#endif
+        		oomph::GeneralisedElement* elem_pt = mesh_pt()->element_pt(e);
+
+#ifdef OOMPH_HAS_MPI
+        		if (!elem_pt->is_halo())
+        		{
+#endif
+          			const unsigned nvar = assembly_handler_pt->ndof(elem_pt);
+					for (unsigned v = 0; v < n_vector; v++)
+					{
+						el_residuals[v].resize(nvar);
+					}
+					for (unsigned m = 0; m < n_matrix; m++)
+					{
+						el_jacobian[m].resize(nvar);
+					}
+					//el_residuals.resize(nvar);
+					//el_jacobian.resize(nvar);
+
+          
+					assembly_handler_pt->get_all_vectors_and_matrices(elem_pt, el_residuals, el_jacobian);
+					//assembly_handler_pt->get_jacobian(elem_pt, el_residuals, el_jacobian);
+
+
+					
+					
+					
+					for (unsigned i = 0; i < nvar; i++)
+					{
+						unsigned eqn_number = assembly_handler_pt->eqn_number(elem_pt, i);
+						// Add the contribution to the residuals
+            			for (unsigned v = 0; v < n_vector; v++)
+            			{
+							residuals[v][eqn_number] += el_residuals[v][i];
+						}
+						
+						for (unsigned j = 0; j < nvar; j++)
+						{
+							// Loop over the matrices
+              				for (unsigned m = 0; m < n_matrix; m++)
+              				{
+								double value = el_jacobian[m](i, j);
+								if (std::fabs(value) > Numerical_zero_for_sparse_assembly)
+								{
+									unsigned unknown = assembly_handler_pt->eqn_number(elem_pt, j);	
+									if (compressed_row_flag)
+									{
+										matrix_data_map[m][eqn_number][unknown] += value;
+									}							
+									else
+									{	
+										matrix_data_map[m][unknown][eqn_number] += value;
+									}
+								}
+							}
+						}
+					}
+
+#ifdef OOMPH_HAS_MPI
+        		} // endif halo element
+#endif
+
+
+#ifdef OOMPH_HAS_MPI        
+				if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+				{
+					Elemental_assembly_time[e] =oomph::TimingHelpers::timer() - t_assemble_start;
+				}
+#endif
+      		} // End of loop over the elements
+    	} // End of map assembly
+
+
+#ifdef OOMPH_HAS_MPI
+    	if ((!doing_residuals) && (!Problem_has_been_distributed) && Must_recompute_load_balance_for_assembly)
+    	{
+      		recompute_load_balanced_assembly();
+    	}
+
+    
+    	if ((!doing_residuals) && Must_recompute_load_balance_for_assembly)
+    	{
+      		Must_recompute_load_balance_for_assembly = false;
+    	}
+#endif
+
+
+    
+    	for (unsigned m = 0; m < n_matrix; m++)
+    	{		
+      
+			row_or_column_start[m] = new int[ndof + 1];      
+			unsigned long entry_count = 0;
+			row_or_column_start[m][0] = entry_count;
+
+			
+			nnz[m] = 0;
+			for (unsigned long i_global = 0; i_global < ndof; i_global++)
+			{
+				nnz[m] += matrix_data_map[m][i_global].size();
+				//nnz[m] += matrix_data_map[i_global].size();
+			}
+      
+			column_or_row_index[m] = new int[nnz[m]];
+			value[m] = new double[nnz[m]];
+
+
+			for (unsigned long i_global = 0; i_global < ndof; i_global++)
+			{
+				row_or_column_start[m][i_global] = entry_count;
+				if (matrix_data_map[m][i_global].empty())
+				//if (matrix_data_map[i_global].empty())
+				{
+					continue;
+				}
+				for (std::map<unsigned, double>::iterator it =matrix_data_map[m][i_global].begin();it != matrix_data_map[m][i_global].end();++it)
+				//for (std::map<unsigned, double>::iterator it =matrix_data_map[i_global].begin();it != matrix_data_map[i_global].end();++it)
+				{
+					column_or_row_index[m][entry_count] = it->first;
+					value[m][entry_count] = it->second;				
+					entry_count++;
+				}
+			}
+      		row_or_column_start[m][ndof] = entry_count;
+    	}
+
+		if (Pause_at_end_of_sparse_assembly)
+		{
+			oomph::oomph_info << "Pausing at end of sparse assembly." << std::endl;
+			oomph::pause("Check memory usage now.");
+		}
+  	}
+
+
+
+
+	void Problem::add_augmented_dofs(DofAugmentations &aug)
+	{
+		if (this->n_unaugmented_dofs!=0)
+		{
+			throw_runtime_error("Cannot add augmented dofs to a problem that already has augmented dofs");
+		}
+		this->n_unaugmented_dofs=this->ndof();
+		unsigned vindex=0,sindex=0,pindex=0;
+		for (unsigned int ti=0;ti<aug.types.size();ti++)
+		{
+			if (aug.types[ti]==0)
+			{
+				auto &v=aug.augmented_vectors[vindex];
+				for (unsigned i=0;i<v.size();i++)
+				{
+					this->GetDofPtr().push_back(&(v[i]));
+				}
+				vindex++;
+			}
+			else if (aug.types[ti]==1)
+			{
+				this->GetDofPtr().push_back(&(aug.augmented_scalars[sindex]));
+				sindex++;
+			}
+			else if (aug.types[ti]==2)
+			{
+				this->GetDofPtr().push_back(&this->get_global_parameter(aug.augmented_parameters[sindex])->value());
+				pindex++;
+			}
+		}
+		aug.split_offsets.push_back(this->GetDofPtr().size());
+		aug.finalized=true;
+
+		this->GetDofDistributionPt()->build(this->communicator_pt(),this->GetDofPtr().size(), false);
+	}
+
+
+	void Problem::assemble_multiassembly(std::vector<std::string> what,std::vector<std::string> contributions,std::vector<std::string> params,std::vector<std::vector<double>> & hessian_vectors,std::vector<unsigned> & hessian_vector_indices,std::vector<std::vector<double>> & data,std::vector<std::vector<int>> &csrdata,unsigned & ndof,std::vector<int> & return_indices)
+	{
+		if (what.size()!=contributions.size()) throw_runtime_error("Number of what and contributions must match");
+		oomph::Vector<int*> column_or_row_index,row_or_column_start;		
+		oomph::Vector<double*> value;
+		oomph::Vector<unsigned> nnz;
+		oomph::Vector<double*> residuals;
+
+		oomph::AssemblyHandler * old_handler=this->assembly_handler_pt();
+		pyoomph::CustomMultiAssembleHandler * new_handler=new pyoomph::CustomMultiAssembleHandler(this,what,contributions,params,hessian_vectors,hessian_vector_indices,return_indices);
+	    ndof = this->get_n_unaugmented_dofs();
+		this->assembly_handler_pt()=new_handler;
+		unsigned nvector=new_handler->n_vector();
+		unsigned nmatrix=new_handler->n_matrix();
+		column_or_row_index.resize(nmatrix);
+		row_or_column_start.resize(nmatrix);
+		value.resize(nmatrix);
+		nnz.resize(nmatrix);
+		residuals.resize(nvector);
+		this->sparse_assemble_row_or_column_compressed_base_problem(column_or_row_index,row_or_column_start,value,nnz,residuals,true);
+		this->assembly_handler_pt()=old_handler;
+		data.resize(nvector+nmatrix);
+		csrdata.resize(2*nmatrix);
+		for (unsigned int i=0;i<nvector;i++) 
+		{
+			data[i].resize(ndof);
+			for (unsigned int j=0;j<ndof;j++) data[i][j]=residuals[i][j];
+			delete [] residuals[i];
+		}
+		for (unsigned int i=0;i<nmatrix;i++) 
+		{
+			data[nvector+i].resize(nnz[i]);
+			
+			for (unsigned int j=0;j<nnz[i];j++) data[nvector+i][j]=value[i][j];
+			csrdata[2*i].resize(ndof+1);
+			for (unsigned int j=0;j<ndof+1;j++) csrdata[2*i][j]=row_or_column_start[i][j];
+			csrdata[2*i+1].resize(nnz[i]);
+			for (unsigned int j=0;j<nnz[i];j++) csrdata[2*i+1][j]=column_or_row_index[i][j];
+			delete [] value[i];
+			delete [] row_or_column_start[i];
+			delete [] column_or_row_index[i];
+		}
+
+		//TODO: Fill the data
+	}
+
+
+
+
+
+
+
+
+
 	void GlobalParameterDescriptor::set_analytic_derivative(bool active)
 	{
 		if (active)
@@ -1306,6 +2368,70 @@ namespace pyoomph
 	bool GlobalParameterDescriptor::get_analytic_derivative()
 	{
 		return problem->is_dparameter_calculated_analytically(&Value);
+	}
+
+
+
+
+	DofAugmentations::DofAugmentations(Problem * _problem) : problem(_problem)
+	{
+		total_length=problem->ndof();
+		finalized=false;
+		split_offsets.push_back(0);
+	}
+    
+	unsigned DofAugmentations::add_vector(const std::vector<double> & v) 
+	{
+		if (finalized) throw_runtime_error("Cannot modify the augmented DoFs once they are finalized");
+		augmented_vectors.push_back(v); 
+		types.push_back(0); 
+		unsigned start=total_length; 
+		split_offsets.push_back(start);
+		total_length+=v.size(); 
+		return start;
+	}
+    
+	unsigned DofAugmentations::add_scalar(const double & s) 
+	{
+		if (finalized) throw_runtime_error("Cannot modify the augmented DoFs once they are finalized");
+		augmented_scalars.push_back(s);
+		types.push_back(1); 		
+		unsigned start=total_length; 
+		split_offsets.push_back(start);
+		total_length+=1; 
+		return start;
+	}
+    unsigned DofAugmentations::add_parameter(std::string p) 
+	{
+		if (finalized) throw_runtime_error("Cannot modify the augmented DoFs once they are finalized");
+		augmented_parameters.push_back(p); 
+		types.push_back(2); 		
+		unsigned start=total_length; 
+		split_offsets.push_back(start);
+		total_length+=1; 
+		return start;
+	}      
+
+	std::vector<std::vector<double>> DofAugmentations::split(unsigned int startindex,int endindex)
+	{
+		if (!finalized) throw_runtime_error("Cannot split non-finalized dofs");
+		auto  dofptr=this->problem->GetDofPtr();		
+		if (dofptr.size()!=split_offsets.back()) throw_runtime_error("Invalid number of dofs. Likely, the dofs has changed meanwhile");
+		std::vector<std::vector<double>> res;
+		if (endindex<0) endindex=split_offsets.size()+(endindex);		
+		if (endindex>=split_offsets.size())  throw_runtime_error("Invalid end index");
+		for (unsigned int i=startindex;i<endindex;i++)
+		{
+			unsigned length=split_offsets[i+1]-split_offsets[i];
+			//std::cout << "SPlIT INDEX "<< i << " " << length << " FROM " << split_offsets[i] << " TO " << split_offsets[i+1] <<std::endl;
+			res.push_back(std::vector<double>(length));
+			for (unsigned int vi=0;vi<length;vi++) 
+			{
+				//std::cout << "DOFPTR" << " at " << split_offsets[i]+vi << "  " << dofptr[split_offsets[i]+vi] <<std::endl << std::flush;
+				res.back()[vi]=*dofptr[split_offsets[i]+vi];
+			}
+		}
+		return res;
 	}
 
 }

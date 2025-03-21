@@ -29,6 +29,8 @@ This file is strongly based  on the oomph-lib library (see thirdparty/oomph-lib/
 
 #include "assembly_handler.h"
 #include <set>
+#include <complex>
+#include "mesh.h"
 
 namespace pyoomph
 {
@@ -99,6 +101,8 @@ namespace pyoomph
     }
 
     void get_eigenfunction(oomph::Vector<oomph::DoubleVector> &eigenfunction);
+
+    std::vector<std::complex<double>> get_nicely_rotated_eigenfunction();
 
     const double &omega() const { return Omega; }
 
@@ -334,6 +338,125 @@ namespace pyoomph
     void solve_full_system();
 
     //  void realign_C_vector(); //Reset the C-vector (which enforces the non-triviality of the eigenvector)
+  };
+
+
+  // Find a periodic orbit by this
+  class PeriodicBSplineBasis;
+  
+  class PeriodicOrbitHandler : public oomph::AssemblyHandler
+  {
+    protected:
+      Problem *Problem_pt;                    // Pointer to the problem class
+      unsigned Ndof;                          // Degrees of freedom of the original problem (non-augmented)
+      std::vector<std::vector<double>> Tadd; // Additional time steps
+      std::vector<double> x0; // Start point for the periodic orbit
+      std::vector<double> n0; // Start normal for the periodic orbit
+      double d_plane; // Plane offset for the Poincare section 
+      double T; // Period of the periodic orbit
+      unsigned T_global_eqn,n_element;      
+      oomph::Vector<int> Count;
+      PeriodicBSplineBasis *basis=NULL; // If nonzero, we use a B-spline basis, otherwise BDF2, central FD between the nodes or
+      bool floquet_mode; // if this is true (and basis==NULL), we use the Floquet mode, where we explictly have dofs for the periodic time point at s=1
+      std::vector<double> s_knots;
+      std::vector<double> backed_up_dofs;
+      // When we do not have a spline basis, we do finite differences. Here, we store the coefficients and indices
+      unsigned FD_ds_order;
+      unsigned T_constraint_mode; // 0: Plane constraint, 1: Period constraint
+      std::vector<std::vector<double>> du0ds; // Derivatives of the start orbit for the phase constraint
+      
+
+      oomph::Mesh * time_mesh;
+      oomph::Integral *collocation_gl;
+
+      std::vector<std::vector<double>> FD_ds_weights;
+      std::vector<std::vector<unsigned>> FD_ds_inds;
+      void get_jacobian_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_residuals_time_nodal_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+      void get_jacobian_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_residuals_bspline_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+      void get_jacobian_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_residuals_floquet_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+      void get_jacobian_collocation_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian);
+      void get_residuals_collocation_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt=NULL);
+    public:
+      void update_phase_constraint_information();
+      unsigned get_problem_ndof() { return Ndof; } // Returning the degrees of freedom of the original system (non-augmented)      
+      bool is_floquet_mode() {return floquet_mode;}
+      std::vector<std::tuple<double,double>> get_s_integration_samples(); // Returns tuples of (s,w), so that integral_0^1(f(U(s))*ds) ~= sum( f(U(s_i))*w_i )
+      PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint);
+      // Destructor (used for cleaning up memory)
+      ~PeriodicOrbitHandler();
+      unsigned n_tsteps() const {return 1+Tadd.size();}
+      unsigned long eqn_number(oomph::GeneralisedElement *const &elem_pt, const unsigned &ieqn_local);      
+      unsigned ndof(oomph::GeneralisedElement *const &elem_pt);
+      void get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals);
+      void get_jacobian(oomph::GeneralisedElement *const &elem_pt,oomph::Vector<double> &residuals,oomph::DenseMatrix<double> &jacobian);            
+      void get_dresiduals_dparameter(oomph::GeneralisedElement *const &elem_pt, double *const &parameter_pt, oomph::Vector<double> &dres_dparam);    
+      void get_djacobian_dparameter(oomph::GeneralisedElement *const &elem_pt, double *const &parameter_pt, oomph::Vector<double> &dres_dparam, oomph::DenseMatrix<double> &djac_dparam);
+      void backup_dofs();
+      void restore_dofs();
+      void set_dofs_to_interpolated_values(const double &s);
+      double get_knot_value(int i);
+      unsigned get_periodic_knot_index(int i);
+      double get_T() const {return T;}
+  };
+
+
+
+ // List of the tree residual contribution indices of each generated C code
+  class CustomMultiAssembleHandlerContributionList
+  {
+  public:
+    DynamicBulkElementCode *code;
+    std::vector<int> residual_indices; // index 0 is base state, 1 is mass matrix residual
+    CustomMultiAssembleHandlerContributionList(DynamicBulkElementCode *_code, const std::vector<int> & resinds) : code(_code) { residual_indices = resinds; }
+    CustomMultiAssembleHandlerContributionList() {}
+  };
+
+  class CustomMultiAssembleReturnIndexInfo
+  {
+    public:
+      int residual_index=-1;
+      int jacobian_index=-1;
+      int mass_matrix_index=-1;
+      std::map<double*,CustomMultiAssembleReturnIndexInfo> paramderivs;
+      std::map<std::tuple<int,bool>,CustomMultiAssembleReturnIndexInfo>  hessians;
+      bool hessian_require_mass_matrix=false;
+      std::vector<unsigned> hessian_vector_indices;      
+  };
+
+  class CustomMultiAssembleHandler : public oomph::AssemblyHandler
+  {
+    protected:
+      Problem *problem;
+      std::vector<std::string> & what;
+      std::vector<std::string> & contributions;
+      std::vector<std::string> & params;
+      std::vector<double *> parameters;
+      std::vector<int> hessian_vector_indices;
+      std::vector<std::vector<double>> & hessian_vectors;
+      std::vector<bool> hessian_vector_transposed;
+      bool transposed_hessians;
+      std::vector<std::string> unique_contributions;
+      std::vector<CustomMultiAssembleReturnIndexInfo> contribution_return_indices;
+      unsigned nmatrix,nvector;
+      int resolve_assembled_residual(oomph::GeneralisedElement *const &elem_pt, int residual_mode);
+      std::map<const pyoomph::DynamicBulkElementCode *, CustomMultiAssembleHandlerContributionList> residual_contribution_indices;
+      void setup_residual_contribution_map();
+    public:     
+      CustomMultiAssembleHandler(Problem *const &problem_pt,std::vector<std::string> & _what,std::vector<std::string> & _contributions,std::vector<std::string> & _params,std::vector<std::vector<double>> & _hessian_vectors, std::vector<unsigned> & _hessian_vector_indices,std::vector<int> & return_indices);
+      ~CustomMultiAssembleHandler() {}      
+      unsigned ndof(oomph::GeneralisedElement *const &elem_pt);
+      unsigned long eqn_number(oomph::GeneralisedElement *const &elem_pt, const unsigned &ieqn_local);      
+      void get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals);
+      void get_jacobian(oomph::GeneralisedElement *const &elem_pt,oomph::Vector<double> &residuals,oomph::DenseMatrix<double> &jacobian);            
+      void get_all_vectors_and_matrices(oomph::GeneralisedElement* const& elem_pt,oomph::Vector<oomph::Vector<double>>& vec,oomph::Vector<oomph::DenseMatrix<double>>& matrix);
+      unsigned n_matrix() const {return nmatrix;}
+      unsigned n_vector() const {return nvector;}
+      
+      
+
   };
 
 }

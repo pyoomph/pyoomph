@@ -263,7 +263,9 @@ class EnforcedBC(InterfaceEquations):
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         must_reapply=False
         if self.set_zero_on_normal_mode_eigensolve:
-            if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
+            pr=self.get_mesh()._problem
+            from ..generic.bifurcation_tools import _NormalModeBifurcationTrackerBase
+            if pr.get_bifurcation_tracking_mode() == "azimuthal" or (pr.get_custom_assembler() is not None and isinstance(pr.get_custom_assembler(),_NormalModeBifurcationTrackerBase)): 
                 #if self.get_mesh()._problem._azimuthal_mode_param_m.value!=0:
                 return False  # Don't do anything in this case. It would mess up everything!
         mesh=eqtree._mesh
@@ -471,8 +473,12 @@ class AxisymmetryBC(InterfaceEquations):
                 
     def _before_stationary_or_transient_solve(self, eqtree:"EquationTree", stationary:bool)->bool:
         must_reapply=False
-        if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
+        #if self.get_mesh()._problem.get_bifurcation_tracking_mode() == "azimuthal": 
+        from ..generic.bifurcation_tools import _NormalModeBifurcationTrackerBase
+        pr=self.get_mesh()._problem
+        if pr.get_bifurcation_tracking_mode() == "azimuthal" or (pr.get_custom_assembler() is not None and isinstance(pr.get_custom_assembler(),_NormalModeBifurcationTrackerBase)): 
             return False  # Don't do anything in this case. It would mess up everything!
+        
         mesh=eqtree._mesh
         assert mesh is not None        
         activated_bcs=set()
@@ -843,15 +849,26 @@ class PinWhere(PythonDirichletBC):
         if not self.active:
             return
         assert self.mesh is not None
-        if len(self.indexvals) > 0 or len(self.additional_vals) > 0:
-            raise RuntimeError("Cannot use PinWhere yet on non-positional DoFs")
+        if len(self.additional_vals) > 0:
+            raise RuntimeError("Cannot use PinWhere yet on interface fields")
+        
         for n in self.mesh.nodes():
-            for i, val in self.pinnedpositions.items():                
-                xv:List[float] = []
-                for xi in range(n.ndim()):
-                    xv.append(n.x(xi))
-                if self.where(*xv) == False:
-                    continue
+            # Check the where condition
+            xv:List[float] = []
+            for xi in range(n.ndim()):
+                xv.append(n.x(xi))
+            if self.where(*xv) == False:
+                continue
+            
+            for i, val in self.indexvals.items():            
+                if self.unpin_instead:
+                    n.unpin(i)
+                else:
+                    n.pin(i)
+                    if not (isinstance(val, bool) and val == True):                
+                        assert isinstance(val,float)
+                        n.set_value(i, val)
+            for i, val in self.pinnedpositions.items():                                                
                 if self.unpin_instead:
                     n.unpin_position(i)
                 else:

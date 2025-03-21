@@ -4,7 +4,7 @@ When you have python 3.9 to 3.13 installed,
 
 > python -m pip install pyoomph
 
-should install the basic framework. On Mac M1 processor systems, please execute it in a Rosetta2 terminal (see below).
+should install the basic framework. On Mac silicon processor systems (arm64, e.g. M1-M4), please execute it in a Rosetta2 terminal (see below).
 For the maximum performance and system-specific information, please refer to the sections below. 
 
 If you cannot manage to install it, refer to our [tutorial](https://pyoomph.readthedocs.io/). If this cannot help, you can ask for help c.diddens@utwente.nl
@@ -25,7 +25,7 @@ If you have installed via pip (see above), just make sure that you have the `gcc
 
 ## On Mac
 
-**If you have a recent Mac with an M1 chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up. Also, please downgrade `mkl` by
+**If you have a recent Mac with an Apple silicon (arm64) chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up. Also, please downgrade `mkl` by
 
 > python3 -m pip install mkl==2021.4.0
 
@@ -85,7 +85,7 @@ Install required python modules via
 
 > python3 -m pip install pybind11 gmsh commonmark six pyparsing pygments pillow numpy mpi4py kiwisolver fonttools cycler scipy rich python-dateutils packaging meshio matplotlib pygmsh pybind11-stubgen
 
-**If you have a recent Mac with an M1 chip**, install 
+**If you have a recent Mac with an Apple silicon (arm64) chip**, install 
 
 > python3 -m pip install mkl==2021.4.0
 

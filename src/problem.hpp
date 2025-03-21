@@ -48,7 +48,7 @@ namespace pyoomph
     std::string filename;
     JITFuncSpec_Table_FiniteElement_t *functable;
     FiniteElementCode *element_class;
-    std::map<std::string, int> integral_function_map;
+    std::map<std::string, int> integral_function_map,extremum_function_map;
     void *so_handle;
 
   public:
@@ -60,6 +60,7 @@ namespace pyoomph
     JITFuncSpec_Table_FiniteElement_t *get_func_table() { return functable; }
     int get_max_dt_order() const { return get_func_table()->max_dt_order; }
     int get_integral_function_index(std::string n);
+    int get_extremum_function_index(std::string n);
     unsigned _set_solved_residual(std::string name);
   };
 
@@ -133,6 +134,7 @@ namespace pyoomph
     std::map<std::string, unsigned> get_elemental_field_indices();
     int get_discontinuous_field_index(std::string name);
     int get_integral_function_index(std::string n) { return dyn->get_integral_function_index(n); }
+    int get_extremum_function_index(std::string n) { return dyn->get_extremum_function_index(n); }
     unsigned resolve_interface_dof_id(std::string n);
     std::string get_space_of_field(std::string name);
     bool has_moving_nodes() {return dyn->functable->moving_nodes;}
@@ -181,6 +183,7 @@ namespace pyoomph
    protected:
       friend class Problem;
       bool Require_jacobian;
+      std::string dparameter;
       std::vector<double> residuals;
       oomph::Vector<double> Jvals;
       oomph::Vector<int> Jcolumn_index,Jrow_start;      
@@ -188,7 +191,28 @@ namespace pyoomph
       bool require_jacobian() const {return Require_jacobian;}
       void set_custom_residuals(const std::vector<double> & r) {residuals=r;}
       void set_custom_jacobian(const std::vector<double> & Jv, const std::vector<int> & col_index,const std::vector<int> & row_start);      
-      CustomResJacInformation(bool req_J) : Require_jacobian(req_J) {}
+      std::string get_parameter_name() const {return dparameter;}
+      CustomResJacInformation(bool req_J,std::string parameter_name) : Require_jacobian(req_J), dparameter(parameter_name) {}
+  };
+
+  class DofAugmentations
+  {
+    protected:
+      friend class pyoomph::Problem;
+      Problem * problem;
+      std::vector<unsigned> types,split_offsets;
+      unsigned total_length;
+      std::vector<std::vector<double>> augmented_vectors;
+      std::vector<double> augmented_scalars;
+      std::vector<std::string> augmented_parameters;
+      bool finalized;
+    public:
+      DofAugmentations(Problem * _problem);
+      unsigned add_vector(const std::vector<double> & v);
+      unsigned add_scalar(const double & s);
+      unsigned add_parameter(std::string);
+      std::vector<std::vector<double>> split(unsigned startindex,int endindex);
+      
   };
 
   // Problem class
@@ -217,11 +241,19 @@ namespace pyoomph
     void actions_after_parameter_increase(double *const &parameter_pt) override;    
 
     double lambda_tracking_real = 0.0; // Real(lambda) for tracking of eigenbranches
+    virtual void sparse_assemble_row_or_column_compressed_for_periodic_orbit(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residuals,bool compressed_row_flag);
+    void sparse_assemble_row_or_column_compressed(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residual,bool compressed_row_flag) override;
+    unsigned n_unaugmented_dofs=0;
   public:
+    void sparse_assemble_row_or_column_compressed_base_problem(oomph::Vector<int*>& column_or_row_index,oomph::Vector<int*>& row_or_column_start,oomph::Vector<double*>& value,oomph::Vector<unsigned>& nnz,oomph::Vector<double*>& residuals,bool compressed_row_flag);
+    unsigned get_n_unaugmented_dofs() const {return n_unaugmented_dofs;}
     bool use_custom_residual_jacobian=false;
     bool improved_pitchfork_tracking_on_unstructured_meshes=false;
 
     double * get_lambda_tracking_real() {return &lambda_tracking_real;}
+
+    void set_sparse_assembly_method(const std::string & method);
+    std::string get_sparse_assembly_method();
     
     std::vector<DynamicBulkElementCode *> &get_bulk_element_codes() { return bulk_element_codes; }
     std::string get_bifurcation_tracking_mode() const { return bifurcation_tracking_mode; }
@@ -231,6 +263,11 @@ namespace pyoomph
     std::vector<double> get_arclength_dof_current_vector();
     void update_dof_vectors_for_continuation(const std::vector<double> & ddof, const std::vector<double> & curr);
     void set_dof_direction_arclength(std::vector<double> ddir);
+    void get_dofs(oomph::DoubleVector& dofs) const  override {oomph::Problem::get_dofs(dofs);}
+    void get_dofs(const unsigned& t, oomph::DoubleVector& dofs) const override;
+    void set_dofs(const oomph::DoubleVector& dofs) override {oomph::Problem::set_dofs(dofs);}
+    void set_dofs(const unsigned& t, oomph::DoubleVector& dof_pt) override;
+    void set_dofs(const unsigned& t, oomph::Vector<double*>& dof_pt) override;
     void adapt(unsigned &n_refined, unsigned &n_unrefined) override
     {
       std::pair<unsigned, unsigned> res = this->_adapt();
@@ -308,7 +345,7 @@ namespace pyoomph
     virtual void actions_after_parameter_increase(const  std::string &  paramname) {}
     virtual void actions_after_change_in_bifurcation_parameter() {}
     virtual void actions_before_newton_convergence_check() {}
-
+    void reset_assembly_handler_to_default() override;
     virtual std::vector<double> get_parameter_derivative(const std::string param);
     void activate_my_fold_tracking(double *const &parameter_pt, const oomph::DoubleVector &eigenvector, const bool &block_solve);
     void activate_my_fold_tracking(double *const &parameter_pt, const bool &block_solve);
@@ -322,6 +359,11 @@ namespace pyoomph
     void set_arc_length_theta_sqr(double thetasqr) {Theta_squared=thetasqr;}
     double get_arc_length_theta_sqr() {return Theta_squared;}    
     void start_bifurcation_tracking(const std::string param, const std::string typus, const bool &blocksolve, const std::vector<double> &eigenv1, const std::vector<double> &eigenv2, const double &omega, std::map<std::string, std::string> special_residual_forms);
+    //void start_custom_augmented_system(oomph::AssemblyHandler *handler);
+    void reset_augmented_dof_vector_to_nonaugmented();
+    void add_augmented_dofs(DofAugmentations &aug);
+    DofAugmentations * create_dof_augmentation() {return new DofAugmentations(this);}
+    void start_orbit_tracking(const std::vector<std::vector<double>> &history, const double &T,int bspline_order,int gl_order,std::vector<double> knots,unsigned T_constraint_mode);
     void after_bifurcation_tracking_step();
     double &global_parameter(const std::string &n);
 
@@ -356,10 +398,16 @@ namespace pyoomph
     {
      oomph::Problem::get_residuals(residuals);
     }
+    virtual void get_derivative_wrt_global_parameter_elemental_assembly(double* const& parameter_pt,oomph::DoubleVector &result)
+    {
+     oomph::Problem::get_derivative_wrt_global_parameter(parameter_pt,result);
+    }
     virtual void get_residuals(oomph::DoubleVector &residuals);
     virtual void get_jacobian(oomph::DoubleVector &residuals,oomph::CRDoubleMatrix &jacobian);
+    virtual void get_derivative_wrt_global_parameter(double* const& parameter_pt,oomph::DoubleVector& result);
     
     virtual SparseRank3Tensor assemble_hessian_tensor(bool symmetric);
+    virtual std::vector<double> get_second_order_directional_derivative(std::vector<double> dir);
     
     virtual void set_symmetric_hessian_assembly(bool active) {symmetric_hessian_assembly=active;}
     virtual bool get_symmetric_hessian_assembly() const {return symmetric_hessian_assembly;}
@@ -373,6 +421,8 @@ namespace pyoomph
     
     //	 virtual bool _globally_convergent_newton_method() {return Use_globally_convergent_newton_method;} // Damn this private decl
     void open_log_file(const std::string & fname,const bool & activate_logging=true);
+
+    void assemble_multiassembly(std::vector<std::string> what,std::vector<std::string> contributions,std::vector<std::string> params,std::vector<std::vector<double>> & hessian_vectors,std::vector<unsigned> & hessian_vector_indices,std::vector<std::vector<double>> & data,std::vector<std::vector<int>> &csrdata,unsigned & ndof,std::vector<int> & return_indices);
     
   };
 

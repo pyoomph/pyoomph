@@ -736,6 +736,19 @@ namespace pyoomph
 					return 0 + GiNaC::GiNaCShapeExpansion(repl);
 				}
 			}
+			else if (GiNaC::is_a<GiNaC::GiNaCMultiRetCallback>(inp))
+			{
+				const auto &sp = GiNaC::ex_to<GiNaC::GiNaCMultiRetCallback>(inp).get_struct();
+				GiNaC::ex invok = expressions::python_multi_cb_function(sp.invok.op(0), sp.invok.op(1).map(*this), sp.invok.op(2));
+				GiNaC::ex res = GiNaC::GiNaCMultiRetCallback(pyoomph::MultiRetCallback(sp.code, invok.map(*this), sp.retindex, sp.derived_by_arg));
+				invok = GiNaC::ex_to<GiNaC::GiNaCMultiRetCallback>(res).get_struct().invok;
+
+				/*if (code->resolve_multi_return_call(invok) < 0)
+				{
+					code->multi_return_calls.push_back(invok);
+				}*/
+				return res;
+			}
 			else if (GiNaC::is_a<GiNaC::GiNaCTestFunction>(inp))
 			{
 				auto &se = GiNaC::ex_to<GiNaC::GiNaCTestFunction>(inp).get_struct();
@@ -1823,6 +1836,7 @@ namespace pyoomph
 					{
 						GiNaC::ex mass_part_se = (*__SE_to_struct_hessian)(masspart2);
 						for_code->subexpressions = __SE_to_struct_hessian->subexpressions;
+						for_code->mark_nonconstant_mass_matrix(); // If we have a Hessian contribution, then we clearly have a changing mass matrix
 						os << indent << "           ADD_TO_MASS_HESSIAN_" << (hanging_eqns ? "HANG" : "NOHANG") << "_" << (hang ? "HANG" : "NOHANG") << "_" << (hang2 ? "HANG" : "NOHANG") << "(";
 						print_simplest_form(mass_part_se, os, csrc_opts);
 						os << ")" << std::endl;
@@ -1985,6 +1999,7 @@ namespace pyoomph
 				os << indent << "    ADD_TO_MASS_MATRIX_" << (hanging_eqns ? "HANG" : "NOHANG") << "_" << (hang ? "HANG" : "NOHANG") << "(";
 				//		    mass_part.evalf().print(GiNaC::print_csrc_FEM(os,&csrc_opts));
 				//          GiNaC::factor(GiNaC::normal(GiNaC::expand(GiNaC::expand(mass_part).evalf()))).print(GiNaC::print_csrc_FEM(os,&csrc_opts));
+				//std::cout << mass_part << std::endl;
 				print_simplest_form(mass_part, os, csrc_opts);
 				os << ")" << std::endl;
 			}
@@ -2346,7 +2361,7 @@ namespace pyoomph
 
 	FiniteElementCode::FiniteElementCode() : residual_index(0), residual_names({""}), equations(NULL), bulk_code(NULL), opposite_interface_code(NULL), residual(std::vector<GiNaC::ex>{0}), dx(this, false), dX(this, true),dx_unity(this, false), elemsize_Eulerian(this, false, true), elemsize_Lagrangian(this, true, true), elemsize_Eulerian_Cart(this, false, false), elemsize_Lagrangian_Cart(this, true, false), nodal_delta(this), stage(0), nodal_dim(0), lagr_dim(0), coordinate_sys(&__no_coordinate_system), _x(GiNaC::indexed(GiNaC::potential_real_symbol("interpolated_x"), GiNaC::idx(0, 3))),
 											 _y(GiNaC::indexed(GiNaC::potential_real_symbol("interpolated_x"), GiNaC::idx(1, 3))), _z(GiNaC::indexed(GiNaC::potential_real_symbol("interpolated_x"))), integration_order(0), IC_names({""}), element_dim(-1), analytical_jacobian(true), analytical_position_jacobian(true), debug_jacobian_epsilon(0.0), with_adaptivity(true),
-											 coordinates_as_dofs(false), generate_hessian(false), assemble_hessian_by_symmetry(true), coordinate_space(""), stop_on_jacobian_difference(false), latex_printer(NULL)
+											 coordinates_as_dofs(false), generate_hessian(false), assemble_hessian_by_symmetry(true), coordinate_space(""), stop_on_jacobian_difference(false), latex_printer(NULL), has_constant_mass_matrix_for_sure(std::vector<bool>{false})
 	{
 		dx_unity.simple_unity_integral=true;
 		spaces.push_back(new PositionFiniteElementSpace(this, "Pos"));
@@ -2401,6 +2416,7 @@ namespace pyoomph
 		}
 		residual_index = residual_names.size();
 		residual_names.push_back(name);
+		has_constant_mass_matrix_for_sure.push_back(false);
 		residual.push_back(0);
 	}
 
@@ -2434,10 +2450,15 @@ namespace pyoomph
 			}
 			else if (GiNaC::is_a<GiNaC::GiNaCMultiRetCallback>(*i))
 			{
+				//std::cout << "GOT MULTIRET CB "  << (*i) << std::endl;
+				
 				GiNaC::GiNaCMultiRetCallback se = GiNaC::ex_to<GiNaC::GiNaCMultiRetCallback>(*i);
+				//std::cout << "GOT MULTIRET CB " << "INVOK "  << (se.get_struct().invok) << std::endl;
+				//std::cout << "GOT MULTIRET CB " << "INVOK OP1 "  << (se.get_struct().invok.op(1)) << std::endl;
 				std::set<ShapeExpansion> sub = get_all_shape_expansions_in(se.get_struct().invok.op(1), merge_no_jacobian, merge_expansion_modes, merge_no_hessian);
 				for (auto &se : sub)
 				{
+					//std::cout << "GOT MULTIRET CB " << "INSERTING "  << GiNaC::GiNaCShapeExpansion(se) << std::endl;
 					res.insert(se);
 				}
 			}
@@ -3648,7 +3669,7 @@ namespace pyoomph
 		osh << "  {" << std::endl;
 		osh << "    hessian_buffer=(double*)calloc(n_dof*n_dof*n_dof,sizeof(double));" << std::endl;
 		osh << "  }" << std::endl;
-		osh << "  if (flag==2) " << std::endl;
+		osh << "  if (flag==2 || flag==5) " << std::endl;
 		osh << "  {" << std::endl;
 		osh << "    hessian_M_buffer=(double*)calloc(n_dof*n_dof*n_dof,sizeof(double));" << std::endl;
 		osh << "  }" << std::endl;
@@ -3822,12 +3843,24 @@ namespace pyoomph
 		os << "  }" << std::endl;
 		os << "  else if (flag!=3) " << std::endl;
 		os << "  {" << std::endl;
-		os << "     SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM(hessian_buffer,Y,n_dof,product)" << std::endl;
+		os << "     if (flag==5 || flag==4) " << std::endl;
+		os << "     {" << std::endl;
+		os << "        SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM_TRANSPOSED(hessian_buffer,Y,n_dof,product)" << std::endl;
+		os << "     }" << std::endl;
+		os << "     else" << std::endl;
+		os << "     {" << std::endl;
+		os << "        SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM(hessian_buffer,Y,n_dof,product)" << std::endl;
+		os << "     }" << std::endl;
 		os << "     free(hessian_buffer); " << std::endl;
 		os << "  }" << std::endl;
 		os << "  if (flag==2)" << std::endl;
 		os << "  {" << std::endl;
 		os << "     SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM(hessian_M_buffer,Y,n_dof,Cs)" << std::endl;
+		os << "     free(hessian_M_buffer);" << std::endl;
+		os << "  }" << std::endl;
+		os << "  else if (flag==5)" << std::endl;
+		os << "  {" << std::endl;
+		os << "     SET_DIRECTIONAL_SYMMETRIC_HESSIAN_FROM_TRANSPOSED(hessian_M_buffer,Y,n_dof,Cs)" << std::endl;
 		os << "     free(hessian_M_buffer);" << std::endl;
 		os << "  }" << std::endl;
 		//		}
@@ -4284,6 +4317,11 @@ namespace pyoomph
 		this->write_code_integral_or_local_expressions(os, local_expressions, local_expression_units, "EvalLocalExpression", "LocalExprs", false);
 	}
 
+	void FiniteElementCode::write_code_extremum_expressions(std::ostream &os)
+	{
+		this->write_code_integral_or_local_expressions(os, extremum_expressions, extremum_expression_units, "EvalExtremumExpression", "ExtremumExprs", false);
+	}
+
 	void FiniteElementCode::write_code_integral_expressions(std::ostream &os)
 	{
 		this->write_code_integral_or_local_expressions(os, integral_expressions, integral_expression_units, "EvalIntegralExpression", "IntegralExprs", true);
@@ -4481,7 +4519,9 @@ namespace pyoomph
 
 		std::vector<ShapeExpansion> ordered_shapeexps;
 		for (auto &sp : shapeexps)
+		{
 			ordered_shapeexps.push_back(sp);
+		}
 		auto shape_order = [](ShapeExpansion &a, ShapeExpansion &b)
 		{
 		   std::string sa=a.field->get_space()->get_code()->get_domain_name()+"/"+a.field->get_name();
@@ -4649,6 +4689,7 @@ namespace pyoomph
 
 				if (generate_hessian)
 				{
+					has_constant_mass_matrix_for_sure[resind]=true; // Might change during writing the Hessian
 					has_hessian_contribution[resind] = write_generic_Hessian(os, "HessianVectorProduct" + std::to_string(resind), residual[resind], true);
 					os << std::endl;
 				}
@@ -4709,6 +4750,11 @@ namespace pyoomph
 		if (local_expressions.size())
 		{
 			write_code_local_expressions(os);
+			os << std::endl;
+		}
+		if (extremum_expressions.size())
+		{
+			write_code_extremum_expressions(os);
 			os << std::endl;
 		}
 		if (tracer_advection_terms.size())
@@ -6139,6 +6185,25 @@ namespace pyoomph
 		}
 	}
 
+	void FiniteElementCode::register_extremum_expression(std::string name, GiNaC::ex expr)
+	{
+		RemoveSubexpressionsByIndentity sub_to_id(this);
+		this->local_expression_units[name] = 1;
+		GiNaC::ex expanded = sub_to_id(expand_all_and_ensure_nondimensional(expr, "ExtremumExpression", &(this->extremum_expression_units[name])));
+		GiNaC::ex factor, unit, rest;
+		expressions::collect_base_units(this->extremum_expression_units[name], factor, unit, rest);
+		this->extremum_expression_units[name] /= (factor * rest);
+		expanded = (expanded * (factor * rest)).evalm();
+		if (!GiNaC::is_a<GiNaC::matrix>(expanded))
+		{
+			this->extremum_expressions[name] = expanded;			
+		}
+		else
+		{
+			throw_runtime_error("Extremum expressions cannot be vectors or matrices");
+		}
+	}
+
 	std::pair<std::vector<std::string>, int> FiniteElementCode::register_local_expression(std::string name, GiNaC::ex expr)
 	{
 		//			std::cout << "EXPR " << expr << std::endl;
@@ -6229,6 +6294,20 @@ namespace pyoomph
 		}
 	}
 
+
+
+	GiNaC::ex FiniteElementCode::get_extremum_expression_unit_factor(std::string name)
+	{
+		if (this->extremum_expression_units.count(name))
+		{
+			return this->extremum_expression_units[name];
+		}
+		else
+		{
+			return 1;
+		}
+	}
+
 	GiNaC::ex FiniteElementCode::get_local_expression_unit_factor(std::string name)
 	{
 		if (this->local_expression_units.count(name))
@@ -6255,6 +6334,14 @@ namespace pyoomph
 		for (auto &e : this->local_expressions)
 			res.push_back(e.first);
 		return res;
+	}
+
+	std::vector<std::string> FiniteElementCode::get_extremum_expressions()
+	{
+		std::vector<std::string> res;
+		for (auto &e : this->extremum_expressions)
+			res.push_back(e.first);
+		return res;		
 	}
 
 	void FiniteElementCode::write_code_info(std::ostream &os)
@@ -6605,6 +6692,8 @@ namespace pyoomph
 		init << " functable->res_jac_names=(char**)calloc(functable->num_res_jacs,sizeof(char*));" << std::endl;
 		init << " functable->missing_residual_assembly=(bool*)calloc(functable->num_res_jacs,sizeof(bool));" << std::endl;
 		cleanup << " pyoomph_tested_free(functable->missing_residual_assembly); functable->missing_residual_assembly=PYOOMPH_NULL; " << std::endl;
+		init << " functable->has_constant_mass_matrix_for_sure=(bool*)calloc(functable->num_res_jacs,sizeof(bool));" << std::endl;
+		cleanup << " pyoomph_tested_free(functable->has_constant_mass_matrix_for_sure); functable->has_constant_mass_matrix_for_sure=PYOOMPH_NULL; " << std::endl;
 
 		for (unsigned int resiind = 0; resiind < residual.size(); resiind++)
 		{
@@ -6635,7 +6724,7 @@ namespace pyoomph
 					this->write_required_shapes(init, "  ", "Hessian[" + std::to_string(resiind) + "]");
 			}
 			init << " functable->missing_residual_assembly[" << resiind << "] = " << (ignore_assemble_residuals.count(residual_names[resiind]) ? "true" : "false") << ";" << std::endl;
-		   				
+			init << " functable->has_constant_mass_matrix_for_sure[" << resiind << "] = " << (has_constant_mass_matrix_for_sure[resiind] ? "true" : "false") << ";" << std::endl;	
 		}
 		cleanup << " pyoomph_tested_free(functable->res_jac_names); functable->res_jac_names=PYOOMPH_NULL; " << std::endl;	
 
@@ -6878,6 +6967,23 @@ namespace pyoomph
 			cleanup << " pyoomph_tested_free(functable->local_expressions_names); functable->local_expressions_names=PYOOMPH_NULL; " << std::endl;
 
 			this->write_required_shapes(init, "  ", "LocalExprs");
+		}
+
+		if (extremum_expressions.size())
+		{
+			init << " functable->numextremum_expressions=" << extremum_expressions.size() << ";" << std::endl;
+			init << " functable->extremum_expressions_names=(char **)malloc(sizeof(char*)*functable->numextremum_expressions);" << std::endl;
+			unsigned ie_index = 0;
+			for (auto &e : extremum_expressions)
+			{
+				init << " SET_INTERNAL_FIELD_NAME(functable->extremum_expressions_names," << ie_index << ",\"" << e.first << "\");" << std::endl;
+				cleanup << " pyoomph_tested_free(functable->extremum_expressions_names["<<ie_index<<"]); functable->extremum_expressions_names["<<ie_index<<"]=PYOOMPH_NULL; " << std::endl;
+				ie_index++;
+			}
+			init << " functable->EvalExtremumExpression=&EvalExtremumExpression;" << std::endl;
+			cleanup << " pyoomph_tested_free(functable->extremum_expressions_names); functable->extremum_expressions_names=PYOOMPH_NULL; " << std::endl;
+
+			this->write_required_shapes(init, "  ", "ExtremumExprs");
 		}
 
 		if (tracer_advection_terms.size())

@@ -809,10 +809,16 @@ class BaseLiquidProperties(MaterialProperties):
                 problem.set_scaling(thermal_conductivity=lambda0)
                 problem.set_scaling(rho_cp=rho0 * cp0)
 
-    def get_vapor_mass_concentration(self,component:str,relative_humidity_for_far_field:ExpressionNumOrNone=None,temperature:ExpressionNumOrNone=None,at_mixture_composition:bool=True):
+    def get_vapor_mass_concentration(self,component:str,relative_humidity_for_far_field:ExpressionNumOrNone=None,temperature:ExpressionNumOrNone=None,at_mixture_composition:Union[bool,Dict[str,ExpressionOrNum]]=True):
         """
         Calculates the saturation vapor concentration :math:`c_{sat}` for the given component in [kg/m^3].
         If relative_humidity_for_far_field is set, it does not apply Raoult's law, but uses the relative humidity to calculate the vapor concentration in the far field
+        
+        Args:
+            component: Name of the component.
+            relative_humidity_for_far_field: Relative humidity in the far field. If set, it is used to calculate the vapor concentration of the pure vapor in the far field.
+            temperature: Temperature at which to calculate the vapor concentration. If not set, the temperature from the initial condition is used.
+            at_mixture_composition: If set to ``True``, the vapor concentration is calculated at the mixture initial composition. If set to a dictionary, the vapor concentration is calculated at the given composition.
         """
         gas_constant=8.3144598*joule/(mol*kelvin)
         M=self.get_pure_component(component).molar_mass
@@ -827,7 +833,10 @@ class BaseLiquidProperties(MaterialProperties):
         if temperature_set is not None:
             csat=self.evaluate_at_condition(csat,{},temperature=temperature_set)
         if at_mixture_composition:
-            csat=self.evaluate_at_condition(csat,self.initial_condition)
+            if at_mixture_composition is True:
+                csat=self.evaluate_at_condition(csat,self.initial_condition)
+            else:
+                csat=self.evaluate_at_condition(csat,at_mixture_composition)
         return csat
 
 
