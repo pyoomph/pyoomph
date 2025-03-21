@@ -227,6 +227,10 @@ class BifurcationGUI:
         #: Write all observable values to the output files
         self.output_all_observables=False
         self.custom_key_functions:Dict[str,Callable[[BifurcationGUI],None]]={}
+        self._initial_view=None
+        
+    def set_initial_view(self,xmin,xmax,ymin,ymax):
+        self._initial_view=[xmin,xmax,ymin,ymax]
 
     def get_bifurcation_parameter(self):
         if self._paramname is None:
@@ -582,8 +586,12 @@ class BifurcationGUI:
             self._open_plot()
             cp=self.current_point.get_coordinate(self._current_observable)
             if len(self.branches)==1 and len(self.current_branch)==1:
-                self._fig.gca().set_xlim(cp[0]-1e-4,cp[0]+1e-4)
-                self._fig.gca().set_ylim(cp[1]-1e-4,cp[1]+1e-4)
+                if self._initial_view is not None:
+                    self._fig.gca().set_xlim(self._initial_view[0],self._initial_view[1])
+                    self._fig.gca().set_ylim(self._initial_view[2],self._initial_view[3])
+                else:
+                    self._fig.gca().set_xlim(cp[0]-1e-4,cp[0]+1e-4)
+                    self._fig.gca().set_ylim(cp[1]-1e-4,cp[1]+1e-4)
             self.update_plot()            
             if plt._get_backend_mod().FigureCanvas.required_interactive_framework is None:
                 raise RuntimeError("You likely have imported pyoomph.output.plotting before pyoomph.utils.bifurcation_gui.\nThis could also have happened if you import a file that imports pyoomph.output.plotting.\nMake sure to first import pyoomph.utils.bifurcation_gui!")

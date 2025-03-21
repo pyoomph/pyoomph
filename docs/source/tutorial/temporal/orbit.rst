@@ -41,4 +41,5 @@ holds. For :math:`\vec{x}=\vec{x}_0`, this is trivially fulfilled and therefore,
 
    orbit/hopf_switch.rst
    orbit/manual_orbit.rst   
+   orbit/floquet.rst      
 

@@ -361,6 +361,8 @@ class GenericEigenSolver:
 			except Exception as e:
 				add_msg_str="When trying to import pyoomph.solvers."+str(name)+", the following error was raised:\n"
 				add_msg_str+=''.join(traceback.format_exception(type(e), value=e, tb=e.__traceback__))
+				if libname=="petsc":
+					add_msg_str+="\n\nNote: If you want to use SLEPc, you must install it separately. Please see the manual ( https://pyoomph.readthedocs.io/en/latest/tutorial/installation/petscslepc.html ) for more information."
 				raise RuntimeError("Unknown Eigen solver solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys()))+"\n"+add_msg_str)
 
 			#raise RuntimeError("Unknown Eigen solver: '"+name+"'. Following are defined (and included): "+str(list(GenericEigenSolver._registered_solvers.keys())))

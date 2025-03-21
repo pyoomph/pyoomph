@@ -149,11 +149,14 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         esolv_kwargs["target"]=-1j*omega0
         evalT,evectT,_,_=problem.get_eigen_solver().solve(1,custom_J_and_M=(AT,MT),**esolv_kwargs,shift=-(1j+omega_epsilon)*omega0,v0=numpy.conjugate(q),sort=False,quiet=False)   # TODO: Is MT right here?                 
     else:
-        problem.deactivate_bifurcation_tracking()
-        problem.set_custom_assembler(HopfTracker(problem,param.get_name(),numpy.conjugate(q),omega=-omega0,left_eigenvector=True,eigenscale=1000))
+        problem.deactivate_bifurcation_tracking()        
+        problem.set_custom_assembler(HopfTracker(problem,param.get_name(),numpy.conjugate(q),omega=-omega0,left_eigenvector=True,eigenscale=1))
         problem.solve()
         evalT=problem.get_last_eigenvalues()
         evectT=problem.get_last_eigenvectors()
+        if evalT*omega0>0:
+            evalT=-evalT
+            evectT=numpy.conjugate(evectT)        
         problem.set_custom_assembler(None)
         
         #raise RuntimeError("Eigenvalue solver does not support target. Please use a different eigenvalue solver.")

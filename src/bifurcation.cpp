@@ -52,6 +52,14 @@ namespace oomph
       Weight[i] = 2.0;
     }
   }
+
+  class POCollocationFakeIntegral: public oomph::Integral
+  {
+    public:
+      unsigned nweight() const override {return 1;}          
+      double knot(const unsigned& i, const unsigned& j) const override {return -1;}
+      double weight(const unsigned& i) const override { return 1;}
+  };
 }
 
 namespace pyoomph
@@ -3128,7 +3136,7 @@ namespace pyoomph
 
   //////// PERIODIC ORBIT TRACKER
 
-  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint), time_mesh(NULL), multi_shoot_gl(NULL)
+  PeriodicOrbitHandler::PeriodicOrbitHandler(Problem *const &problem_pt, const double &period, const std::vector<std::vector<double>> &tadd, int bspline_order, int gl_order, std::vector<double> knots,unsigned T_constraint) : Problem_pt(problem_pt), T(period), T_constraint_mode(T_constraint), time_mesh(NULL), collocation_gl(NULL)
   {
     Ndof = problem_pt->ndof();    
     n_element = problem_pt->mesh_pt()->nelement();
@@ -3266,11 +3274,12 @@ namespace pyoomph
     else if (bspline_order<0) // Time mesh mode
     {
       unsigned order=-bspline_order-2;
-      if (order==0) throw_runtime_error("Multi-shoot order "+std::to_string(order)+" is not implemented");      
-      if ((s_knots.size()-1)%order!=0) throw_runtime_error("The (number of knots-1) must be a multiple of the multi-shoot order");
+      if (order==0) throw_runtime_error("Orthogonal collocation method order "+std::to_string(order)+" is not implemented");      
+      if ((s_knots.size()-1)%order!=0) throw_runtime_error("The (number of knots-1) must be a multiple of the orthogonal collocation method order");
       unsigned Nelem=(s_knots.size()-1)/order;
       unsigned nnode_per_elem=order+1;
-      if (gl_order<=0) gl_order=order;      
+      //if (gl_order<0) gl_order=order;      
+      gl_order=order;
       time_mesh=new oomph::Mesh;
 
       for (unsigned int i=0;i<s_knots.size();i++)
@@ -3278,13 +3287,16 @@ namespace pyoomph
         time_mesh->add_node_pt(new TimeNode(s_knots[i],(floquet_mode ? i : i%(s_knots.size()-1)))); // PERIODIC MODE or FLOQUET MODE
       }
 
-      if (gl_order==1) multi_shoot_gl=new oomph::GaussLegendre<1,1>;
-      else if (gl_order==2) multi_shoot_gl=new oomph::GaussLegendre<1,2>;
-      else if (gl_order==3) multi_shoot_gl=new oomph::GaussLegendre<1,3>;
-      else if (gl_order==4) multi_shoot_gl=new oomph::GaussLegendre<1,4>;
-      else throw_runtime_error("Multi-shoot integration order is only implemented up to 4 is implemented");
+      if (gl_order==0) collocation_gl=new oomph::POCollocationFakeIntegral;
+      else if (gl_order==1) collocation_gl=new oomph::GaussLegendre<1,1>;
+      else if (gl_order==2) collocation_gl=new oomph::GaussLegendre<1,2>;
+      else if (gl_order==3) collocation_gl=new oomph::GaussLegendre<1,3>;
+      else if (gl_order==4) collocation_gl=new oomph::GaussLegendre<1,4>;
+      else throw_runtime_error("Orthogonal collocation method integration order is only implemented up to 4 is implemented");
 
-      std::cout << "Using multi-shoot of collocation order " << order << " and integration order " << gl_order << std::endl;
+      
+
+      std::cout << "Using collocation order " << order << " and integration order " << gl_order << std::endl;
       
 
       for (unsigned int ie=0;ie<Nelem;ie++)
@@ -3294,7 +3306,7 @@ namespace pyoomph
         else if (nnode_per_elem==3) el=new oomph::QElement<1,3>;
         else if (nnode_per_elem==4) el=new oomph::QElement<1,4>;
         //else if (nnode_per_elem==5) el=new oomph::QElement<1,5>;
-        else throw_runtime_error("Multi-shoot is only implemented up to order 3 is implemented");
+        else throw_runtime_error("orthogonal collocation method is only implemented up to order 3 is implemented");
                 
         
         for (unsigned int in=0;in<nnode_per_elem;in++)
@@ -3303,6 +3315,8 @@ namespace pyoomph
         }        
         time_mesh->element_pt().push_back(el);   
       }
+
+      if (collocation_gl->nweight()!=dynamic_cast<oomph::FiniteElement*>(time_mesh->element_pt(0))->nnode()-1) throw_runtime_error("The number of nodes per element (here "+std::to_string(dynamic_cast<oomph::FiniteElement*>(time_mesh->element_pt(0))->nnode())+") in the time mesh must be the same as the number of weights (here "+std::to_string(collocation_gl->nweight())+") plus 1 in the collocation method");
       
       /*for (unsigned int ie=0;ie<time_mesh->nelement();ie++)
       {
@@ -3358,10 +3372,10 @@ namespace pyoomph
         delete time_mesh;
         time_mesh=NULL;
     }
-    if (multi_shoot_gl) 
+    if (collocation_gl) 
     {
-        delete multi_shoot_gl;
-        multi_shoot_gl=NULL;
+        delete collocation_gl;
+        collocation_gl=NULL;
     }
     Problem_pt->GetDofPtr().resize(Ndof);
     Problem_pt->GetDofDistributionPt()->build(Problem_pt->communicator_pt(),
@@ -3550,7 +3564,7 @@ namespace pyoomph
   }
 */
 
-void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)
+void PeriodicOrbitHandler::get_residuals_collocation_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,double *const &parameter_pt)
   {
       residuals.initialise(0.0);
       unsigned raw_ndof = elem_pt->ndof();
@@ -3572,24 +3586,17 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
         oomph::QElementBase * el=dynamic_cast<oomph::QElementBase*>(time_mesh->element_pt(ie));
         oomph::Shape psi(el->nnode());
         oomph::DShape dpsi(el->nnode(),1);
+        double deltaS=el->vertex_node_pt(1)->x(0)-el->vertex_node_pt(0)->x(0);
         for (unsigned int inode=0;inode<el->nnode()-1;inode++)
         {
-          
-          
-          oomph::Vector<double> local_coord0(1);
-          oomph::Vector<double> local_coord1(1);          
-          el->local_coordinate_of_node(inode,local_coord0);
-          el->local_coordinate_of_node(inode+1,local_coord1);
-          double deltaS=el->node_pt(inode+1)->x(0)-el->node_pt(inode)->x(0);
-
-          for (unsigned int igl=0;igl<multi_shoot_gl->nweight();igl++)
-          {          
-              double gl_s=multi_shoot_gl->knot(igl,0);
-              double w=multi_shoot_gl->weight(igl);
+                    
+              double gl_s=collocation_gl->knot(inode,0);
+              double w=collocation_gl->weight(inode);
               
               oomph::Vector<double> local_coord(1);              
-              local_coord[0]=(local_coord0[0]*(1-gl_s)+local_coord1[0]*(1+gl_s))*0.5;
-              el->dshape_eulerian(local_coord,psi,dpsi);
+              local_coord[0]=gl_s;
+              el->dshape_eulerian(local_coord,psi,dpsi);                            
+              
               
               for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
               dUds.initialise(0.0);
@@ -3626,6 +3633,8 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
 
               }
 
+              unsigned index=dynamic_cast<TimeNode*>(el->node_pt(inode))->get_index();
+
 
               for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=U[i];
 
@@ -3636,7 +3645,6 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
               else elem_pt->get_djacobian_and_dmass_matrix_dparameter(parameter_pt,current_res, jacobian, M);
 
             
-              unsigned index=dynamic_cast<TimeNode*>(el->node_pt(inode))->get_index();
                 
               for (unsigned i = 0; i < raw_ndof; i++)
               {
@@ -3657,7 +3665,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
                 }     
               }
 
-            }
+            
 
         }
       }
@@ -3672,7 +3680,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
         {
           for (unsigned int i=0;i<raw_ndof;i++)
           {          
-            residuals[(ntsteps-1)*raw_ndof+i]=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
+            residuals[(ntsteps-1)*raw_ndof+i]+=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
           }
         }
       }
@@ -3692,7 +3700,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
           double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
           plane_eq+=x*n0[glob_eq]/Count[glob_eq];
         }      
-        residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+        residuals[raw_ndof*this->n_tsteps()]+=plane_eq;
       }          
   }
 
@@ -4136,12 +4144,14 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
 
   void PeriodicOrbitHandler::get_residuals(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals)  
   {        
+    unsigned raw_ndof=elem_pt->ndof();
+    if (!raw_ndof) {residuals.initialise(0.0); return;}
       if (!this->basis)
       {                
         if (time_mesh) 
         {
           
-          this->get_residuals_multi_shoot_mode(elem_pt,residuals,NULL);          
+          this->get_residuals_collocation_mode(elem_pt,residuals,NULL);          
         }
         else if (floquet_mode) this->get_residuals_floquet_mode(elem_pt,residuals,NULL);     
         else this->get_residuals_time_nodal_mode(elem_pt,residuals,NULL);                     
@@ -4161,7 +4171,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
         {
           if (time_mesh) 
           {
-            this->get_jacobian_multi_shoot_mode(elem_pt,resdummy,Jdummy);
+            this->get_jacobian_collocation_mode(elem_pt,resdummy,Jdummy);
           }
           else if (floquet_mode)
           {
@@ -4394,7 +4404,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
   }
   */
 
- void PeriodicOrbitHandler::get_jacobian_multi_shoot_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,oomph::DenseMatrix<double> & jacobian)
+ void PeriodicOrbitHandler::get_jacobian_collocation_mode(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals,oomph::DenseMatrix<double> & jacobian)
   {
       residuals.initialise(0.0);
       jacobian.initialise(0.0);
@@ -4432,23 +4442,15 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
         oomph::QElementBase * el=dynamic_cast<oomph::QElementBase*>(time_mesh->element_pt(ie));
         oomph::Shape psi(el->nnode());
         oomph::DShape dpsi(el->nnode(),1);
+        double deltaS=el->vertex_node_pt(1)->x(0)-el->vertex_node_pt(0)->x(0);
         for (unsigned int inode=0;inode<el->nnode()-1;inode++)
         {
-          
-          
-          oomph::Vector<double> local_coord0(1);
-          oomph::Vector<double> local_coord1(1);          
-          el->local_coordinate_of_node(inode,local_coord0);
-          el->local_coordinate_of_node(inode+1,local_coord1);
-          double deltaS=el->node_pt(inode+1)->x(0)-el->node_pt(inode)->x(0);
-
-          for (unsigned int igl=0;igl<multi_shoot_gl->nweight();igl++)
-          {          
-              double gl_s=multi_shoot_gl->knot(igl,0);
-              double w=multi_shoot_gl->weight(igl);
+                              
+              double gl_s=collocation_gl->knot(inode,0);
+              double w=collocation_gl->weight(inode);
               
               oomph::Vector<double> local_coord(1);              
-              local_coord[0]=(local_coord0[0]*(1-gl_s)+local_coord1[0]*(1+gl_s))*0.5;
+              local_coord[0]=gl_s;
               el->dshape_eulerian(local_coord,psi,dpsi);
               
               for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=0.0;
@@ -4488,6 +4490,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
 
 
               for (unsigned int i=0;i<raw_ndof;i++) *(alldofs[glob_eqs[i]])=U[i];
+              unsigned index=dynamic_cast<TimeNode*>(el->node_pt(inode))->get_index();
 
               current_res.initialise(0.0);                                          
               M.initialise(0.0);
@@ -4503,8 +4506,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
                 pyoomph_elem_pt->get_multi_assembly(multi_assm);
               }                   
 
-            
-              unsigned index=dynamic_cast<TimeNode*>(el->node_pt(inode))->get_index();
+                          
                 
               for (unsigned i = 0; i < raw_ndof; i++)
               {
@@ -4546,8 +4548,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
                     }
                 }     
               }
-
-            }
+          
 
         }
       }
@@ -4560,9 +4561,9 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
         //for (unsigned int i=0;i<raw_ndof;i++) residuals[raw_ndof*(this->n_tsteps()-1)+i]=0.0;        
           for (unsigned int i=0;i<raw_ndof;i++)
           {          
-            residuals[(ntsteps-1)*raw_ndof+i]=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
-            jacobian((ntsteps-1)*raw_ndof+i,(ntsteps-1)*raw_ndof+i)=1.0/Count[glob_eqs[i]];
-            jacobian((ntsteps-1)*raw_ndof+i,i)=-1.0/Count[glob_eqs[i]];
+            residuals[(ntsteps-1)*raw_ndof+i]+=(Tadd[ntsteps-2][glob_eqs[i]]-dof_backup[i])/Count[glob_eqs[i]];
+            jacobian((ntsteps-1)*raw_ndof+i,(ntsteps-1)*raw_ndof+i)+=1.0/Count[glob_eqs[i]];
+            jacobian((ntsteps-1)*raw_ndof+i,i)+=-1.0/Count[glob_eqs[i]];
           }
       }
 
@@ -4581,11 +4582,11 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
           double x=*(this->Problem_pt->GetDofPtr()[glob_eq]);
           plane_eq+=x*n0[glob_eq]/Count[glob_eq];
         }      
-        residuals[raw_ndof*this->n_tsteps()]=plane_eq;
+        residuals[raw_ndof*this->n_tsteps()]+=plane_eq;
         for (unsigned int i=0;i<raw_ndof;i++)
         {
             unsigned glob_eq=glob_eqs[i];
-            jacobian(raw_ndof*this->n_tsteps(),i)=n0[glob_eq]/Count[glob_eq];
+            jacobian(raw_ndof*this->n_tsteps(),i)+=n0[glob_eq]/Count[glob_eq];
         }
       }          
   }
@@ -5036,11 +5037,17 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
 
   void PeriodicOrbitHandler::get_jacobian(oomph::GeneralisedElement *const &elem_pt, oomph::Vector<double> &residuals, oomph::DenseMatrix<double> &jacobian)
   {
+    unsigned raw_ndof=elem_pt->ndof();
+    if (!raw_ndof) {
+      residuals.initialise(0.0); 
+      jacobian.initialise(0.0);
+      return;
+    }
     if (!basis)
     {
       if (time_mesh)
       {
-        this->get_jacobian_multi_shoot_mode(elem_pt,residuals,jacobian);
+        this->get_jacobian_collocation_mode(elem_pt,residuals,jacobian);
         /*
         residuals.initialise(0.0);
         this->get_residuals(elem_pt, residuals);
@@ -5093,7 +5100,6 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
 #ifdef PYOOMPH_BIFURCATION_HANDLER_DEBUG
     residuals.initialise(0.0);
     this->get_residuals(elem_pt, residuals);
-    unsigned raw_ndof=elem_pt->ndof();
     unsigned tot_ndof=residuals.size();
     oomph::Vector<double *> & alldofs=this->Problem_pt->GetDofPtr();
     for (unsigned int i=0;i<tot_ndof;i++)
@@ -5129,7 +5135,7 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
       {
         if (time_mesh)
         {
-          this->get_jacobian_multi_shoot_mode(elem_pt,ana_res,ana_J);
+          this->get_jacobian_collocation_mode(elem_pt,ana_res,ana_J);
         }
         else {
           if (floquet_mode)
@@ -5148,14 +5154,14 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
       }
       for (unsigned int i=0;i<raw_ndof*this->n_tsteps()+1;i++)
       {
-        if (std::fabs(ana_res[i]-residuals[i])>1e-6)
+        if (std::fabs(ana_res[i]-residuals[i])>1e-9)
         {
           std::cout << "RESIDUAL MISMATCH " << i << " " << ana_res[i] << " " << residuals[i] << std::endl;
           std::cout << " raw_ndof " <<  raw_ndof<< " n_tsteps " << this->n_tsteps()  << " TOT DOF " << tot_ndof << " VS " << raw_ndof*this->n_tsteps()+1<< std::endl;
         }
         for (unsigned int j=0;j<raw_ndof*this->n_tsteps()+1;j++)
         {
-          if (std::fabs(ana_J(i,j)-jacobian(i,j))>1e-6)
+          if (std::fabs(ana_J(i,j)-jacobian(i,j))>1e-4)
           {
             unsigned glob_eq;
             unsigned tindex=i/raw_ndof;
@@ -5324,9 +5330,11 @@ void PeriodicOrbitHandler::get_residuals_multi_shoot_mode(oomph::GeneralisedElem
 
   void PeriodicOrbitHandler::get_dresiduals_dparameter(oomph::GeneralisedElement *const &elem_pt, double *const &parameter_pt,oomph::Vector<double> &dres_dparam)
   {
+    unsigned raw_ndof=elem_pt->ndof();
+    if (!raw_ndof) {dres_dparam.initialise(0.0); return;}
       if (!basis)
       {
-        if (time_mesh) this->get_residuals_multi_shoot_mode(elem_pt,dres_dparam,parameter_pt);     
+        if (time_mesh) this->get_residuals_collocation_mode(elem_pt,dres_dparam,parameter_pt);     
         else if (floquet_mode) this->get_residuals_floquet_mode(elem_pt,dres_dparam,parameter_pt);     
         else this->get_residuals_time_nodal_mode(elem_pt,dres_dparam,parameter_pt);        
       } 

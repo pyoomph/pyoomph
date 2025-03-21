@@ -639,9 +639,10 @@ class BaseEquations(_pyoomph.Equations):
         """
         pass
 
-    def define_residuals(self):
+    def define_residuals(self)->Union[Expression,None]:
         """
         Inherit and specify to define residuals for the equations, using :py:meth:`add_residual` or :py:meth:`add_weak`
+        Any returned expression will be also added to the residuals
         """
         pass
 
@@ -837,7 +838,9 @@ class BaseEquations(_pyoomph.Equations):
 
 
 #            raise RuntimeError("Transfer fields here")
-        master.define_residuals()
+        res=master.define_residuals()
+        if res is not None:
+            master.add_residual(res)
         for d,add_res in master._additional_residuals.items():
             master.add_residual(add_res,destination=d if d!="" else None)
         master.define_error_estimators()
@@ -2592,10 +2595,17 @@ class CombinedEquations(Equations):
     def define_residuals(self):
         bck = self._bckup_final_elem()
         self._setup_combined_element()
+        retres=None
         for e in self._subelements:
             if isinstance(e, BaseEquations): #type:ignore
-                e.define_residuals()
+                ret=e.define_residuals()
+                if ret is not None:
+                    if retres is None:
+                        retres=ret
+                    else:
+                        retres+=ret
         self._rstr_final_elem(bck)
+        return retres
 
     def define_error_estimators(self):
         bck = self._bckup_final_elem()

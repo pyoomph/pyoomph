@@ -179,7 +179,7 @@ class PeriodicOrbit:
         self._get_handler().restore_dofs()
         self.problem.deactivate_bifurcation_tracking()
         for i,h in enumerate(history):
-            print(i,h)                        
+            #print(i,h)                        
             self.problem.set_history_dofs(i,h)
         
         self.problem.initialise_dt(dt)
@@ -192,6 +192,9 @@ class PeriodicOrbit:
         self.problem.shift_time_values()
         self.problem.shift_time_values()
         self.problem.time_stepper_pt().undo_make_steady()
+        self.problem._taken_already_an_unsteady_step=True
+        self.problem._last_step_was_stationary=False
+        self.problem.actions_before_transient_solve()
         
     
     def _get_handler(self)->_pyoomph.PeriodicOrbitHandler:
@@ -299,7 +302,7 @@ class PeriodicOrbit:
             return accus[observables[0]]*T
         
     
-    def change_sampling(self,*,mode:Literal["floquet","central","bspline","BDF2"]="floquet",N:Optional[int]=None, order:Optional[int]=None,GL_order:Optional[int]=None,T_constraint:Optional[Literal["plane","phase"]]=None,do_solve:bool=True):
+    def change_sampling(self,*,mode:Literal["collocation","central","bspline","BDF2"]=None,NT:Optional[int]=None, order:Optional[int]=None,GL_order:Optional[int]=None,T_constraint:Optional[Literal["plane","phase"]]=None,do_solve:bool=True):
         if mode is None:
             mode=self.mode
         if order is None:
@@ -308,11 +311,11 @@ class PeriodicOrbit:
             GL_order=self.GL_order
         if T_constraint is None:
             T_constraint=self.T_constraint            
-        if N is None:
-            N=self.get_num_time_steps()
+        if NT is None:
+            NT=self.get_num_time_steps()
         history_dofs=[]
         Nbase=self._get_handler().get_base_ndof()
-        for T in self.iterate_over_samples(N=N):
+        for T in self.iterate_over_samples(N=NT):
             history_dofs.append(self.problem.get_current_dofs()[0][:Nbase])
         T=self.get_T()
         self.problem.deactivate_bifurcation_tracking()
@@ -3598,7 +3601,7 @@ class Problem(_pyoomph.Problem):
         """
                         
         if len(kwargs) != 1:
-            raise RuntimeError("Please to it with only one parameter!")
+            raise RuntimeError("Please only give one parameter as keyword argument (you might have misspelled an optional keyword argument)!")
         pname:str=""
         desired_val:float=0.0
         for a, b in kwargs.items():
@@ -4196,7 +4199,7 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
 
-    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["multi_shoot","floquet","bspline","central","BDF2"]="multi_shoot",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase")->PeriodicOrbit:
+    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["collocation","floquet","bspline","central","BDF2"]="collocation",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase")->PeriodicOrbit:
         """
         Activates periodic orbit tracking based on history dofs. Use :py:meth:`set_current_dofs` to set the first time point of the orbit guess. The other time points must be shipped with the history_dofs argument.
         
@@ -4233,16 +4236,16 @@ class Problem(_pyoomph.Problem):
             self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint)
         elif mode=="BDF2":
             self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
-        elif mode=="multi_shoot":
+        elif mode=="collocation":
             if order<1:
-                raise ValueError("Invalid multi-shoot collocation order: "+str(order))
+                raise ValueError("Invalid collocation order: "+str(order))
             self._start_orbit_tracking(history_dofs,T,-2-order,GL_order,knots,T_constraint)
         else:
             raise ValueError("Invalid mode: "+str(mode))
         res=PeriodicOrbit(self,mode,0,None,0,None,None,0,order,GL_order,T_constraint)
         return res
 
-    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["multi_shoot","floquet","central","BDF2","bspline"]="multi_shoot",order:int=3,GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,FD_param_delta=1e-3,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True,orbit_amplitude:Optional[float]=None,patch_number_of_nodes:bool=True)->PeriodicOrbit:
+    def switch_to_hopf_orbit(self,eps:float=0.01,dparam:Optional[float]=None,NT:int=30,mode:Literal["collocation","floquet","central","BDF2","bspline"]="collocation",order:int=3,GL_order:int=-1,T_constraint:Literal["phase","plane"]="phase",amplitude_factor:float=1,FD_delta:float=1e-5,FD_param_delta=1e-3,do_solve:bool=True,solve_kwargs:Dict[str,Any]={},check_collapse_to_stationary:bool=True,orbit_amplitude:Optional[float]=None,patch_number_of_nodes:bool=True)->PeriodicOrbit:
         """After solving for a Hopf bifurcation by bifurcation tracking, this method will calculate the first Lyapunov exponent and initializes a good guess for the tracking of the periodic orbits originating at this Hopf bifurcation.
         
         It is best to call it like:
@@ -4256,7 +4259,7 @@ class Problem(_pyoomph.Problem):
             eps: A small number to construct the initial guess of the orbit and shift the parameter accordingly. Defaults to 0.01.
             dparam: Optional parameter shift. If given and orbit_amplitude is also given, eps is ignored. Defaults to None.
             NT: Number of discrete time steps to consider for the orbit. Defaults to 30.
-            mode: Selects the time discretization and interpolation mode. Defaults to "multi_shoot".
+            mode: Selects the time discretization and interpolation mode. Defaults to "collocation".
             order: Selects the order of the time discretization method. Defaults to 3.
             GL_order: Selects the Gauss-Legendre integration order for some time discretization modes. Defaults to -1, which is auto-select depending on the order.
             T_constraint: Either use the "plane" or the "phase" constraint as equation for T. Defaults to "phase".
@@ -4311,9 +4314,9 @@ class Problem(_pyoomph.Problem):
             parameter.value+=-eps**2*sign
         u0=self.get_current_dofs()[0]
         
-        if patch_number_of_nodes and mode=="multi_shoot":            
+        if patch_number_of_nodes and mode=="collocation":            
             if order<=0:
-                raise RuntimeError("Invalid order for multi-shoot collocation")
+                raise RuntimeError("Invalid order for collocation")
             if NT%order!=0:
                 NT=(((NT)//order)+1)*order
             
