@@ -223,6 +223,12 @@ class PeriodicOrbit:
         """
         return self._get_handler().get_num_time_steps()
     
+    def update_phase_constraint(self):
+        """
+        Updates the phase constraint history (u0) for the orbit
+        """
+        self._get_handler().update_phase_constraint_information()
+    
     def output_orbit(self,subdir:str,Tstart:Optional[float]=None,Tend:Optional[float]=None,N:Optional[int]=None,set_current_time:bool=True,endpoint:bool=True):
         olddir=self.problem.get_output_directory()
         write_states=self.problem.write_states
@@ -4199,7 +4205,7 @@ class Problem(_pyoomph.Problem):
             raise ValueError("Unknown bifurcation type:"+str(bifurcation_type))
 
 
-    def activate_periodic_orbit_handler(self,T,history_dofs=[],mode:Literal["collocation","floquet","bspline","central","BDF2"]="collocation",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase")->PeriodicOrbit:
+    def activate_periodic_orbit_handler(self,T:ExpressionOrNum,history_dofs=[],mode:Literal["collocation","floquet","bspline","central","BDF2"]="collocation",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase")->PeriodicOrbit:
         """
         Activates periodic orbit tracking based on history dofs. Use :py:meth:`set_current_dofs` to set the first time point of the orbit guess. The other time points must be shipped with the history_dofs argument.
         
@@ -4225,21 +4231,21 @@ class Problem(_pyoomph.Problem):
             T_constraint=1
         else:
             raise ValueError("Invalid T_constraint: "+str(T_constraint))
-        
+        T_nd=float(T/self.get_scaling("temporal"))
         if mode=="floquet":
-            self._start_orbit_tracking(history_dofs,T,0,-1,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T_nd,0,-1,knots,T_constraint)
         elif mode=="bspline":
             if order<1:
                 raise ValueError("Invalid bspline order: "+str(order))
-            self._start_orbit_tracking(history_dofs,T,order,GL_order,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T_nd,order,GL_order,knots,T_constraint)
         elif mode=="central":
-            self._start_orbit_tracking(history_dofs,T,-1,-1,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T_nd,-1,-1,knots,T_constraint)
         elif mode=="BDF2":
-            self._start_orbit_tracking(history_dofs,T,-2,-1,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T_nd,-2,-1,knots,T_constraint)
         elif mode=="collocation":
             if order<1:
                 raise ValueError("Invalid collocation order: "+str(order))
-            self._start_orbit_tracking(history_dofs,T,-2-order,GL_order,knots,T_constraint)
+            self._start_orbit_tracking(history_dofs,T_nd,-2-order,GL_order,knots,T_constraint)
         else:
             raise ValueError("Invalid mode: "+str(mode))
         res=PeriodicOrbit(self,mode,0,None,0,None,None,0,order,GL_order,T_constraint)
@@ -4322,7 +4328,7 @@ class Problem(_pyoomph.Problem):
             
             
         
-        T=2*numpy.pi/omega
+        T=2*numpy.pi/omega*self.get_scaling("temporal")
         upert=lambda t: u0+2*eps*al*amplitude_factor*numpy.real(numpy.exp(1j*omega*t)*(qR+1j*qI))
         print("Amplitude perturbation factor:",2*eps*al*amplitude_factor)
         print("Parameter step",-eps**2*sign)

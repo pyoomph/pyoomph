@@ -1,3 +1,5 @@
+.. _secODEfloquet:
+
 Stability of orbits
 ~~~~~~~~~~~~~~~~~~~
 
@@ -27,7 +29,7 @@ Pyoomph can calculate Floquet multipliers, which is demonstrated in the followin
          \partial_t z&=\mu z-\left(x^2+y^2+z^2\right)
 	\end{aligned}
 
-For :math:`mu>1.683`, perfectly circular orbits can be found which change the stability from stable to unstable at :math:`\mu=2` :cite:`Gesla2024`.
+For :math:`\mu>1.683`, perfectly circular orbits can be found which change the stability from stable to unstable at :math:`\mu=2` :cite:`Gesla2024`.
 
 Implementing the equation and setting up the problem is again trivial:
 

@@ -337,3 +337,22 @@ class PeriodicDrivingResponse():
         ampl=numpy.absolute(v)
         phase=numpy.angle(v)
         return ampl,phase
+    
+    
+    def switch_to_orbit_tracking(self,*,omega:ExpressionNumOrNone=None,freq:ExpressionNumOrNone=None,mode:Literal["collocation","floquet","bspline","central","BDF2"]="collocation",  order:int=2,GL_order:int=-1,T_constraint:Literal["plane","phase"]="phase",NT:int=50):
+        if freq is None:
+            if omega is None:
+                raise RuntimeError("Need to set either omega or frequency")            
+            drivemode=self.solve_driving_response(omega=omega)
+            T=2*pi/omega
+        elif omega is None:
+            drivemode=self.solve_driving_response(freq=freq)
+            T=1/freq
+        else:
+            raise RuntimeError("Cannot set both omega and frequency")
+        
+        basesol=self.problem.get_current_dofs()[0]
+        history_dofs=[basesol+numpy.real(numpy.exp(1j*phase)*drivemode) for phase in numpy.linspace(0,2*numpy.pi,NT,endpoint=False)]
+        history_dofs=numpy.array(history_dofs)        
+        self.problem.set_current_dofs(history_dofs[0])
+        return self.problem.activate_periodic_orbit_handler(T,history_dofs=history_dofs[1:],mode=mode,order=order,GL_order=GL_order,T_constraint=T_constraint)

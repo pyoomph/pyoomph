@@ -41,13 +41,25 @@ Tutorial
   :align: center  
   :class: framed  
   :title: Adaptive timestepping for the Lorenz attractor
-
+  
     
 .. |tuto_odebif| thumbnail:: tutorial/temporal/stability/bifurcs_thumb.png
   :width: 270px
   :align: center
   :class: framed    
   :title: Stability analysis and bifurcation tracking of ODEs
+
+.. |tuto_hopfswitch| thumbnail:: tutorial/temporal/orbit/switch_hopf_thumb.png
+  :width: 200px
+  :align: center  
+  :class: framed  
+  :title: Hopf branch switching to periodic orbits
+
+.. |tuto_floquet| thumbnail:: tutorial/temporal/orbit/torus_unstable_thumb.png
+  :width: 270px
+  :align: center  
+  :class: framed  
+  :title: Stability of periodic orbits via Floquet multipliers
   
 .. |tuto_adaptpoisson| thumbnail:: tutorial/spatial/poisson/poisson2d_adapt_thumb.png
   :width: 140px
@@ -193,7 +205,14 @@ Tutorial
 		:ref:`Adaptive timestepping for the Lorenz attractor<secODEtemporaladapt>`
 	  - 	|tuto_odebif|
 	  
-		:ref:`Stability analysis and bifurcation tracking of ODEs<secODEarclength>`	  
+		:ref:`Stability analysis and bifurcation tracking of ODEs<secODEarclength>`
+		
+	* - 	|tuto_hopfswitch|  
+		
+		:ref:`Hopf branch switching to periodic orbits<secODEhopfswitch>`
+	  - 	|tuto_floquet|
+	  
+		:ref:`Stability of periodic orbits via Floquet multipliers<secODEfloquet>`	  			  
 		
 	* -	|tuto_adaptpoisson|
 	

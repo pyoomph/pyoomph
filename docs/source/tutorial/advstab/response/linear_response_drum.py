@@ -95,11 +95,11 @@ with DrumProblem() as problem:
             # Add interpolators to perform the Bessel projection
             interr=scipy.interpolate.UnivariateSpline(nd_resp_real.get_data("coordinate_x"),nd_resp_real.get_data("h"),k=3,s=0)
             interi=scipy.interpolate.UnivariateSpline(nd_resp_imag.get_data("coordinate_x"),nd_resp_imag.get_data("h"),k=3,s=0)
-            # Calculate the bessel decomposition of the response
+            # Calculate the Bessel decomposition of the response
             bessel_data=[]
             for i in range(numbessel):                
                 bess_proj=lambda r : r*scipy.special.j0(bessel_roots[i]*r)*(interr(r)+1j*interi(r))                
-                numer=scipy.integrate.quad(bess_proj,0,1,complex_func=True)[0] # Integrate bessel projection
+                numer=scipy.integrate.quad(bess_proj,0,1,complex_func=True)[0] # Integrate Bessel projection
                 denom=1/2*scipy.special.j1(bessel_roots[i])**2 # Denominator of the Fourier-Bessel transform
                 nd_response_ampl=numpy.absolute(numer/denom)                
                 dim_response_ampl_by_F=(nd_response_ampl*problem.get_scaling("h")/(milli*meter))/(F/(meter/second**2))                

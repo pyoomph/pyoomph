@@ -1,3 +1,5 @@
+.. _secODEhopfswitch:
+
 From Hopf bifurcations to periodic orbits
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
