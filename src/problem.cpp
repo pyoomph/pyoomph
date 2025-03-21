@@ -776,6 +776,66 @@ namespace pyoomph
 		this->set_dofs(dofs);
 	}
 
+
+    void Problem::get_dofs(const unsigned& t, oomph::DoubleVector& dofs) const
+	{	
+      oomph::Problem::get_dofs(t,dofs);
+	  //std::cout << "GET HISTORY DOFS " << t << std::endl;
+	  for (unsigned i = 0, ni = mesh_pt()->nnode(); i < ni; i++)
+      {
+       pyoomph::Node* node_pt = dynamic_cast<pyoomph::Node*>(mesh_pt()->node_pt(i));
+	   if (!node_pt) continue;
+       for (unsigned j = 0, nj = node_pt->variable_position_pt()->nvalue(); j < nj; j++)
+       {        
+        int eqn_number = node_pt->variable_position_pt()->eqn_number(j);
+        if (eqn_number >= 0)
+        {
+          dofs[eqn_number]=node_pt->variable_position_pt()->value(t, j);
+        }
+       }
+      }	
+	}
+
+	void Problem::set_dofs(const unsigned& t, oomph::DoubleVector& dof_pt) 
+	{
+	 oomph::Problem::set_dofs(t,dof_pt);
+	 //std::cout << "SET HISTORY DOFS " << t << std::endl;
+	 // But oomph-lib forgot the variable position pt of moving nodes...
+     for (unsigned i = 0, ni = mesh_pt()->nnode(); i < ni; i++)
+     {
+      pyoomph::Node* node_pt = dynamic_cast<pyoomph::Node*>(mesh_pt()->node_pt(i));
+	  if (!node_pt) continue;
+      for (unsigned j = 0, nj = node_pt->variable_position_pt()->nvalue(); j < nj; j++)
+      {        
+        int eqn_number = node_pt->variable_position_pt()->eqn_number(j);
+        if (eqn_number >= 0)
+        {
+          node_pt->variable_position_pt()->set_value(t, j, dof_pt[eqn_number]);
+        }
+      }
+     }		 	
+	}
+
+    void Problem::set_dofs(const unsigned& t, oomph::Vector<double*>& dof_pt) 
+	{
+     oomph::Problem::set_dofs(t,dof_pt);
+	 //std::cout << "SET HISTORY DOFS " << t << std::endl;
+	 // But oomph-lib forgot the variable position pt of moving nodes...
+     for (unsigned i = 0, ni = mesh_pt()->nnode(); i < ni; i++)
+     {
+      pyoomph::Node* node_pt = dynamic_cast<pyoomph::Node*>(mesh_pt()->node_pt(i));
+	  if (!node_pt) continue;
+      for (unsigned j = 0, nj = node_pt->variable_position_pt()->nvalue(); j < nj; j++)
+      {        
+        int eqn_number = node_pt->variable_position_pt()->eqn_number(j);
+        if (eqn_number >= 0)
+        {
+          node_pt->variable_position_pt()->set_value(t, j, *(dof_pt[eqn_number]));
+        }
+      }
+     }
+	}
+
 	void Problem::set_history_dofs(unsigned t, const std::vector<double> &inp)
 	{
 		oomph::DoubleVector dofs;

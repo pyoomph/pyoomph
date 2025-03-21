@@ -263,6 +263,11 @@ namespace pyoomph
     std::vector<double> get_arclength_dof_current_vector();
     void update_dof_vectors_for_continuation(const std::vector<double> & ddof, const std::vector<double> & curr);
     void set_dof_direction_arclength(std::vector<double> ddir);
+    void get_dofs(oomph::DoubleVector& dofs) const  override {oomph::Problem::get_dofs(dofs);}
+    void get_dofs(const unsigned& t, oomph::DoubleVector& dofs) const override;
+    void set_dofs(const oomph::DoubleVector& dofs) override {oomph::Problem::set_dofs(dofs);}
+    void set_dofs(const unsigned& t, oomph::DoubleVector& dof_pt) override;
+    void set_dofs(const unsigned& t, oomph::Vector<double*>& dof_pt) override;
     void adapt(unsigned &n_refined, unsigned &n_unrefined) override
     {
       std::pair<unsigned, unsigned> res = this->_adapt();

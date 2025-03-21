@@ -9,6 +9,14 @@ Made First_el_for_assembly, Last_el_plus_one_for_assembly, Must_recompute_load_b
 Made void Problem::reset_assembly_handler_to_default() virtual
 (Changed on 2rd March 2025):
 Made void get_derivative_wrt_global_parameter(double* const& parameter_pt,DoubleVector& result) virtual
+(Changed on 21st March 2025):
+Made 
+  void get_dofs(DoubleVector& dofs) const;
+  void get_dofs(const unsigned& t, DoubleVector& dofs) const;
+  void set_dofs(const DoubleVector& dofs);
+  void set_dofs(const unsigned& t, DoubleVector& dofs);
+  void set_dofs(const unsigned& t, Vector<double*>& dof_pt)
+virtual. Noticed that it does not get/set the history of the variable_position_pt of moving nodes.
 *******************************************************************************/
 
 // LIC// ====================================================================
@@ -1766,20 +1774,25 @@ namespace oomph
 
     /// Return the vector of dofs, i.e. a vector containing the current
     /// values of all unknowns.
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
     void get_dofs(DoubleVector& dofs) const;
 
     /// Return vector of the t'th history value of all dofs.
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
     void get_dofs(const unsigned& t, DoubleVector& dofs) const;
 
     /// Set the values of the dofs
-    void set_dofs(const DoubleVector& dofs);
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
+    virtual void set_dofs(const DoubleVector& dofs);
 
     /// Set the history values of the dofs
-    void set_dofs(const unsigned& t, DoubleVector& dofs);
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
+    virtual void set_dofs(const unsigned& t, DoubleVector& dofs);
 
     /// Set history values of dofs from the type of vector stored in
     /// problem::Dof_pt.
-    void set_dofs(const unsigned& t, Vector<double*>& dof_pt);
+    // FOR_PYOOMPH: made virtual (this is required to patch the missing positional dofs)
+    virtual void set_dofs(const unsigned& t, Vector<double*>& dof_pt);
 
     /// Add lambda x incremenet_dofs[l] to the l-th dof
     void add_to_dofs(const double& lambda, const DoubleVector& increment_dofs);
