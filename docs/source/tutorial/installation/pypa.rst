@@ -13,7 +13,7 @@ If you get errors, let us know (c.diddens@utwente.nl), and we see whether we can
 
 .. warning::
 
-   If you are using a recent Mac with the Apple silicon (arm64 architecture) processor, you must execute this command in a Rosetta terminal. At https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/ you can find instructions how to create such a Rosetta terminal. Also, please see below regarding the `mkl` module.
+   If you are using a recent Mac with the Apple silicon (arm64 architecture) processor, you must execute this command in a Rosetta terminal. At https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/ you can find instructions how to create such a Rosetta terminal (**note**: recent systems must be handled differently, see e.g. here: https://developer.apple.com/forums/thread/718666). Also, please see below regarding the `mkl` module.
 
 
 Depending on your system, you have to do additional steps to obtain the full performance:

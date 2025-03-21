@@ -25,7 +25,7 @@ If you have installed via pip (see above), just make sure that you have the `gcc
 
 ## On Mac
 
-**If you have a recent Mac with an Apple silicon (arm64) chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up. Also, please downgrade `mkl` by
+**If you have a recent Mac with an Apple silicon (arm64) chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up (**note**: recent systems must be handled differently, see [here](https://developer.apple.com/forums/thread/718666)) . Also, please downgrade `mkl` by
 
 > python3 -m pip install mkl==2021.4.0
 
