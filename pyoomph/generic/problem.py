@@ -1718,7 +1718,7 @@ class Problem(_pyoomph.Problem):
             if info.get_parameter_name()!="":
                 raise RuntimeError("Cannot derive custom Jacobian with respect to a parameter yet")
             res,J=self._custom_assembler.get_residuals_and_jacobian(True)
-            assert res.dtype==numpy.float64 #type:ignore
+            assert res.dtype==numpy.float64, "Expected float residuals, but got "+str(res.dtype) #type:ignore
             info.set_custom_residuals(res)
             assert J.indptr.dtype==numpy.int32 and J.indices.dtype==numpy.int32 and J.data.dtype==numpy.float64 #type:ignore
             info.set_custom_jacobian(J.data,J.indices,J.indptr) #type:ignore
@@ -3614,7 +3614,7 @@ class Problem(_pyoomph.Problem):
             pname = a
             desired_val = float(b)
         if pname not in self.get_global_parameter_names():
-            raise RuntimeError("Cannot go to parameter "+str(pname)+"="+str(desired_val)+", since the parameter '"+str(pname)+"' is not part of the problem")
+            raise RuntimeError("Cannot go to parameter "+str(pname)+"="+str(desired_val)+", since the parameter '"+str(pname)+"' is not part of the problem. Available parameters are: "+str(self.get_global_parameter_names()))
         if not self.is_initialised():
             self.initialise()
 

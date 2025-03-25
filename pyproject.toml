@@ -14,7 +14,7 @@ dependencies = [
 'mkl==2021.4.0; sys_platform == "darwin"'
 ]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [  { name="Christian Diddens", email="c.diddens@utwente.nl" },  { name="Duarte Rocha", email="d.rocha@utwente.nl" },  ]
 license = { file = "COPYING" }
 classifiers=[
