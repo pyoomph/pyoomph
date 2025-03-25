@@ -7,7 +7,7 @@ As stationary solutions, periodic orbits can exhibit different kinds of stabilit
 In the discussed Lorenz system, we only found unstable orbits, but how to prove that they are indeed unstable?
 As usual, stability can be defined by the linearized dynamics around the state of interest, here the orbit.
 
-Recalling :math:numref:`orbitdefM`, a linearization around the orbit :math:\vec{x}(t)` corresponds to the solution
+Recalling :math:numref:`orbitdefM`, a linearization around the orbit :math:`\vec{x}(t)` corresponds to the solution
 
 .. math:: :label: orbitdeflin
 

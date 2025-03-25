@@ -178,7 +178,7 @@ class LaplaceSmoothedMesh(BaseMovingMeshEquations):
 
 
 class SingleDirectionLaplaceSmoothedMesh(LaplaceSmoothedMesh):
-    def __init__(self, direction:Union[int,Literal["x","y","z"]], factor: Expression | int | float = scale_factor("spatial") ** 2, constrain_bulk_to_C1: bool = False, coordinate_space: str | None = None, coordsys: BaseCoordinateSystem | None = cartesian):
+    def __init__(self, direction:Union[int,Literal["x","y","z"]], factor: ExpressionOrNum = scale_factor("spatial") ** 2, constrain_bulk_to_C1: bool = False, coordinate_space: Optional[str] = None, coordsys: OptionalCoordinateSystem = cartesian):
         super().__init__(factor, constrain_bulk_to_C1, coordinate_space, coordsys, symmetrize=False)
         self.direction=direction
         if isinstance(direction,str):

@@ -930,7 +930,7 @@ class _NormalModeBifurcationTrackerBase(CustomBifurcationTracker):
             self.problem._azimuthal_mode_param_m.value=self.azimuthal_m
             self.real_contribution=self.problem._azimuthal_stability.real_contribution_name
             self.imag_contribution=self.problem._azimuthal_stability.imag_contribution_name
-        elif self._normal_mode_param_k is not None:
+        elif self.problem._normal_mode_param_k is not None:
             self.azimuthal=False
             if azimuthal_m is not None:
                 raise RuntimeError("Cannot supply an azimuthal mode m for Cartesian normal mode bifurcation tracking")
@@ -956,7 +956,8 @@ class _NormalModeBifurcationTrackerBase(CustomBifurcationTracker):
             self.has_imag=self.problem._set_solved_residual(self.imag_contribution,raise_error=False)
             self.problem._set_solved_residual("")
             if self.has_imag:
-                raise RuntimeError("Strange, eigenvector is real, but it has imaginary jacobian contribution")
+                print("Strange, eigenvector is real, but it has imaginary jacobian contribution")
+                #raise RuntimeError("Strange, eigenvector is real, but it has imaginary jacobian contribution")
         self.lambda0=numpy.real(self.problem.get_last_eigenvalues()[eigenvector])
         if self.has_imag: # TODO: Is this really the case? Can't we have a Hopf bifurcation for normal mode expansions? I think so, e.g. on a partial_t(u,2)=div(grad(u))+alpha*u, we can have a Hopf bifurcation
             #self.eigenvector=self.get_complex_eigenvector_guess(eigenvector)
@@ -1054,13 +1055,13 @@ class NormalModeBifurcationTracker(_NormalModeBifurcationTrackerBase):
                     return numpy.hstack([R,JR@Vr,numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)])                                
             else:
                 assert dparameter is None, "dparameter not supported for require_jacobian=True"
-                R,J,JR,HJVr,dJRdp=self.start_multiassembly().R().J().J(self.real_contribution).M(self.real_contribution).dJdU(Vr).dJdp(self.parameter).assemble()
+                R,J,JR,HJVr,dJRdP=self.start_multiassembly().R().J().J(self.real_contribution).dJdU(Vr).dJdp(self.parameter).assemble()
                 J,=self.patch_matrices(eigen=False,J=J)
                 R,=self.patch_residuals(eigen=False,R=[R])
                 JR,dJRdP=self.patch_matrices(eigen=True,J=[JR,dJRdP])
                 col=lambda C:self.as_matrix_column(C)
                 row=lambda R:self.as_matrix_row(R)                                
-                Raug=numpy.hstack([R,JRVr,numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)])                                
+                Raug=numpy.hstack([R,JR,numpy.dot(Vr,Vr if self.nonlinear_length_constraint else self.V0)-self.eigenscale*(self.eigenscale if self.nonlinear_length_constraint else 1)])                                
                 Jaug=scipy.sparse.block_array(
                     [[J,None,None],
                      [HJVr,JR,col(dJRdP@Vr)],

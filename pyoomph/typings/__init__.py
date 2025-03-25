@@ -30,7 +30,8 @@ import numpy
 import numpy.typing
 
 import sys
-if sys.version_info.major>3 or sys.version_info.minor>=10:
+#if sys.version_info.major>3 or sys.version_info.minor>=10:
+if sys.version_info >= (3, 10):
     from typing import TypeAlias
 else:
     TypeAlias=Any
@@ -47,7 +48,7 @@ def assert_type(obj:Any,typ:_AnyPyoomphType)->_AnyPyoomphType:
     if not isinstance(obj,typ):
         raise RuntimeError("Expected type "+str(typ)+", but got "+str(type(obj)))
     else:
-        return cast(typ,obj)
+        return cast(Type[typ],obj) # type: ignore
     
 __all__ = ["Union","Any","Sequence","Iterable","Callable","Iterator","Optional","TYPE_CHECKING","NPFloatArray","NPIntArray","NPComplexArray","NPUInt64Array","NPInt32Array","Type","Set","Literal","List","Dict","overload","Tuple","cast","NPAnyArray","TypeVar","Generator","OrderedDict","SupportsFloat","TypeAlias","assert_type"]
 
