@@ -214,6 +214,8 @@ class BifurcationGUI:
         self._tangs={}
         self._paramname=parameter
         self.parameter_range=[]
+        self._out_demo_video=False
+        self._demo_video_step=0
         self._current_observable=None
         self._avail_observables=[]
         self._observable_funcs=None
@@ -400,9 +402,13 @@ class BifurcationGUI:
                 self.update_plot()
 
         elif event.key=="t":
-            self.transient_leave_branch()
+            self.transient_leave_branch(0)
             self.save_all()
             self.update_plot()            
+        elif event.key=="T":
+            self.transient_leave_branch(1)
+            self.save_all()
+            self.update_plot()                        
         elif event.key=="*":  
             ds_backup=self._last_ds          
             self.step()
@@ -637,12 +643,15 @@ class BifurcationGUI:
             for seg,stab in zip(segs,stabs):
                 if stab == True:
                     dt="-"
+                    lw=1.5
                 elif stab == False:
                     dt="dashed"
+                    lw=0.75
                 else:
                     dt="dotted"               
+                    lw=1.0
                 #print("IN",stab,len(seg),dt,seg)                 
-                gca.plot(seg[:,0],seg[:,1], linestyle=dt,color=color)
+                gca.plot(seg[:,0],seg[:,1], linestyle=dt,color=color,linewidth=lw)
             normpts=numpy.array([p.get_coordinate(self._current_observable) for p in b if p.eig_value_Re!=0],ndmin=2)
             #print("BEF",normpts)
             #if normpts.shape[0]>1:
@@ -713,6 +722,13 @@ class BifurcationGUI:
         self._fig.canvas.draw()
         self._fig.canvas.flush_events()
         
+        if self._out_demo_video:
+            ddir=self.problem.get_output_directory(self.data_subdir)
+            odir=os.path.join(ddir,"demo_movie")        
+            Path(odir).mkdir(parents=True,exist_ok=True)
+            self._fig.savefig(os.path.join(odir,"plot_{:06d}.png".format(self._demo_video_step)))
+            self._demo_video_step+=1
+        
     def _update_tangents(self):
         FD_eps=1e-6
         #if self.current_point._tangs is not None and len(self.current_point._tangs)>0:
@@ -732,7 +748,7 @@ class BifurcationGUI:
         self.current_point._tangs=self._tangs.copy()
         self.problem.set_current_dofs(backup)
 
-    def transient_leave_branch(self):
+    def transient_leave_branch(self,eigenindex=0):
         self.update_plot("LEAVING BRANCH TRANSIENTLY")
         eig=numpy.sqrt(self.current_point.eig_value_Re**2+self.current_point.eig_value_Im**2)
         eig=max(1e-4,eig)
@@ -744,7 +760,7 @@ class BifurcationGUI:
   
         #self.problem.solve()
         #self.problem.solve_eigenproblem(self.neigen)
-        self.problem.perturb_dofs(0.1*numpy.real(self.problem.get_last_eigenvectors()[0]))
+        self.problem.perturb_dofs(0.1*numpy.real(self.problem.get_last_eigenvectors()[eigenindex]))
         self.problem.initialise_dt(tsnd)
         self.problem.assign_initial_values_impulsive(tsnd)
         self.problem.timestepper.set_num_unsteady_steps_done(0)
@@ -920,6 +936,8 @@ class BifurcationGUI:
             if len(avail_params)!=1:
                 raise RuntimeError("Please create the BifurcationGUI with a parameter name, unless you have a problem with a single global parameter only")
             self._paramname=avail_params[0]
+        elif not isinstance(self._paramname,str):
+            self._paramname=self._paramname.get_name()
         datadir=self.problem.get_output_directory(self.data_subdir)
         Path(datadir).mkdir(parents=True, exist_ok=True)
         Path(os.path.join(datadir,"_states")).mkdir(parents=True, exist_ok=True)
@@ -951,7 +969,7 @@ class BifurcationGUI:
         
         fullinfo={}
         fullinfo["branches"]=[b.to_state_dict() for b in self.branches]
-
+        fullinfo["demo_video_step"]=self._demo_video_step
         fullinfo["xlim"]=self._fig.gca().get_xlim()
         fullinfo["ylim"]=self._fig.gca().get_ylim()
         fullinfo["xscale"]=self._fig.gca().get_xscale()
@@ -983,6 +1001,9 @@ class BifurcationGUI:
         self._fig.gca().set_ylim(fullinfo["ylim"])
         self._fig.gca().set_xscale(fullinfo["xscale"])
         self._fig.gca().set_yscale(fullinfo["yscale"])
+        
+        if "demo_video_step" in fullinfo:
+            self._demo_video_step=fullinfo["demo_video_step"]
 
         self._state_step=fullinfo["statestep"]
         self.current_branch=self.branches[fullinfo["currentbranch"]]

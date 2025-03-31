@@ -149,6 +149,9 @@ class GenericProblemHooks:
     def actions_after_initialise(self):
         pass
     
+    def actions_on_output(self,outstep):
+        pass
+    
 
 
         
@@ -1322,6 +1325,9 @@ class Problem(_pyoomph.Problem):
                     print("OUTPUT at t=" + str(self.get_current_time()) + paramstr)
             else:
                 print("OUTPUT of proc " + str(get_mpi_rank()) + " at t=" + str(self.get_current_time()) + paramstr)
+                
+        for hook in self._hooks:
+            hook.actions_on_output(self._output_step)
         self._equation_system._do_output(self._output_step, stage)
 
         if self.write_states:

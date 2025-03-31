@@ -1343,3 +1343,70 @@ def EigenbranchTracker(problem:Problem,eigenvector:int=0,eigenscale:float=1,nonl
     else:
         return ComplexEigenbranchTracker(problem,eigenvector,eigenscale=eigenscale,nonlinear_length_constraint=nonlinear_length_constraint)
     pass
+
+
+
+
+# Just a little helper to
+class ResidualJacobianParameterDerivativeHandler(AugmentedAssemblyHandler):
+    def define_augmented_dofs(self, dofs):
+        pass
+    
+    def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:               
+        if require_jacobian is False:
+            raise ValueError("Jacobian is required")
+        if dparameter is None:
+            raise ValueError("No parameter specified")
+        assm=self.start_multiassembly()
+        dRdp,dJdp=assm.dRdp(dparameter).dJdp(dparameter).assemble()
+        return numpy.array(dRdp),dJdp
+        
+
+
+def get_simple_branch_point_normal_form(problem:Problem,param:Optional[str]=None):
+        # Approximates a simple branching point (single zero eigenvalue of the Jacobian) by a normal form
+        # dz/dt = a*(l-l0)+z*(b1*(l-l0)+b2*z^2/2+b3*z^3/3)
+        # for a real valued z and l being the parameter
+        # if a!=0, then the bifurcation is a fold
+        # if a=0 & b1!=0, then the bifurcation is a transcritical bifurcation
+        # if a=0 & b2==0 & b3!=0, then the bifurcation is a pitchfork
+        if param is None:
+            param=problem._bifurcation_tracking_parameter_name
+            if param is None:
+                raise ValueError("No parameter specified or inferred from active bifurcation tracking")
+        problem.deactivate_bifurcation_tracking()
+        last_evs=problem.get_last_eigenvectors()
+        if last_evs is None or len(last_evs)==0:
+            problem.solve_eigenproblem(1,shift=0.001)
+        lamb=problem.get_last_eigenvalues()[0]
+        if numpy.imag(lamb)>1e-6:
+            raise ValueError("Eigenvalue is not real")
+        
+        q=numpy.real(last_evs[0])
+        q=q/numpy.linalg.norm(q)
+        p=q # TODO: Not sure whether we have to take the left eigenvector here...
+        
+        problem.timestepper.make_steady()
+        
+        def d2f(direct):                    
+            return -numpy.array(problem.get_second_order_directional_derivative(direct))                
+        u=problem.get_current_dofs()[0]
+        def d3f(direct,delt=1e-6):        
+            direct_scale=1
+            problem.set_current_dofs(u+delt*direct*direct_scale)
+            res_hessp=-numpy.array(problem.get_second_order_directional_derivative(direct))
+            problem.set_current_dofs(u-delt*direct*direct_scale)
+            res_hessm=-numpy.array(problem.get_second_order_directional_derivative(direct))
+            problem.set_current_dofs(u)        
+            return 0.5*(res_hessp-res_hessm)/(delt*direct_scale)
+        d2f_res=d2f(q)
+        d3f_res=d3f(q)
+        
+        
+        problem.set_custom_assembler(ResidualJacobianParameterDerivativeHandler())
+        dRdp,dJdp=problem._custom_assembler.get_residuals_and_jacobian(True,param)
+        problem.set_custom_assembler(None)
+        print("a",numpy.dot(-dRdp,p))
+        print("b1",numpy.dot(-dJdp@q,p))
+        print("b2",numpy.dot(d2f_res,p))
+        print("b3",numpy.dot(d3f_res,p))

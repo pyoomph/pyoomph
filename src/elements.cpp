@@ -5218,7 +5218,7 @@ namespace pyoomph
 		if (!this->ndof())
 			return;
 		if (!functable->hessian_generated)
-			throw_runtime_error("Tried to calculate an analytical Hessian, but the corresponding C code was not generated");
+			throw_runtime_error("Tried to calculate an analytical Hessian, but the corresponding C code was not generated. Please call setup_for_stability_analysis(analytic_hessian=True) of the Problem instance before initialization of the Problem.");
 		if (!functable->HessianVectorProduct[functable->current_res_jac])
 			return;
 
@@ -5481,7 +5481,7 @@ namespace pyoomph
 		if (!this->ndof())
 			return;
 		if (!functable->hessian_generated)
-			throw_runtime_error("Tried to calculate an analytical Hessian, but the corresponding C code was not generated");
+			throw_runtime_error("Tried to calculate an analytical Hessian, but the corresponding C code was not generated. Please call setup_for_stability_analysis(analytic_hessian=True) of the Problem instance before initialization of the Problem.");
 		if (!functable->HessianVectorProduct[functable->current_res_jac])
 			return;
 
