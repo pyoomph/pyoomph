@@ -1365,7 +1365,7 @@ class ResidualJacobianParameterDerivativeHandler(AugmentedAssemblyHandler):
 
 def get_simple_branch_point_normal_form(problem:Problem,param:Optional[str]=None):
         # Approximates a simple branching point (single zero eigenvalue of the Jacobian) by a normal form
-        # dz/dt = a*(l-l0)+z*(b1*(l-l0)+b2*z^2/2+b3*z^3/3)
+        # dz/dt = a*(l-l0)+z*(b1*(l-l0)+b2*z^2/2+b3*z^3/6)
         # for a real valued z and l being the parameter
         # if a!=0, then the bifurcation is a fold
         # if a=0 & b1!=0, then the bifurcation is a transcritical bifurcation
@@ -1384,9 +1384,21 @@ def get_simple_branch_point_normal_form(problem:Problem,param:Optional[str]=None
         
         q=numpy.real(last_evs[0])
         q=q/numpy.linalg.norm(q)
-        p=q # TODO: Not sure whether we have to take the left eigenvector here...
         
         problem.timestepper.make_steady()
+        
+        n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = problem.assemble_eigenproblem_matrices(0) #type:ignore
+        M=csr_matrix((M_val, M_ci, M_rs), shape=(n, n))	#TODO: Is csr or csc?
+        A=csr_matrix((-J_val, J_ci, J_rs), shape=(n, n))
+        AT=A.transpose().tocsr()
+        MT=M.transpose().tocsr()
+        res=problem.get_eigen_solver().solve(1,0.0001,custom_J_and_M=(AT,MT))
+        p=numpy.real(res[1][0])
+        prod=numpy.dot(p,q)
+        q/=numpy.sqrt(abs(prod))
+        p/=numpy.sqrt(abs(prod))*numpy.sign(prod)
+        
+        
         
         def d2f(direct):                    
             return -numpy.array(problem.get_second_order_directional_derivative(direct))                
@@ -1403,10 +1415,30 @@ def get_simple_branch_point_normal_form(problem:Problem,param:Optional[str]=None
         d3f_res=d3f(q)
         
         
-        problem.set_custom_assembler(ResidualJacobianParameterDerivativeHandler())
-        dRdp,dJdp=problem._custom_assembler.get_residuals_and_jacobian(True,param)
-        problem.set_custom_assembler(None)
-        print("a",numpy.dot(-dRdp,p))
+        if True:
+            
+            R0,J0=problem.assemble_jacobian(with_residual=True)
+            problem.set_custom_assembler(ResidualJacobianParameterDerivativeHandler())
+            dRdp,dJdp=problem._custom_assembler.get_residuals_and_jacobian(True,param)
+            problem.set_custom_assembler(None)
+            if False:
+                a=numpy.dot(-dRdp,p)
+            else:
+                dzdp_sol=scipy.sparse.linalg.spsolve(J0,dRdp)
+                print(numpy.dot(p,dzdp_sol))
+                exit()
+            
+        else:
+            dparam=-0.0000001            
+            pv0=problem.get_global_parameter(param).value
+            R0,J0=problem.assemble_jacobian(with_residual=True)
+            problem.go_to_param(**{param:pv0+dparam})
+            R1,J1=problem.assemble_jacobian(with_residual=True)
+            problem.get_global_parameter(param).value=pv0
+            problem.set_current_dofs(u)
+            dRdp=(numpy.array(R1)-numpy.array(R0))/dparam
+            dJdp=(J1-J0)/dparam
+        print("a",a)
         print("b1",numpy.dot(-dJdp@q,p))
         print("b2",numpy.dot(d2f_res,p))
         print("b3",numpy.dot(d3f_res,p))
