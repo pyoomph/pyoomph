@@ -1353,13 +1353,41 @@ class ResidualJacobianParameterDerivativeHandler(AugmentedAssemblyHandler):
         pass
     
     def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:               
-        if require_jacobian is False:
-            raise ValueError("Jacobian is required")
         if dparameter is None:
             raise ValueError("No parameter specified")
         assm=self.start_multiassembly()
-        dRdp,dJdp=assm.dRdp(dparameter).dJdp(dparameter).assemble()
-        return numpy.array(dRdp),dJdp
+        if require_jacobian is False:
+            dRdp=assm.dRdp(dparameter).assemble()
+            return numpy.array(dRdp)                
+        else:
+            dRdp,dJdp=assm.dRdp(dparameter).dJdp(dparameter).assemble()
+            return numpy.array(dRdp),dJdp
+        
+
+# Just a little helper to return arbitrary stuff
+class PerformCustomMultiAssembly(AugmentedAssemblyHandler):
+    def __init__(self,problem:Problem,request:Callable[[MultiAssembleRequest],Any]):
+        super().__init__()
+        self.request=request
+        self.problem=problem
+        self.problem.set_custom_assembler(self)
+        self.res=self.get_residuals_and_jacobian(require_jacobian=False)
+        self.problem.set_custom_assembler(None)
+        
+    def result(self):
+        return self.res
+    
+    def define_augmented_dofs(self, dofs):
+        pass
+    
+    def get_residuals_and_jacobian(self,require_jacobian:bool,dparameter:Optional[str]=None)->Union[NPFloatArray,Tuple[NPFloatArray,DefaultMatrixType]]:                       
+        assm=self.start_multiassembly()
+        self.request(assm)
+        res=assm.assemble()        
+        for i,r in enumerate(res):
+            if isinstance(r,list):
+                res[i]=numpy.array(r)
+        return res
         
 
 
