@@ -92,7 +92,7 @@ class PiecewiseLowOrderNSCHPotential(CustomMultiReturnExpression):
 
 #https://arxiv.org/abs/1911.06718
 class LowOrderNSCH(Equations):
-    def __init__(self,rho_a,rho_b,mu_a,mu_b,epsilon,gamma,mobility,*,W=rational_num(1,4),gravity=0,low_order=True,with_cut_off=True,with_subexpressions=True,mobility_mode:int=0,phase_boundary_level:Union[int,Literal["max"]]=0,incompressiblity_PI:bool=False,real_pressure:bool=False,use_sym_grad_u:bool=True,swap_test_functions:bool=True,piecewise_potential:bool=True,compression_term_lambda:ExpressionOrNum=0):
+    def __init__(self,rho_a,rho_b,mu_a,mu_b,epsilon,gamma,mobility,*,W=rational_num(1,4),gravity=0,low_order=True,with_cut_off=True,with_subexpressions=True,mobility_mode:int=0,phase_boundary_level:Union[int,Literal["max"]]=0,phase_boundary_threshold:float=0.8,incompressiblity_PI:bool=False,real_pressure:bool=False,use_sym_grad_u:bool=True,swap_test_functions:bool=True,piecewise_potential:bool=True,compression_term_lambda:ExpressionOrNum=0):
         super().__init__()
         self.low_order=low_order
         self.gravity=gravity
@@ -105,7 +105,7 @@ class LowOrderNSCH(Equations):
         self.mobility_mode=mobility_mode
         self.W=W
         self.phase_boundary_level=phase_boundary_level
-        self.phase_boundary_threshold=0.8
+        self.phase_boundary_threshold=phase_boundary_threshold
         self.incompressiblity_PI=incompressiblity_PI
         self.use_sym_grad_u=use_sym_grad_u
         self.real_pressure=real_pressure

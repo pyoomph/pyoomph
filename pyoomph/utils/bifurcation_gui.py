@@ -57,7 +57,9 @@ class BifurcationGUISolutionPoint:
         self.outstep=outstep
         self.scoord=0
         self._tangs={}
+        self._branch_switch_tangs=[]
         self.tag=-1
+        self.bifurcation_info:Optional[Dict]=None
 
     @staticmethod
     def from_dict(res):
@@ -230,6 +232,8 @@ class BifurcationGUI:
         self.output_all_observables=False
         self.custom_key_functions:Dict[str,Callable[[BifurcationGUI],None]]={}
         self._initial_view=None
+        self.classify_bifurcations=False
+        
         
     def set_initial_view(self,xmin,xmax,ymin,ymax):
         self._initial_view=[xmin,xmax,ymin,ymax]
@@ -290,6 +294,9 @@ class BifurcationGUI:
             self.branches.append(self.current_branch)
         state_file=self.problem.get_output_directory(os.path.join(self.data_subdir,"_states","state_{:06d}.dump".format(self._state_step))) 
         p=BifurcationGUISolutionPoint(self.get_bifurcation_parameter().value,self.evalulate_observables(),self.problem.get_last_eigenvalues()[0],state_file,self._state_step)                                 
+        if p.eig_value_Re==0 and self.classify_bifurcations:
+            from pyoomph.generic.bifurcation_tools import NormalFormCalculator
+            p.bifurcation_info=NormalFormCalculator(self.problem).get_normal_form(self.get_bifurcation_parameter().get_name())            
         self.problem.save_state(state_file)
         self._state_step+=1
         #if self.current_point is not None:            
@@ -384,6 +391,12 @@ class BifurcationGUI:
             self.update_plot()
         elif event.key=="o":
             self.output_curves()
+        elif event.key=="a":
+            self.problem.set_arc_length_parameter(scale_arc_length=not self._modifier_keys["shift"])
+            print("Scale arclength is set to ",not self._modifier_keys["shift"], "use a or shift+a to switch")
+        elif event.key=="A":
+            self.problem.set_arc_length_parameter(scale_arc_length=False)
+            print("Scale arclength is set to ",False, "use a or shift+a to switch")
         elif event.key=="i":
             self.interpolated_splines=not self.interpolated_splines
             self.update_plot()
@@ -540,9 +553,17 @@ class BifurcationGUI:
             self.update_plot()
 
         elif event.key=="b":
-            self.locate_bifurcation()
-            self.save_all()
-            self.update_plot()
+            if self.current_point is not None and self.current_point.eig_value_Re==0:
+                self.branch_switch()
+                self.save_all()
+                self.update_plot()
+            else:                    
+                try:
+                    self.locate_bifurcation()
+                    self.save_all()
+                except:
+                    self.problem.deactivate_bifurcation_tracking()
+                self.update_plot()
             
         elif event.key=="p":
             self.locate_bifurcation(pitchfork=True)
@@ -662,8 +683,14 @@ class BifurcationGUI:
             for p in b:                
                 if p.eig_value_Re==0:                                        
                     pc=p.get_coordinate(self._current_observable)
-                    gca.plot([pc[0]],[pc[1]], marker='o', markersize=6,color="brown")
-                if p.tag>=0:
+                    gca.plot([pc[0]],[pc[1]], marker='o', markersize=6,color="brown")                    
+                    if p.bifurcation_info is not None:
+                        shorts={"transcritical":"T","fold":"F","pitchfork":"P","Hopf":"H"}
+                        if p.bifurcation_info["type"] in shorts:                            
+                            gca.annotate(str(p.tag)+"," if p.tag>=0 else ""+ shorts[p.bifurcation_info["type"]],pc)
+                        elif p.tag>=0:
+                            gca.annotate(str(p.tag),pc)
+                elif p.tag>=0:
                     pc=p.get_coordinate(self._current_observable)
                     gca.annotate(str(p.tag),pc)
 
@@ -681,6 +708,11 @@ class BifurcationGUI:
                     #self._fig.gca().arrow(x0[0],x0[1],dx[0],dx[1])
                     extend_lims(x0)
                     self._fig.gca().annotate("", xy=x0+dx, xytext=x0,arrowprops=dict(arrowstyle="->"),annotation_clip=False)
+                    for i,bst in enumerate(self.current_point._branch_switch_tangs):
+                        dx=self._last_ds*bst[self._current_observable]
+                        #self._fig.gca().arrow(x0[0],x0[1],dx[0],dx[1])
+                        extend_lims(x0)
+                        self._fig.gca().annotate("", xy=x0+dx, xytext=x0,arrowprops=dict(arrowstyle="->",color="brown",linewidth=1 if i==0 else 0.1),annotation_clip=False)
                 eigv=pc[2]+1j*pc[3]
                 pttext="({:3.3g},{:3.3g})\n".format(pc[0],pc[1])+f'{eigv:.2g}'                
             else:
@@ -746,7 +778,61 @@ class BifurcationGUI:
             do=(po[k]-self.current_point.obs_values[k])/FD_eps
             self._tangs[k]=numpy.array([dp,do])    
         self.current_point._tangs=self._tangs.copy()
+        
+        
+        if self.current_point.bifurcation_info is not None:
+            bi=self.current_point.bifurcation_info
+            self.current_point._branch_switch_tangs=[]
+            if bi["type"]=="transcritical":
+                for dptr in [-dp,dp]:
+                    ddof=numpy.array(bi["perturbation_predictor"](dptr))                    
+                    self.problem.set_current_dofs(backup+FD_eps*ddof)
+                    po=self.evalulate_observables()
+                    btangtangs={}
+                    for k in self._avail_observables:
+                        do=(po[k]-self.current_point.obs_values[k])/FD_eps
+                        btangtangs[k]=numpy.array([dptr,do])    
+                    self.current_point._branch_switch_tangs.append(btangtangs)
+                    
         self.problem.set_current_dofs(backup)
+
+    def branch_switch(self):
+        if self.current_point.eig_value_Re!=0:
+            raise RuntimeError("Can only switch branches as bifurcations")
+        if self.current_point.bifurcation_info is None:
+            raise RuntimeError("No bifurcation info available. Please set gui.classify_bifurcations=True")
+        bi=self.current_point.bifurcation_info
+        if bi["type"]=="fold":
+            print("Cannot switch branches at fold bifurcations")
+            return
+        
+        param=self.get_bifurcation_parameter()
+        curr=self.problem.get_current_dofs()[0]       
+        
+        if self.current_point._branch_switch_tangs is None or len(self.current_point._branch_switch_tangs)==0:
+            ds=0.001 
+            dp=bi["param_predictor"](ds)
+            du=bi["perturbation_predictor"](ds)      
+        else:
+            dp=self.current_point._branch_switch_tangs[0][self._current_observable][0]*self._last_ds
+            du=bi["perturbation_predictor"](dp)                
+            ds=self._last_ds
+        
+        print("Branch switching with dp=",dp,"dunorm",numpy.linalg.norm(du))
+        self.update_plot("BRANCH SWITCHING")
+        
+        self.problem._update_dof_vectors_for_continuation(du,curr)
+        self.problem._update_param_info_for_continuation(dp,param.value)
+        self.problem.arclength_continuation(param,ds)
+        
+        self.branches.append(BifurcationGUISolutionBranch())
+        self.current_branch=self.branches[-1]
+        self.selected_branch=self.current_branch
+        self._tangs={}
+        self.problem.solve_eigenproblem(self.neigen)
+        self._add_current_state()  
+        self._update_tangents()  
+        self._mode="al"
 
     def transient_leave_branch(self,eigenindex=0):
         self.update_plot("LEAVING BRANCH TRANSIENTLY")
@@ -923,6 +1009,7 @@ class BifurcationGUI:
         self.problem.activate_bifurcation_tracking(self._paramname,"pitchfork" if pitchfork else None)
         self.problem.solve(max_newton_iterations=20)
         self._add_current_state()
+        self._update_tangents()
         self.problem.deactivate_bifurcation_tracking()
         self.reorder_branch_upon_point_insertion(self.current_branch,self.current_point)
 

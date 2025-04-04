@@ -1046,6 +1046,15 @@ namespace pyoomph
 		}
     }
 
+	void Problem::update_param_info_for_continuation(double dp,double p0)
+	{
+		Parameter_current=p0;
+		if (dp>0) Continuation_direction=1; else  if (dp<0) Continuation_direction=-1; 
+		Parameter_derivative=abs(dp);
+		
+		Arc_length_step_taken=true;
+	}
+
 	
 
     void Problem::activate_my_fold_tracking(double *const &parameter_pt, const oomph::DoubleVector &eigenvector, const bool &block_solve)
