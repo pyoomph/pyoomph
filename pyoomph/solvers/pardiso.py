@@ -451,6 +451,8 @@ class PardisoSolver(GenericLinearSystemSolver):
                 
                 self._current_pardiso.iparm[3] = 63
                 bv=self.get_b(n,b)
+                if self.problem._custom_assembler is not None and self.problem._custom_assembler.has_custom_solve_routine():
+                    raise NotImplementedError("Custom solve not implemented for this case")
                 sol=self._current_pardiso.solve(bv)
                 #self._current_pardiso.iparm[3] = 0
                 err=numpy.amax(numpy.absolute(self._lastA*sol-bv))
@@ -466,7 +468,10 @@ class PardisoSolver(GenericLinearSystemSolver):
                     print("REUSE PARDISO AND REFACTOR DONE, ERROR",err,"IN ",self._current_pardiso.iparm[6],"ITERATIONS")
                 b[:]=sol[:]
             else:
-                sol = self._current_pardiso.solve(self.get_b(n,b))
+                if self.problem._custom_assembler is not None and self.problem._custom_assembler.has_custom_solve_routine():
+                    sol=self.problem._custom_assembler.custom_solve_routine(lambda rhs : self._current_pardiso.solve(rhs), b)
+                else:
+                    sol = self._current_pardiso.solve(self.get_b(n,b))
             if self.verbose:
                 print("PARDISO SOLVE IPARM",self._current_pardiso.iparm)
             b[:] = sol[:]

@@ -120,8 +120,11 @@ class PETSCSolver(GenericLinearSystemSolver):
         elif op_flag == 2:
             self.setup_solver()
             bv = PETSc.Vec().createWithArray(b) #type:ignore
-            self.ksp.solve(bv, self.x) #type:ignore
-            xv = self.x.getArray() #type:ignore
+            if self.problem._custom_assembler is not None and self.problem._custom_assembler.has_custom_solve_routine():
+                raise RuntimeError("Cannot use custom solve routine with PETSc yet. Also, iterative solving might require different handling here")
+            else:
+                self.ksp.solve(bv, self.x) #type:ignore
+                xv = self.x.getArray() #type:ignore
             b[:] = xv[:] #type:ignore
 
             #print('Converged in', self.ksp.getIterationNumber(), 'iterations.') #type:ignore

@@ -5080,6 +5080,182 @@ class Problem(_pyoomph.Problem):
         return currentdt
 
 
+    def iterate_over_multiple_solutions_by_deflation(self,deflation_alpha:float=0.1,deflation_p:int=2,perturbation_amplitude:float=0.5,max_newton_iterations:Optional[int]=None,newton_relaxation_factor:Optional[float]=None,use_eigenperturbation:bool=False,skip_initial_solution:bool=False,num_random_tries:int=1,keep_deflation_operator_active:bool=False)-> Generator[NPFloatArray,None,None]:
+        """Tries to find multiple stationary solutions by deflation. The procedure is implemented according to 'Deflation techniques for finding distinct solutions of nonlinear partial differential equations' by
+Patrick E. Farrell, Ásgeir Birkisson & Simon W. Funke, https://arxiv.org/pdf/1410.5620.pdf .
+
+        Args:
+            deflation_alpha (float, optional): Shift of the deflation operator. Defaults to 0.1.
+            deflation_p (int, optional): Order of the deflation. Defaults to 2.
+            perturbation_amplitude (float, optional): Perturbation amplitude to move away from the previous solution. Defaults to 0.5.
+            max_newton_iterations (Optional[int], optional): Optional override of the number of Newton iterations to try. Defaults to None.
+            newton_relaxation_factor (Optional[float], optional): Optional override of the Newton relaxation factor. Defaults to None.
+
+        Yields:
+            The found solutions as lists of degrees of freedom
+        """        
+            
+        from pyoomph.generic.bifurcation_tools import DeflationAssemblyHandler
+        deflation=DeflationAssemblyHandler(alpha=deflation_alpha,p=deflation_p)
+        self.set_custom_assembler(deflation)
+        U=self.get_current_dofs()[0]
+        remaining_random_tries=num_random_tries
+        numfound=0
+        numtries=0
+        while True:
+            try:
+                numtries+=1
+                self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+            except Exception as e:
+                remaining_random_tries-=1
+                if remaining_random_tries>1:
+                    self.set_current_dofs(U)
+                    self.perturb_dofs((numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
+                    print("Trying again with new random values")
+                    continue                    
+                print("Further deflation failed to converge. No more solutions found. Returned in total ",numfound,"solutions by",numtries,"attempted Newton solves")                                
+                if not keep_deflation_operator_active:
+                    self.set_custom_assembler(None)
+                self.set_current_dofs(U)
+                return
+            
+            U=self.get_current_dofs()[0]
+            if not skip_initial_solution:
+                numfound+=1
+                yield U
+            remaining_random_tries=num_random_tries
+            skip_initial_solution=False
+            deflation.add_known_solution(U)
+            if use_eigenperturbation:
+                self.solve_eigenproblem(1)
+                eigv=numpy.real(self.get_last_eigenvectors()[0])
+                eigv=eigv/numpy.amax(abs(eigv))
+                self.perturb_dofs(eigv*perturbation_amplitude)
+            else:
+                self.perturb_dofs((numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
+
+
+    def deflated_continuation(self,deflation_alpha:float=0.1,deflation_p:int=2,perturbation_amplitude:float=0.5,max_newton_iterations:Optional[int]=None,newton_relaxation_factor:Optional[float]=None,use_eigenperturbation:bool=False,skip_initial_solution:bool=False,num_random_tries:int=1,max_branches:Optional[int]=None,branch_continue_iterations:int=10,**param_range):
+        """Scan over a parameter range and try to find multiple solutions for each parameter step by deflation
+        This is an implemetation according to: The computation of disconnected bifurcation diagrams by Patrick E. Farrell, Casper H. L. Beentjes, Ásgeir Birkisson
+         https://arxiv.org/pdf/1603.00809.pdf
+        
+        Args:
+            deflation_alpha : Shift of the deflation operator. Defaults to 0.1.
+            deflation_p: Order of the deflation. Defaults to 2.
+            perturbation_amplitude: Perturbation amplitude to move away from the previous solution. Defaults to 0.5.
+            max_newton_iterations: Optional override of the number of Newton iterations during deflated search for additional solutions. Defaults to None.
+            newton_relaxation_factor: Optional override of the Newton relaxation factor during deflated search for additional solutions. Defaults to None.
+            use_eigenperturbation: Whether to use eigen perturbation for the next solution during deflation. Defaults to False.            
+            num_random_tries: Number of random tries for finding solutions during deflation. Defaults to 1.
+            max_branches: Maximum number of branches to find. Defaults to None.
+            branch_continue_iterations: Number of iterations for continuing branches. Defaults to 10.
+            
+        Yields:
+            A tuple of branch index (from 0 to ...), the current parameter value and the current degrees of freedom (dofs) for the solution.
+        """ 
+        from pyoomph.generic.bifurcation_tools import DeflationAssemblyHandler
+        param=None
+        rang=None
+        for k,v in param_range.items():
+            if param is None:
+                param=k
+                rang=[pv for pv in v]
+            else:
+                raise RuntimeError("Please specify only one parameter range")
+        if param is None:
+            raise RuntimeError("Please specify a parameter range like e.g. parameter_name=linspace(0,1,10)")
+        if param not in self.get_global_parameter_names():
+            raise RuntimeError("Please specify a parameter that is defined in the problem")
+        param_obj=self.get_global_parameter(param)
+        active_branches={} # Branch index -> current dofs
+        
+        # Find the first solutions
+        self.go_to_param(**{param:rang.pop(0)})
+        self.solve()
+        branch_index=0
+        for dofs in self.iterate_over_multiple_solutions_by_deflation(max_newton_iterations=max_newton_iterations,perturbation_amplitude=perturbation_amplitude,deflation_alpha=deflation_alpha,deflation_p=deflation_p,newton_relaxation_factor=newton_relaxation_factor,use_eigenperturbation=use_eigenperturbation,skip_initial_solution=skip_initial_solution,num_random_tries=num_random_tries,keep_deflation_operator_active=True):
+            active_branches[branch_index]=dofs
+            yield branch_index,param_obj.value,dofs
+            branch_index+=1            
+        deflator=cast(DeflationAssemblyHandler,self._custom_assembler)
+        if len(active_branches)==0:
+            print("No solution found to start with")
+            self.set_custom_assembler(None)
+            return
+        
+        for pv in rang:
+            deflator.clear_known_solutions()
+            param_obj.value=pv
+            branches_to_remove=[]
+            branches_to_add={}
+            old_branches=active_branches.copy()
+            for bi,dofs in active_branches.items():
+                self.set_current_dofs(dofs)
+                param_obj.value=pv
+                try:
+                    self.solve(max_newton_iterations=branch_continue_iterations)
+                    newdofs=self.get_current_dofs()[0]
+                    deflator.add_known_solution(newdofs)
+                    active_branches[bi]=newdofs
+                    yield bi,param_obj.value,newdofs
+                except:
+                    branches_to_remove.append(bi)
+            
+            # It could have happened that we accidentially switched branches due to the order of the deflation selection
+            # Reorder them by distance in the dofs
+            new_branches_to_remove=[]
+            for bind_to_rem in branches_to_remove:
+                switch_index=None
+                mindist=numpy.linalg.norm(active_branches[bind_to_rem]-old_branches[bind_to_rem])
+                for other_branch,otherdofs in active_branches.items():
+                    if other_branch in branches_to_remove:
+                        continue
+                    cdist=numpy.linalg.norm(otherdofs-old_branches[bind_to_rem])
+                    if cdist<mindist:
+                        cdist=mindist
+                        switch_index=other_branch
+                if switch_index is not None:
+                    print("Switching branch {} with {}".format(bind_to_rem,switch_index))
+                    new_branches_to_remove.append(switch_index)
+                    active_branches[bind_to_rem]=active_branches[switch_index]
+                else:
+                    new_branches_to_remove.append(bind_to_rem)                        
+                
+            branches_to_remove=new_branches_to_remove
+                    
+            for bi,dofs in active_branches.items():
+                success=True
+                if max_branches is not None and len(active_branches)+len(branches_to_add)-len(branches_to_remove)>max_branches:
+                    break
+                remaining_perturbation_tries=num_random_tries
+                while success:
+                    
+                    print("Checking for a new solution",branch_index,branches_to_remove)
+                    self.set_current_dofs(dofs)
+                    self.perturb_dofs((numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
+                    param_obj.value=pv
+                    try:                    
+                        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+                        print("Found new solution after ",len(self.get_last_residual_convergence()),"steps",self.get_last_residual_convergence())
+                        newdofs=self.get_current_dofs()[0]
+                        deflator.add_known_solution(newdofs)
+                        branches_to_add[branch_index]=newdofs                        
+                        yield branch_index,param_obj.value,newdofs
+                        branch_index+=1
+                    except:
+                        remaining_perturbation_tries-=1
+                        if remaining_perturbation_tries<=0:
+                            success=False
+                        
+            for bi in branches_to_remove:
+                del active_branches[bi]
+            for bi,newdofs in branches_to_add.items():
+                active_branches[bi]=newdofs
+        
+        self.set_custom_assembler(None)
+        return
+
     def force_remesh(self, only_domains:Optional[Set[MeshTemplate]]=None, num_adapt:Optional[int]=None,interpolator:Type["BaseMeshToMeshInterpolator"]=_DefaultInterpolatorClass):
         remeshers:List["RemesherBase"] = []
         if only_domains is not None:

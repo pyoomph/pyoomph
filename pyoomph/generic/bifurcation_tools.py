@@ -1395,6 +1395,124 @@ class PerformCustomMultiAssembly(AugmentedAssemblyHandler):
         
 
 
+
+class DeflationAssemblyHandler(AugmentedAssemblyHandler):
+    # Deflation as described in https://arxiv.org/pdf/1410.5620
+    def __init__(self,alpha=0.1,p=2):
+        super().__init__()
+        self.alpha=alpha
+        self.p=p
+        self.shift_mode:Literal["single","each","scaled"]="each"
+        if not isinstance(self.p,int):
+            raise ValueError("p must be an integer")
+        if self.p<2:
+            raise ValueError("p must be at least 2")
+        self.Ws=[]
+        
+    def define_augmented_dofs(self, dofs):
+        # No augmentation of dofs
+        pass
+        
+    def add_known_solution(self,W):
+        U,=self.get_augmented_dofs().split(startindex=0)
+        if len(U)!=len(W):
+            raise ValueError("Length of known solution and augmented dof do not match")
+        self.Ws.append(W)
+        
+    def clear_known_solutions(self):
+        self.Ws=[]
+        
+    
+    def _get_alpha(self):
+        if len(self.Ws)==0 or self.shift_mode=="single" or self.shift_mode=="each":
+            return self.alpha
+        else:
+            return self.alpha**(1/len(self.Ws))
+    
+    def _get_eta_single(self,U,W):
+        # Return the inverse of the diagonal of the deflation matrix (just a constant scalar) with respect to a known solution W
+        norm=numpy.sum((U-W)**self.p)
+        if self.shift_mode=="single":
+            return norm
+        else:
+            return 1/(1/norm+self._get_alpha())
+
+    def _get_eta(self,U):
+        # Return the inverse of the diagonal of the deflation matrix (just a constant scalar) with respect to a all known solutions
+        res=1
+        for W in self.Ws:
+            res*=self._get_eta_single(U,W)
+        if self.shift_mode=="single":
+            if len(self.Ws)==0:
+                return 1
+            res=1/(1/res+self._get_alpha())
+            return res
+        else:
+            return res        
+    
+    def _get_eta_prime_single(self,U,W):
+        # Return derivative of eta_single(W) with respect to U        
+        dnorm=self.p*(U-W)**(self.p-1)        
+        if self.shift_mode=="single":            
+            return dnorm
+        else:
+            norm=numpy.sum((U-W)**self.p)
+            return dnorm/(self._get_alpha()*norm**2+1)
+
+    def _get_eta_prime(self,U):    
+        # Return derivative of eta([W1,W2,...]) with respect to U
+        
+        if self.shift_mode=="single":
+            if len(self.Ws)==0:
+                return 0
+            sum_deta=0
+            sum_eta=0
+            for W in self.Ws:
+                sum_eta+=self._get_eta_single(U,W)                
+                sum_deta+=self._get_eta_prime_single(U,W)
+            return sum_deta/(self._get_alpha()*sum_eta+1)**2
+        else:
+            factor=1
+            sum=0
+            for W in self.Ws:
+                eta_s=self._get_eta_single(U,W)
+                factor*=eta_s
+                sum+=self._get_eta_prime_single(U,W)/eta_s
+            return factor*sum
+    
+        
+    def get_residuals_and_jacobian(self, require_jacobian, dparameter = None):
+        assm=self.start_multiassembly()
+        U,=self.get_augmented_dofs().split(startindex=0)
+        eta=self._get_eta(U)
+        if require_jacobian:
+            if dparameter is not None:
+                raise NotImplementedError("dparameter not implemented for jacobian")
+            R,J=assm.R().J().assemble()            
+            return numpy.array(R)/eta,J # NOTE: J is not deflated, it requires the special solving method
+        else:
+            if dparameter is not None:
+                raise NotImplementedError("dparameter not implemented for residuals")
+            R,=assm.R().assemble()            
+            return numpy.array(R)/eta
+        
+    def has_custom_solve_routine(self):
+        return True
+        
+    def custom_solve_routine(self, solve_Jx_b:Callable[[NPFloatArray],NPFloatArray], b:NPFloatArray) -> NPFloatArray:
+        if len(self.Ws)==0:
+            return solve_Jx_b(b)
+        U,=self.get_augmented_dofs().split(startindex=0)
+        eta=self._get_eta(U)
+        d=self._get_eta_prime(U)
+        f=-b/eta # Since R=R_nondeflated/eta, f=-R_nondeflated/eta**2
+        fsol=solve_Jx_b(f)
+        bsol=solve_Jx_b(b)
+        fdbsol=f*numpy.dot(d,bsol)
+        numer=solve_Jx_b(fdbsol)
+        denom=1+eta*numpy.dot(d,fsol)                
+        return eta*bsol-eta**2*numer/denom        
+
          
 class NormalFormCalculator:
       def __init__(self,problem:Problem):
