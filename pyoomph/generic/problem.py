@@ -5097,6 +5097,8 @@ Patrick E. Farrell, Ásgeir Birkisson & Simon W. Funke, https://arxiv.org/pdf/14
             
         from pyoomph.generic.bifurcation_tools import DeflationAssemblyHandler
         deflation=DeflationAssemblyHandler(alpha=deflation_alpha,p=deflation_p)
+        if not self.is_initialised():
+            self.initialise()
         self.set_custom_assembler(deflation)
         U=self.get_current_dofs()[0]
         remaining_random_tries=num_random_tries
