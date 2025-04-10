@@ -19,7 +19,7 @@ if [[ "$PYVERS" == "True" ]]; then
  EDITABLE_MODE="--config-settings editable_mode=strict"
 else
  echo "ERROR: Please upgrade pip to at least version 24.0!"
- echo "pyoomph -m pip install --upgrade pip"
+ echo "python -m pip install --upgrade pip"
  exit
  EDITABLE_MODE=
 fi
