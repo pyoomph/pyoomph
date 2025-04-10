@@ -2732,8 +2732,8 @@ class MatplotlibPlotter(BasePlotter):
 
     def ensure_spatial_nondim(self,x:ExpressionOrNum) -> float:
         if isinstance(x,Expression):
-            factor,_unit,_rest,_success=_pyoomph.GiNaC_collect_units(x)
-            return float(factor)
+            factor,_unit,rest,_success=_pyoomph.GiNaC_collect_units(x)
+            return float(factor*rest)
         else:
             return float(x)
 
@@ -2764,6 +2764,7 @@ class MatplotlibPlotter(BasePlotter):
         if ymax is not None:
             self.ymax=self.ensure_spatial_nondim(ymax)
             plt.ylim(top=self.ymax) #type:ignore
+        
 
         if self.aspect_ratio and self.fullscreen and (self.xmin is not None) and (self.xmax is not None) and (self.ymin is not None) and (self.ymax is not None):
             # Enforce the image size to match it

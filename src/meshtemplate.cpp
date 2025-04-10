@@ -799,7 +799,32 @@ namespace pyoomph
 
 	MeshTemplateFacet *MeshTemplateElementTetraC1::construct_facet(unsigned i)
 	{
-		throw_runtime_error("TODO");
+//oomph ordering : {1, 2, 3}, {0, 2, 3}, {0, 1, 3}, {1, 2, 0}
+		unsigned ni1, ni2, ni3;
+		if (i == 0)
+		{
+			ni1 = 1; ni2 = 2; ni3 = 3;
+		}
+		else if (i==1)
+		{
+			ni1 = 0; ni2 = 2; ni3 = 3;
+		}
+		else if (i==2)
+		{
+			ni1 = 0; ni2 = 1; ni3 = 3;
+		}
+		else if (i==3)
+		{
+			ni1 = 1; ni2 = 2; ni3 = 0;
+		}
+		else
+			return NULL;
+		ni1 = node_indices[ni1];
+		ni2 = node_indices[ni2];
+		ni3 = node_indices[ni3];
+		std::vector<unsigned> inds = {ni1, ni2, ni3};
+		// std::sort(inds.begin(),inds.end());
+		return new MeshTemplateFacet(inds, NULL, NULL);
 	}
 
 	/////////////////////////////////
@@ -813,7 +838,32 @@ namespace pyoomph
 
 	MeshTemplateFacet *MeshTemplateElementTetraC2::construct_facet(unsigned i)
 	{
-		throw_runtime_error("TODO");
+//oomph ordering : {1, 2, 3}, {0, 2, 3}, {0, 1, 3}, {1, 2, 0}
+		unsigned ni1, ni2, ni3;
+		if (i == 0)
+		{
+			ni1 = 1; ni2 = 2; ni3 = 3;
+		}
+		else if (i==1)
+		{
+			ni1 = 0; ni2 = 2; ni3 = 3;
+		}
+		else if (i==2)
+		{
+			ni1 = 0; ni2 = 1; ni3 = 3;
+		}
+		else if (i==3)
+		{
+			ni1 = 1; ni2 = 2; ni3 = 0;
+		}
+		else
+			return NULL;
+		ni1 = node_indices[ni1];
+		ni2 = node_indices[ni2];
+		ni3 = node_indices[ni3];
+		std::vector<unsigned> inds = {ni1, ni2, ni3};
+		// std::sort(inds.begin(),inds.end());
+		return new MeshTemplateFacet(inds, NULL, NULL);
 	}
 
 	MeshTemplateElement *MeshTemplateElementTetraC2::convert_for_C2TB_space(MeshTemplate *templ)

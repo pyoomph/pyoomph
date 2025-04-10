@@ -4546,7 +4546,9 @@ namespace pyoomph
           ind = treeB.point_present(nA->x(0));
         if (ind < 0)
         {
-          throw_runtime_error("Cannot locate opposite node");
+          std::string posstring="";
+          for (unsigned int inda=0;inda<ndimA;inda++) posstring+=std::to_string(nA->x(inda))+(inda+1<ndimA ? "," : "");
+          throw_runtime_error("Cannot locate opposite node at x=("+posstring+")");
         }
         indices.insert(ind);
         //  std::cout << ind << "  " ;
