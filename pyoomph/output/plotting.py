@@ -1146,10 +1146,11 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
 
         self._arrows=[]
 
+        asp=1 if self.plotter.aspect_ratio is True else self.plotter.aspect_ratio
         for lentry in lines:
             x:List[float] = [coordinates[0, lentry[i]] for i in range(len(lentry))]
             y:List[float] = [coordinates[1, lentry[i]] for i in range(len(lentry))]
-            dxx:List[float]=[dx[lentry[i]] for i in range(len(lentry))]
+            dxx:List[float]=[dx[lentry[i]]*asp for i in range(len(lentry))]
             dyy:List[float] = [dy[lentry[i]] for i in range(len(lentry))]
             datasegs:List[float]=[self._data[lentry[i]] for i in range(len(lentry))]
 
