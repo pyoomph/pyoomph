@@ -1136,6 +1136,14 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
         ny = self.mshcache.get_data("normal_y")
         assert nx is not None
         assert ny is not None
+        
+        # Scale by the aspect ratio
+        asp=float(self.plotter.aspect_ratio)
+        if self.plotter.aspect_ratio is not True and self.plotter.aspect_ratio!=1:            
+            nxl=numpy.sqrt(nx*nx+ny*ny*(asp*asp))
+            nx/=nxl
+            ny/=nxl*asp
+        
         dx=data*nx
         dy=data*ny
         if not self.transform is None:
@@ -1146,7 +1154,7 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
 
         self._arrows=[]
 
-        asp=1 if self.plotter.aspect_ratio is True else self.plotter.aspect_ratio
+        
         for lentry in lines:
             x:List[float] = [coordinates[0, lentry[i]] for i in range(len(lentry))]
             y:List[float] = [coordinates[1, lentry[i]] for i in range(len(lentry))]
