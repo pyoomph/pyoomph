@@ -1405,8 +1405,8 @@ class DeflationAssemblyHandler(AugmentedAssemblyHandler):
         self.shift_mode:Literal["single","each","scaled"]="each"
         if not isinstance(self.p,int):
             raise ValueError("p must be an integer")
-        if self.p<2:
-            raise ValueError("p must be at least 2")
+        if self.p<1:
+            raise ValueError("p must be at least 1")
         self.Ws=[]
         
     def define_augmented_dofs(self, dofs):
@@ -1431,7 +1431,8 @@ class DeflationAssemblyHandler(AugmentedAssemblyHandler):
     
     def _get_eta_single(self,U,W):
         # Return the inverse of the diagonal of the deflation matrix (just a constant scalar) with respect to a known solution W
-        norm=numpy.sum((U-W)**self.p)
+        #norm=numpy.sum((U-W)**self.p)
+        norm=numpy.linalg.norm(U-W)**self.p
         if self.shift_mode=="single":
             return norm
         else:
@@ -1451,13 +1452,17 @@ class DeflationAssemblyHandler(AugmentedAssemblyHandler):
             return res        
     
     def _get_eta_prime_single(self,U,W):
-        # Return derivative of eta_single(W) with respect to U        
-        dnorm=self.p*(U-W)**(self.p-1)        
+        # Return derivative of eta_single(W) with respect to U   
+        
+        
         if self.shift_mode=="single":            
+            raise RuntimeError("Implement single mode")
+            #dnorm=self.p*n**(self.p-1)        
             return dnorm
-        else:
-            norm=numpy.sum((U-W)**self.p)
-            return dnorm/(self._get_alpha()*norm**2+1)
+        else:            
+            n=numpy.linalg.norm(U-W)     
+            return self.p*n**(self.p-2)/(self._get_alpha()*n**self.p+1)**2 *(U-W)
+            #return dnorm/(self._get_alpha()*norm**2+1)
 
     def _get_eta_prime(self,U):    
         # Return derivative of eta([W1,W2,...]) with respect to U

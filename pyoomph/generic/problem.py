@@ -5093,6 +5093,7 @@ Patrick E. Farrell, Ásgeir Birkisson & Simon W. Funke, https://arxiv.org/pdf/14
 
         Yields:
             The found solutions as lists of degrees of freedom
+            
         """        
             
         from pyoomph.generic.bifurcation_tools import DeflationAssemblyHandler
@@ -5100,42 +5101,65 @@ Patrick E. Farrell, Ásgeir Birkisson & Simon W. Funke, https://arxiv.org/pdf/14
         if not self.is_initialised():
             self.initialise()
         self.set_custom_assembler(deflation)
+        
+        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+        numtries=1
         U=self.get_current_dofs()[0]
-        remaining_random_tries=num_random_tries
-        numfound=0
-        numtries=0
+        found_sols=[U]
+        eigen_perts=[]
+        if use_eigenperturbation:
+            self.solve_eigenproblem(1)
+            eigv=numpy.real(self.get_last_eigenvectors()[0])
+            eigv=eigv/numpy.amax(abs(eigv))
+            eigen_perts.append(eigv*perturbation_amplitude)
+        if not skip_initial_solution:
+            yield U
+        deflation.add_known_solution(U)
         while True:
-            try:
-                numtries+=1
-                self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
-            except Exception as e:
-                remaining_random_tries-=1
-                if remaining_random_tries>1:
-                    self.set_current_dofs(U)
-                    self.perturb_dofs((numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
-                    print("Trying again with new random values")
-                    continue                    
-                print("Further deflation failed to converge. No more solutions found. Returned in total ",numfound,"solutions by",numtries,"attempted Newton solves")                                
+            new_sols=[]
+            for i,Ustart in enumerate(found_sols):    
+                
+                if use_eigenperturbation:
+                    self.set_current_dofs(Ustart+eigen_perts[i])
+                    try:
+                        numtries+=1
+                        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+                        Unew=self.get_current_dofs()[0]
+                        self.solve_eigenproblem(1)
+                        eigv=numpy.real(self.get_last_eigenvectors()[0])
+                        eigv=eigv/numpy.amax(abs(eigv))
+                        eigen_perts.append(eigv*perturbation_amplitude)
+                        new_sols.append(Unew)
+                        deflation.add_known_solution(Unew)
+                        
+                        yield Unew
+                    except:
+                        print("Eigenperturbation of solution "+str(i)+" failed to converge. Trying random perturbation")
+                for j in range(num_random_tries):
+                    self.set_current_dofs(Ustart+(numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
+                    try:
+                        numtries+=1
+                        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+                        Unew=self.get_current_dofs()[0]
+                        new_sols.append(Unew)
+                        if use_eigenperturbation:
+                            self.solve_eigenproblem(1)
+                            eigv=numpy.real(self.get_last_eigenvectors()[0])
+                            eigv=eigv/numpy.amax(abs(eigv))
+                            eigen_perts.append(eigv*perturbation_amplitude)
+                        deflation.add_known_solution(Unew)
+                        yield Unew
+                    except:
+                        print("Random perturbation "+str(j+1)+"/"+str(num_random_tries)+" of solution "+str(i)+" failed to converge")
+            if len(new_sols)==0:
+                print("No new solutions found. Stopping deflation. Found in total "+str(len(found_sols))+" in "+str(numtries)+" attempts.")
                 if not keep_deflation_operator_active:
                     self.set_custom_assembler(None)
-                self.set_current_dofs(U)
+                self.set_current_dofs(U)                
                 return
-            
-            U=self.get_current_dofs()[0]
-            if not skip_initial_solution:
-                numfound+=1
-                yield U
-            remaining_random_tries=num_random_tries
-            skip_initial_solution=False
-            deflation.add_known_solution(U)
-            if use_eigenperturbation:
-                self.solve_eigenproblem(1)
-                eigv=numpy.real(self.get_last_eigenvectors()[0])
-                eigv=eigv/numpy.amax(abs(eigv))
-                self.perturb_dofs(eigv*perturbation_amplitude)
             else:
-                self.perturb_dofs((numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
-
+                found_sols+=new_sols
+                
 
     def deflated_continuation(self,deflation_alpha:float=0.1,deflation_p:int=2,perturbation_amplitude:float=0.5,max_newton_iterations:Optional[int]=None,newton_relaxation_factor:Optional[float]=None,use_eigenperturbation:bool=False,skip_initial_solution:bool=False,num_random_tries:int=1,max_branches:Optional[int]=None,branch_continue_iterations:int=10,**param_range):
         """Scan over a parameter range and try to find multiple solutions for each parameter step by deflation
