@@ -2687,7 +2687,8 @@ class MatplotlibPlotter(BasePlotter):
             if self.aspect_ratio is True:
                 plt.gca().set_aspect('equal') #type:ignore
             else:
-                raise RuntimeError("TODO ASPECT")
+                #raise RuntimeError("TODO ASPECT")
+                plt.gca().set_aspect(self.aspect_ratio) #type:ignore
         if self.fullscreen:
             plt.margins(0, 0) #type:ignore
             plt.gca().set_axis_off() #type:ignore
@@ -2751,7 +2752,7 @@ class MatplotlibPlotter(BasePlotter):
         """
 
         if center is not None and size is not None:
-            self.set_view(xmin=center[0]-size[0]/2,xmax=center[0]+size[0]/2,ymin=center[1]-size[1]/2,ymax=center[1]+size[1]/2)
+            self.set_view(xmin=center[0]-size[0]/2,xmax=center[0]+size[0]/2,ymin=center[1]-size[1]/2,ymax=center[1]+size[1]/2)        
         if xmin is not None:
             self.xmin=self.ensure_spatial_nondim(xmin)
             plt.xlim(left=self.xmin) #type:ignore
@@ -2771,6 +2772,7 @@ class MatplotlibPlotter(BasePlotter):
             dx=self.xmax-self.xmin
             dy=self.ymax-self.ymin
             #print("DX and DY",dx,dy,self.xmax,self.xmin,self.xmax-self.xmin)
+            ar=1 if self.aspect_ratio is True else self.aspect_ratio
             RX=self.image_size[0]/dx
             RY = self.image_size[1] / dy
 
@@ -2786,6 +2788,6 @@ class MatplotlibPlotter(BasePlotter):
                 hH=(int(hH*self.dpi)+1.00001)/self.dpi
             #print(W, H, W * self.dpi, H * self.dpi)
             #exit()
-            plt.gcf().set_size_inches(wW,hH)
+            plt.gcf().set_size_inches(wW,hH*ar)
 
 

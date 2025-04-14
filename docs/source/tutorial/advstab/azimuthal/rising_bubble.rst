@@ -30,7 +30,7 @@ As in :cite:`Bonnefis2024`, we neglect the viscosity and the mass density inside
 
 The nondimensionalized equations read 
 
-.. math:: :label: eqmcflowwadvdiff
+.. math:: :label: eqadvstabrisingbubble
 
    \begin{aligned}
    \partial_t \vec{u}+\nabla\vec{u}\cdot\vec{u}&=-\nabla p+\frac{1}{Ga}\nabla\cdot\left[\left(\nabla\vec{u}+\nabla\vec{u}^\text{t}\right)\right]-\dot U e_y\\
