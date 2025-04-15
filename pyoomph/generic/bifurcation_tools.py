@@ -10,7 +10,7 @@ from ..solvers.generic import DefaultMatrixType,EigenMatrixManipulatorBase
 
 from scipy.sparse import csr_matrix      
 
-def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,str],FD_delta:float=1e-5,FD_param_delta:float=1e-5,omega:Optional[float]=None,q:Optional[NPComplexArray]=None,mu0:float=0,omega_epsilon:float=1e-3):
+def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,str],FD_delta:float=1e-5,FD_param_delta:float=1e-5,omega:Optional[float]=None,q:Optional[NPComplexArray]=None,mu0:float=0,omega_epsilon:float=1e-5):
     # Taken from § 10.2 of Yuri A. Kuznetsov, Elements of Applied Bifurcation Theory, Fourth Edition, Springer, 2004
     # Also implemented analogously in pde2path, file hogetnf.m 
     # XXX Here is the generalization of the code with mass matrix
@@ -163,7 +163,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         #raise RuntimeError("Eigenvalue solver does not support target. Please use a different eigenvalue solver.")
     #print("GOT",evalT,evectT)
     #print("Omega0",omega0)
-    if numpy.imag(evalT[0])<0 and numpy.abs(numpy.imag(evalT[0])+omega0)<1e-6:                    
+    if numpy.imag(evalT[0])<0 and numpy.abs(numpy.imag(evalT[0])+omega0)<1e-3:                    
         #print("Omega0'[0]",numpy.imag(evalT[0]))
         pR=numpy.real(evectT[0])
         pI=numpy.imag(evectT[0])
@@ -172,6 +172,7 @@ def get_hopf_lyapunov_coefficient(problem:Problem,param:Union[GlobalParameter,st
         #print(numpy.amax(AT@pR-omega0*MT@pI))
         #print(numpy.amax(omega0*MT@pR+AT@pI))
     else:
+        print("For omega0=",omega0,"we found ",numpy.imag(evalT[0]))
         raise ValueError("Could not find the correct eigenvector. This is likely an issue with the eigenvalue solver. Please check the eigenvalue solver settings.")
 
     #p=MT@(pR+pI*1j)
@@ -1528,12 +1529,14 @@ class NormalFormCalculator:
         res_hess=-numpy.array(self.problem.get_second_order_directional_derivative(direct))                
         return res_hess
   
-      def d3f(self,direct):
+      def d3f(self,direct,directfd=None):
+            if directfd is None:
+                directfd=direct
             u=self.problem.get_current_dofs()[0]
             direct_scale=1
-            self.problem.set_current_dofs(u+self.fd_eps*direct*direct_scale)
+            self.problem.set_current_dofs(u+self.fd_eps*directfd*direct_scale)
             res_hessp=-numpy.array(self.problem.get_second_order_directional_derivative(direct))
-            self.problem.set_current_dofs(u-self.fd_eps*direct*direct_scale)
+            self.problem.set_current_dofs(u-self.fd_eps*directfd*direct_scale)
             res_hessm=-numpy.array(self.problem.get_second_order_directional_derivative(direct))
             self.problem.set_current_dofs(u)        
             res_hess=0.5*(res_hessp-res_hessm)/(self.fd_eps*direct_scale)
@@ -1562,7 +1565,7 @@ class NormalFormCalculator:
                 evals,evects,_,_=self.problem.get_eigen_solver().solve(2,shift=1e-7,custom_J_and_M=(AT,MT))
             else:    
                 evals,evects,_,_=self.problem.get_eigen_solver().solve(2,shift=1e-7,target=lamb,custom_J_and_M=(AT,MT))
-            closest=numpy.argmin(numpy.abs(evals-numpy.conj(lamb)))
+            closest=numpy.argmin(numpy.abs(evals-lamb))
             return evects[closest],evals[closest]
       
       def get_normal_form(self,param:Optional[str]=None,eigenindex:int=0):
@@ -1575,9 +1578,121 @@ class NormalFormCalculator:
             raise RuntimeError("Eigenpair at index "+str(eigenindex)+" not calculated!")
         lambd=self.problem.get_last_eigenvalues()[eigenindex]
         if numpy.abs(numpy.imag(lambd))>1e-8:
-            raise RuntimeError("Eigenvalue is not real. Hopf to be done!")
+            return self.get_normal_form_hopf(param=param,eigenindex=eigenindex)
         else:
             return self.get_normal_form1d(param=param,eigenindex=eigenindex)
+        
+      def get_normal_form_hopf(self,param:Optional[str]=None,eigenindex:int=0):
+            # Translated from Julia language code BifurcationKitDocs.jl (https://bifurcationkit.github.io/BifurcationKitDocs.jl)
+            #raise RuntimeError("Hopf calculation does not really work without considering the mass matrix")
+            # Generalized by a mass matrix
+            if param is None:
+                  if self.problem._bifurcation_tracking_parameter_name is not None and self.problem._bifurcation_tracking_parameter_name!="":
+                        param=self.problem._bifurcation_tracking_parameter_name
+                  else:
+                        raise RuntimeError("Pass a parameter or use this with solved bifurcation tracking active")
+            if self.problem.get_last_eigenvalues() is None or eigenindex>=len(self.problem.get_last_eigenvalues()):
+                  raise RuntimeError("Eigenpair at index "+str(eigenindex)+" not calculated!")
+            lambd=self.problem.get_last_eigenvalues()[eigenindex]
+            # TODO: Check lambda small Re and nonvanishing imag
+            omega=numpy.imag(lambd)
+            
+            
+            zeta=self.problem.get_last_eigenvectors()[eigenindex]
+            # TODO: Scale zeta reasonably
+            zeta/=numpy.linalg.norm(zeta)
+            czeta=numpy.conj(zeta)            
+            self.problem.deactivate_bifurcation_tracking()
+            self.problem.timestepper.make_steady()
+            
+            n, M_nzz, M_nr, M_val, M_ci, M_rs, J_nzz, J_nr, J_val, J_ci, J_rs = self.problem.assemble_eigenproblem_matrices(0) #type:ignore
+            M=csr_matrix((M_val, M_ci, M_rs), shape=(n, n)).copy()	#TODO: Is csr or csc?
+            
+            
+            zeta_star,lambd_star=self.get_left_eigenvector(numpy.conj(lambd))
+            zeta_star /= numpy.vdot(M@zeta,zeta_star )                        
+                        
+            
+            
+            dRdp,J,dJdp,HzetaR,HzetaI=PerformCustomMultiAssembly(self.problem,lambda a : a.dRdp(param).J().dJdp(param).dJdU(numpy.real(zeta)).dJdU(numpy.imag(zeta))).result()
+            Hzeta=(HzetaR+1j*HzetaI)/2
+            R01=-dRdp
+            L=-J
+            psi001=self.la_solve(L,-R01) # TODO: This must be checked
+            av=-dJdp@zeta
+            av += 2 * Hzeta@ psi001 # TODO: This must be checked
+            a = numpy.vdot(av, zeta_star)
+            
+            
+            R20 = Hzeta@zeta
+            psi200 = self.la_solve((2j*omega*M-L), R20)
+            R20 =  Hzeta@czeta
+            psi110 = self.la_solve(L, -R20)        
+            
+            # Third order term is a mess
+            u=self.problem.get_current_dofs()[0]
+            delt=1e-8
+            
+            def R3(dx1,dx2,dx3):
+                self.problem.set_current_dofs(u+delt*dx1)
+                dJp,=PerformCustomMultiAssembly(self.problem,lambda a : a.dJdU(dx3)).result()
+                self.problem.set_current_dofs(u-delt*dx1)                
+                dJm,=PerformCustomMultiAssembly(self.problem,lambda a : a.dJdU(dx3)).result()
+                self.problem.set_current_dofs(u)
+                return -((dJp-dJm)@dx2)/(2*delt)
+            
+            def third_order(R3,dx1, dx2, dx3): # x2=x1 assumed here
+                dx1r = numpy.real(dx1);  dx2r=numpy.real(dx2); dx3r = numpy.real(dx3)
+                dx1i = numpy.imag(dx1);  dx2i=numpy.imag(dx2); dx3i = numpy.imag(dx3)
+                #outr =  R3(dx1r, dx2r, dx3r) - R3(dx1r, dx2i, dx3i) -R3(dx1i, dx2r, dx3i) - R3(dx1i, dx2i, dx3r)
+                #outi =  R3(dx1r, dx2r, dx3i) + R3(dx1r, dx2i, dx3r) +R3(dx1i, dx2r, dx3r) - R3(dx1i, dx2i, dx3i)
+                
+                outr =  R3(dx1r, dx2r, dx3r) - R3(dx1r, dx2i, dx3i) - R3(dx1i, dx2r, dx3i) - R3(dx1i, dx2i, dx3r)
+                outi =  R3(dx1r, dx2r, dx3i) + R3(dx1r, dx2i, dx3r) +R3(dx1i, dx2r, dx3r) - R3(dx1i, dx2i, dx3i)
+                return (outr+1j*outi)/12
+
+            
+            
+            #bv = 2 * Hzeta@psi110 + 2 * numpy.conj(Hzeta)@psi200 + 3 * third_order(lambda d1,d2,d3:R3(d1,d2,d3), zeta,zeta,czeta)
+            # TODO: Here is still something not perfect in the quadratic terms...
+            bv =  Hzeta@psi110 +  2*numpy.conj(Hzeta)@psi200 + 3 * third_order(lambda d1,d2,d3:R3(d1,d2,d3), zeta,zeta,czeta)
+            print("HZETA1",Hzeta@psi110)
+            print("HZERA2",numpy.conj(Hzeta)@psi200)
+            
+            
+            
+            b = numpy.vdot(bv, zeta_star)            
+            #b*=2
+            
+            if omega>0:
+                a=numpy.conj(a)
+                b=numpy.conj(b)
+            else:
+                omega=-omega
+                a=a
+                b=b
+                zeta=numpy.conj(zeta)
+            
+            # Nontrivial solution: A*exp(I*omega_l*t) where
+            #   A**2*b + a*dp - I*omega + I*omega0=0
+            # A=sqrt(-real(a)*dp/real(b))
+            # omega_l=omega0+ imag(a)*dp - real(a)*imag(b)*dp/real(b) 
+            
+            
+            print("omega",omega)
+            print("a",a)
+            print("b",b)
+            res={}
+            res["type"]="hopf"
+            psign=1 if numpy.real(a)/numpy.real(b)<0 else -1
+            res["psign"]=psign
+            res["zeta"]=zeta
+            res["param_predictor"]=lambda dp : psign*abs(dp)
+            res["omega_predictor"]=lambda dp : omega+ numpy.imag(a)*dp - numpy.real(a)*numpy.imag(b)*dp/numpy.real(b) 
+            res["perturbation_predictor"]=lambda dp,omegat: u+numpy.sqrt(numpy.abs(numpy.real(a)*dp/(2*numpy.real(b))))*numpy.real(zeta*numpy.exp(1j*omegat)+czeta*numpy.exp(-1j*omegat))
+            return res
+            
+            
             
             
       def get_normal_form1d(self,param:Optional[str]=None,eigenindex:int=0):

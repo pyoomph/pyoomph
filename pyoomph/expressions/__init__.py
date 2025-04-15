@@ -319,7 +319,7 @@ def real_part(x:ExpressionOrNum) -> Expression:
 		Expression: The real part of the input.
 
 	"""
-	x=x if isinstance(x,_pyoomph.Expression) else _pyoomph.Expression(x) 	
+	x=x if isinstance(x,_pyoomph.Expression) else _pyoomph.Expression(Expression(1)*x) 	
 	return _pyoomph.GiNaC_get_real_part(x)
 
 def imag_part(x:ExpressionOrNum)->Expression:
@@ -332,8 +332,8 @@ def imag_part(x:ExpressionOrNum)->Expression:
 	Returns:
 		Expression: The imaginary part of the input.
 
-	"""
-    x=x if isinstance(x,_pyoomph.Expression) else _pyoomph.Expression(x) 	
+	"""	
+    x=x if isinstance(x,_pyoomph.Expression) else _pyoomph.Expression(Expression(1)*x) 	
     return _pyoomph.GiNaC_get_imag_part(x)
     
 
