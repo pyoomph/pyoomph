@@ -713,7 +713,10 @@ class Problem(_pyoomph.Problem):
             return J
 
     def remove_equations(self, path:str, of_type:Optional[Type[BaseEquations]]=None, only_if:Callable[[BaseEquations],bool]=lambda eqn: True,fail_if_not_exist:bool=False):
-        eqtree = self._equation_system.get_by_path(path)
+        if hasattr(self,"_equation_system"):
+            eqtree = self._equation_system.get_by_path(path)
+        else:
+            eqtree=self.additional_equations.get_by_path(path)
         if eqtree is None:
             if fail_if_not_exist:
                 raise RuntimeError("No equations found at the path "+str(path))

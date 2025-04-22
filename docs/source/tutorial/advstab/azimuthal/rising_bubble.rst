@@ -163,7 +163,7 @@ Eventually, we get the eigenvalues shown below, which agree decently with the da
 	:class: with-shadow
 	:width: 60%
 	
-	Eigenvalues of the first :math:`m=1` instability of a rising bubble with :math:`Mo=6.2\times 10^{-7}` (DMS-T05), agreeing well with the literature data.
+	Eigenvalues of the first :math:`m=1` instability of a rising bubble with :math:`Mo=6.2\times 10^{-7}` (DMS-T05), agreeing well with the literature data :cite:`Bonnefis2024`. We thank Javier Sierra-Ausin and Jacques Magnaudet for providing the data of their paper :cite:`Bonnefis2024`.
 
 We can also generate a movie of the instability. Please refer to :numref:`secploteigendynamics` for a tutorial on this.
 

@@ -829,6 +829,7 @@ class BaseLiquidProperties(MaterialProperties):
             psat=relative_humidity_for_far_field*self.get_vapor_pressure_for(component,pure=True)
         else:
             psat=self.get_vapor_pressure_for(component)
+
         csat=psat/(temperature * gas_constant)*M
         if temperature_set is not None:
             csat=self.evaluate_at_condition(csat,{},temperature=temperature_set)

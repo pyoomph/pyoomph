@@ -664,6 +664,8 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
                                 flux += -wi * total_mass_transfer_rate
                                 # flux += wi * total_mass_flux
                             self.add_residual(-weak(flux, wi_test))
+                        if outadvdiffu.fluid_props.passive_field in partial_mass_transfer_rates.keys() and not self._has_opposite_flow:
+                            raise RuntimeError("The exterior phase only solves component diffusion and the component '"+outadvdiffu.fluid_props.passive_field+"' is passive (not solved for explicitly). Yet, we have a mass transfer of this component. This is problematic. Please set passive_field in the exterior phase to some non-volatile component (usually, it is e.g. air, must be the dominant part of the exterior mixture) or solve the flow in the exterior phase by using CompositionFlowEquations instead of CompositionDiffusionEquations")
 
             # Thermal effects
             tins=self.get_parent_equations(TemperatureConductionEquation)
