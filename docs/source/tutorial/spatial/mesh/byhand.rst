@@ -90,6 +90,10 @@ As an example how to use this mesh, we solve again a Poisson equation on this me
 
 The predefined :py:class:`~pyoomph.equations.poisson.PoissonEquation` works as the one developed in :numref:`secspatialpoisson`. Note how we initially suppress the mesh adaption by setting :py:attr:`~pyoomph.generic.problem.Problem.initial_adaption_steps` to zero. Otherwise, we would get redundant adaption near the ``"top"`` boundary due to the non-zero :py:class:`~pyoomph.meshes.bcs.DirichletBC`. The custom mesh and the problem class in action can be seen in :numref:`figspatialmeshtemplate1`.
 
+
+.. warning::
+	The orientation of the elements can matter, in particular for refineable meshes. Therefore, it is advised to make sure that all elements are constructed by node indices in the same orientation. E.g. for a 2d mesh, the order of the nodes passed to :py:meth:`~_pyoomph.MeshTemplate.add_quad_2d_C1` can either lead to an element facing in positive or negative :math:`z`-direction. If elements of different orientation are connected in the very same mesh, this leads to issues upon spatial refinement. Therefore, make sure that all elements are oriented in the same direction by adjusting the order of the nodes passed to the construction of the elements. You can easily check the mesh by *Paraview*. After outputting the mesh with :py:class:`~pyoomph.output.meshio.MeshFileOutput`, you can open it with Paraview and search for *Backface Representation* in the search box of the *Properties* box (hidden by default). Then, select *Cull Frontface* or *Cull Backface*. The entire mesh should be visible in one of this settings and entirely invisible in the other setting.
+
 .. only:: html
 
 	.. container:: downloadbutton

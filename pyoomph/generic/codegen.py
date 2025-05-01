@@ -812,6 +812,7 @@ class BaseEquations(_pyoomph.Equations):
             if dest is not None:
                 cg._activate_residual(dest)
             try:
+                #print("adding residual", expression, dest)
                 cg._add_residual(expression, False)
             except Exception as e:
                 self.add_exception_info(e)

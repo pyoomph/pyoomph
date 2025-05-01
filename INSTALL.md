@@ -56,7 +56,7 @@ in your pyoomph directory.
 
 Install required and optional python modules via
 
-> python -m pip gmsh mkl mpi4py matplotlib numpy petsc4py pybind11 pygmsh scipy meshio pybind11-stubgen
+> python -m pip gmsh mkl mpi4py matplotlib numpy petsc4py pybind11 pygmsh scipy meshio pybind11-stubgen setuptools
 
 If you want to install pyoomph **for development**, it is best to install it via 
 
