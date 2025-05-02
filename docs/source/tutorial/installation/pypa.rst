@@ -41,6 +41,10 @@ If you do not want to install MS Build Tools for any reason, you always can use 
 
       python my_simulation.py --tcc
 
+
+.. note::
+
+      If you encounter segmentation faults during solving, you likely have a bugged version of the MKL package installed. In that case, please downgrade to an older version, e.g. via *python -m pip install mkl==2024.1.0*.
       
 Mac
 ~~~
@@ -73,6 +77,9 @@ On Linux, make sure that you have the ``gcc`` compiler installed to get optimal 
       
 Other Linux distributions, you might have to use ``yum``, ``pacman``, etc., instead.
 
+.. note::
+
+      If you encounter segmentation faults during solving, you likely have a bugged version of the MKL package installed. In that case, please downgrade to an older version, e.g. via *python -m pip install mkl==2024.1.0*.
       
       
 

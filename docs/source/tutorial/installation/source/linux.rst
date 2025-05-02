@@ -42,4 +42,10 @@ Finally, build pyoomph and install it, and check whether it works:
       cd <PYOOMPH_DIR>
       bash ./build_for_develop.sh
       python -m pyoomph check all
+      
+
+.. note::
+
+      If you encounter segmentation faults during solving, you likely have a bugged version of the MKL package installed. In that case, please downgrade to an older version, e.g. via *python -m pip install mkl==2024.1.0*.
+            
 
