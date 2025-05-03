@@ -798,6 +798,7 @@ void PyReg_Mesh(py::module &m)
 	auto &decl_PyoomphMesh = (*py_decl_PyoomphMesh);
 	decl_PyoomphMesh
 		.def("activate_duarte_debug", &pyoomph::Mesh::activate_duarte_debug)
+		.def("check_integrity",&pyoomph::Mesh::check_integrity)
 		.def("prepare_zeta_interpolation", [](pyoomph::Mesh *self, pyoomph::Mesh *old_mesh){self->prepare_zeta_interpolation(old_mesh);})
 		.def("remove_boundary_nodes",[](pyoomph::Mesh *self) {self->remove_boundary_nodes();})		
 		.def("remove_boundary_nodes_of_bound",[](pyoomph::Mesh *self,unsigned b) {self->remove_boundary_nodes(b);})		

@@ -136,6 +136,7 @@ namespace pyoomph
 		virtual MeshKDTree *get_lagrangian_kdtree();
 		virtual std::map<std::string, std::string> get_field_information(); // first: names, second: list of spaces (C2,C1,DL,D0), but also (../C2 etc for elements defined on bulk domains)
 		virtual ~Mesh();
+		virtual void check_integrity();
 	};
 
 	class DummyErrorEstimator : public oomph::Z2ErrorEstimator // Only be used to make sure that the error_estimator_pt is not NULL, which causes problems if PARANOID

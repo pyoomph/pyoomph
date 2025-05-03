@@ -432,6 +432,8 @@ class Problem(_pyoomph.Problem):
         #:  There are different methods implemented in oomph-lib to fill the sparse matrices (Jacobian, mass matrix, etc.). Depending on the problem, one or the other method may be faster or more memory efficient. The default method is "vectors_of_pairs", which is the most general one.                
         self.sparse_assembly_method:Literal["vectors_of_pairs","two_vectors","lists","maps","two_arrays"]="vectors_of_pairs"
         self.only_write_logfile_on_proc0:bool=True
+        #: Checks whether the elements in the meshes are nicely oriented (facing) so that refinement works as it should. Can be only done once initially or at each refinement step
+        self.check_mesh_integrity:Union[bool,Literal["initially"]]="initially"
 
         self._meshtemplate_list:List[MeshTemplate]=[]
         self._meshdict={}
@@ -2565,6 +2567,13 @@ class Problem(_pyoomph.Problem):
             self.actions_before_distribute()
             self.distribute()
             self.actions_after_distribute()
+            
+            
+        if self.check_mesh_integrity:
+            for _,m in self._meshdict.items():
+                assert m._codegen is not None                                
+                if isinstance(m,(MeshFromTemplate1d,MeshFromTemplate2d,MeshFromTemplate3d)):
+                    m.check_integrity()
 
         if self._runmode!="continue" and self._runmode!="replot":
             if self.initial_adaption_steps is None:
@@ -3103,6 +3112,13 @@ class Problem(_pyoomph.Problem):
             m._connect_opposite_elements(self._equation_system)
         self.setup_pinning()
         self.reapply_boundary_conditions()
+        
+        if self.check_mesh_integrity is True:
+            for _,m in self._meshdict.items():
+                assert m._codegen is not None                                
+                if isinstance(m,(MeshFromTemplate1d,MeshFromTemplate2d,MeshFromTemplate3d)):
+                    m.check_integrity()
+                    
         if self._call_output_after_adapt:
             self.output()
         if self._custom_assembler:

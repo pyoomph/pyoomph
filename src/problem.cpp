@@ -1834,7 +1834,7 @@ namespace pyoomph
 					<< row_or_column_start.size() << " does not equal "
 					<< "column_or_row_index.size() "
 					<< column_or_row_index.size() << std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 
@@ -1849,7 +1849,7 @@ namespace pyoomph
 			<< std::endl
 			<< std::endl
 			<< std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 #endif
@@ -2081,7 +2081,7 @@ namespace pyoomph
 					<< row_or_column_start.size() << " does not equal "
 					<< "column_or_row_index.size() "
 					<< column_or_row_index.size() << std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 
@@ -2096,7 +2096,7 @@ namespace pyoomph
 			<< std::endl
 			<< std::endl
 			<< std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 #endif

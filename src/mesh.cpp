@@ -102,6 +102,18 @@ namespace pyoomph
     lagrangian_kdtree = NULL;
   }
 
+  void Mesh::check_integrity()
+  {
+    if (dynamic_cast<oomph::TreeBasedRefineableMeshBase *>(this) && dynamic_cast<oomph::TreeBasedRefineableMeshBase *>(this)->forest_pt())
+    {
+
+      oomph::DocInfo docinfo;
+      docinfo.disable_doc();
+      dynamic_cast<oomph::TreeBasedRefineableMeshBase *>(this)->forest_pt()->check_all_neighbours(docinfo);
+    }
+    
+  }
+
   unsigned Mesh::count_nnode(bool discontinuous)
   {
     if (!discontinuous)
