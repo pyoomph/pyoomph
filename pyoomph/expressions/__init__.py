@@ -429,7 +429,7 @@ def determinant(M:Expression,n:int=0)->Expression:
 	return _pyoomph.GiNaC_determinant(M,Expression(n))
 
 
-def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True)->Expression:
+def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True,fill_to_vector_dim_3:bool=False)->Expression:
 	"""
 	Compute the inverse of a matrix expression.
 
@@ -443,6 +443,7 @@ def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True)->Ex
 		Expression: The symbolical inverse of the matrix expression.
 	"""
 	flags=1 if use_subexpression_for_det else 0
+	flags+=2 if fill_to_vector_dim_3 else 0
 	return _pyoomph.GiNaC_inverse_matrix(M,Expression(n),Expression(flags))
 
 

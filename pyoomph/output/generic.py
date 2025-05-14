@@ -291,10 +291,10 @@ def save_by_extension(fname:str,data:NPFloatArray,header:List[str],timeinfo:floa
         for pn,v in params.items():
             headerr+="\t"+pn+"="+str(v)
         if discontinuous_elem_indices is None:
-            numpy.savetxt(fname,data,header=headerr,delimiter="\t") #type:ignore
+            numpy.savetxt(fname,data,header=headerr.lstrip(),delimiter="\t") #type:ignore
         else:
             with open(fname,"w") as f:
-                f.write("#"+headerr+"\n")
+                f.write("#"+headerr.lstrip()+"\n")
                 for e in discontinuous_elem_indices:
                     for j in e:
                         if j==-1:

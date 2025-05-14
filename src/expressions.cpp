@@ -1771,8 +1771,26 @@ namespace pyoomph
 					entries.push_back((ma(0,0)*ma(1,1)-ma(0,1)*ma(1,0))/det);					
 				}
 				
-				GiNaC::lst entries_lst(GiNaC::lst(entries.begin(), entries.end()));
-				return GiNaC::matrix(_n, _n, entries_lst);				
+				if (flag & 2==0)
+				{
+				  GiNaC::lst entries_lst(GiNaC::lst(entries.begin(), entries.end()));
+				  return GiNaC::matrix(_n, _n, entries_lst);				
+				}
+				else
+				{
+					//Return a 3x3 matrix with zero filling
+					std::vector<GiNaC::ex> entries3x3(9,0);
+					for (unsigned int i = 0; i < _n; i++)
+					{
+						for (unsigned int j = 0; j < _n; j++)
+						{
+						  entries3x3[3*i+j] = entries[_n*i];
+						}
+					}
+					// TODO: Diag to 1 ?
+					GiNaC::lst entries_lst(GiNaC::lst(entries3x3.begin(), entries3x3.end()));
+					return GiNaC::matrix(3, 3, entries_lst);				
+				}
 			}
 			throw_runtime_error("inverse_matrix cannot be applied on a non-matrix/vector object");
 		}

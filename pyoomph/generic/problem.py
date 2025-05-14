@@ -4752,6 +4752,7 @@ class Problem(_pyoomph.Problem):
 
         if not self.is_initialised():
             self.initialise()
+            TSCALE=self.scaling.get("temporal",1)
             self._activate_solver_callback()
             if (timestep is not None):
                 timestep=timestep/TSCALE
