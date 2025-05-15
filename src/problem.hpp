@@ -381,6 +381,7 @@ namespace pyoomph
     // void set_diagonal_zero_entries(bool yesno) {KeepZeroDiagonal=yesno;} //Requires a patched oomph-lib problem class
     Problem();
     virtual void unload_all_dlls();
+    virtual unsigned get_max_dt_order() const;
     virtual ~Problem();
     virtual CCompiler *get_ccompiler() { return compiler; }
     virtual void set_ccompiler(CCompiler *comp) { compiler = comp; }

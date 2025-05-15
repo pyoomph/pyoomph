@@ -3539,18 +3539,34 @@ namespace pyoomph
 				if (sp.get_code() == this || sp.get_code() == NULL)
 				{
 					this->mark_shapes_required(for_what, this->get_my_position_space(), es_name);
+					if (this->coordinates_as_dofs && !sp.is_lagrangian())
+					{
+						this->mark_shapes_required(for_what, this->get_my_position_space(), "psi");
+					}
 				}
 				else if (this->bulk_code && sp.get_code() == this->bulk_code)
 				{
 					this->mark_shapes_required(for_what, this->bulk_code->get_my_position_space(), es_name);
+					if (this->bulk_code->coordinates_as_dofs && !sp.is_lagrangian())
+					{
+						this->mark_shapes_required(for_what, this->bulk_code->get_my_position_space(), "psi");
+					}
 				}
 				else if (this->opposite_interface_code && sp.get_code() == this->opposite_interface_code)
 				{
 					this->mark_shapes_required(for_what, this->opposite_interface_code->get_my_position_space(), es_name);
+					if (this->opposite_interface_code->coordinates_as_dofs && !sp.is_lagrangian())
+					{
+						this->mark_shapes_required(for_what, this->opposite_interface_code->get_my_position_space(), "psi");
+					}
 				}
 				else if (this->opposite_interface_code->bulk_code && sp.get_code() == this->opposite_interface_code->bulk_code)
 				{
 					this->mark_shapes_required(for_what, this->opposite_interface_code->bulk_code->get_my_position_space(), es_name);
+					if (this->opposite_interface_code->bulk_code->coordinates_as_dofs && !sp.is_lagrangian())
+					{
+						this->mark_shapes_required(for_what, this->opposite_interface_code->bulk_code->get_my_position_space(), "psi");
+					}
 				}
 				else
 				{

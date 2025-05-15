@@ -12331,6 +12331,10 @@ namespace pyoomph
 
 	void InterfaceElementBase::add_interface_dofs()
 	{
+		for (unsigned l = 0; l < eleminfo.nnode; ++l)
+		{			
+			if (!dynamic_cast<BoundaryNode*>(this->node_pt(l))) throw_runtime_error("Interface element has a node which is not a BoundaryNode. This can happen in meshes when you have sharp corners in a boundary. Happened in "+this->codeinst->get_code()->get_file_name());
+		}
 		auto *ft = codeinst->get_func_table();
 		for (unsigned i = ft->numfields_C2TB_bulk; i < ft->numfields_C2TB; i++)
 		{
@@ -12365,6 +12369,7 @@ namespace pyoomph
 			for (unsigned l = 0; l < eleminfo.nnode; ++l)
 			{
 				additional_data_values[l] = 1;
+				
 				already_allocated.push_back(dynamic_cast<BoundaryNode*>(this->node_pt(l))->has_additional_dof(value_index));
 				add_values = true;
 			}

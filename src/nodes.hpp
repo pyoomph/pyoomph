@@ -80,6 +80,7 @@ namespace pyoomph
 		std::map<unsigned, unsigned> *get_additional_dof_map() { return Index_of_first_value_assigned_by_face_element_pt; }
 		bool has_additional_dof(const unsigned index)
 		{
+			//std::cout << "has_additional_dof  " << Index_of_first_value_assigned_by_face_element_pt << std::endl << std::flush;
 			if (!Index_of_first_value_assigned_by_face_element_pt)
 				return false;
 			return Index_of_first_value_assigned_by_face_element_pt->count(index);

@@ -3335,7 +3335,12 @@ class Problem(_pyoomph.Problem):
         """
         if not self.is_initialised():
             self.initialise()
-            
+        _dtorder=self._get_max_dt_order()
+        if _dtorder!=1:
+            if _dtorder==0:
+                raise RuntimeError("Cannot calculate eigenvalues/vectors without any time derivatives. This would give an empty mass matrix")
+            else:
+                raise RuntimeError("Cannot calculate eigenvalues/vectors when you have an time derivative order of "+str(_dtorder)+". Consider using auxiliary unknowns and equations to reduce the order of all time derivatives to 1.")
         if normal_mode_L is not None:
             if normal_mode_k is not None:
                 raise ValueError("Cannot specify both normal_mode_L and normal_mode_k")

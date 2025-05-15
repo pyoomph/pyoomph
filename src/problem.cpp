@@ -517,6 +517,16 @@ namespace pyoomph
 			Jrow_start[i] = row_start[i];
 	}
 
+	unsigned Problem::get_max_dt_order() const
+	{
+		unsigned max_order = 0;
+		for (unsigned int i = 0; i < bulk_element_codes.size(); i++)
+		{
+			max_order = std::max(max_order, (unsigned)bulk_element_codes[i]->functable->max_dt_order);
+		}
+		return max_order;
+	}
+
 	void Problem::unload_all_dlls()
 	{
 		if (pyoomph_verbose)
