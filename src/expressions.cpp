@@ -1784,7 +1784,7 @@ namespace pyoomph
 					{
 						for (unsigned int j = 0; j < _n; j++)
 						{
-						  entries3x3[3*i+j] = entries[_n*i];
+						  entries3x3[3*i+j] = entries[_n*i+j];
 						}
 					}
 					// TODO: Diag to 1 ?

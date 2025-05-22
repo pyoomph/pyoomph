@@ -370,7 +370,8 @@ def grad(arg:ExpressionOrNum,lagrangian:bool=False,nondim:bool=False,coordsys:Op
 		if you calculate grad(u) on a boundary, you will get the surface gradient, even if u is defined in the bulk.
 		To get the bulk gradient at the boundary, use grad(var("u",domain="..")) instead.
 	"""
-	
+	if isinstance(arg,str):
+		arg=var(arg)
 	if isinstance(arg,float) or isinstance(arg,int) or isinstance(arg,_pyoomph.GiNaC_GlobalParam):
 		return _pyoomph.Expression(0)
 	flag=(0 if nondim else 1)+(0 if vector is None else (2 if vector==False else 4) ) + (8 if lagrangian else 0) #Code the flag
