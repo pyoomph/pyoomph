@@ -487,7 +487,8 @@ class ProjectExpression(Equations):
         import pyoomph.expressions.generic
         for n,e in self.projs.items():
             f,ftest=var_and_test(n)
-            self.add_residual(pyoomph.expressions.generic.weak(f-e,testfunction(n,dimensional=False)/scale_factor(n)))
+            self.add_residual(pyoomph.expressions.generic.weak(f,testfunction(n,dimensional=False)/scale_factor(n)))
+            self.add_residual(pyoomph.expressions.generic.weak(-e,testfunction(n,dimensional=False)/scale_factor(n)))
 
 class InitialCondition(BaseEquations):
     """
