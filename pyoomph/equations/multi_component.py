@@ -358,13 +358,14 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
         static_normal_interface_motion(ExpressionOrNum): If solved on a static mesh, we can mimic the interface motion by moving it in normal direction with this rate. Default is 0.
         static_interface_motion_testfunction(ExpressionNumOrNone): If set, we solve that the total outflux is zero by adjusting this.
         project_interface_flux(bool): If set to True, the interface flux (kinematic BC) is projected and used for the kinematic BC. Default is False.
+        surface_tension_factor(ExpressionOrNum): The surface tension factor. Multiplicative factor for the imposition of the surface tension. Default is 1.
     """
             
         
     from ..materials.mass_transfer import MassTransferModelBase
     def __init__(self, interface_props:AnyFluidFluidInterface, *, kinbc_name:str="_kin_bc", velo_connect_prefix:str="_lagr_conn_",
                  masstransfer_model:Optional[Union[MassTransferModelBase,Literal[False]]]=None, static:Union[Literal["auto"],bool]="auto", surface_tension_theta:float=1, total_mass_loss_factor_inside:ExpressionOrNum=1,total_mass_loss_factor_outside:ExpressionOrNum=1,
-                 surface_tension_projection_space:Optional[FiniteElementSpaceEnum]=None,additional_normal_traction:ExpressionOrNum=0,surface_tension_gradient_directly:bool=False,use_highest_space_for_velo_connection:bool=False,kinematic_bc_coordinate_sys:Optional[BaseCoordinateSystem]=None,additional_masstransfer_scale=1,additional_kin_bc_test_scale=1,static_normal_interface_motion:ExpressionOrNum=0,static_interface_motion_testfunction:ExpressionNumOrNone=None,project_interface_flux:bool=False):
+                 surface_tension_projection_space:Optional[FiniteElementSpaceEnum]=None,additional_normal_traction:ExpressionOrNum=0,surface_tension_gradient_directly:bool=False,use_highest_space_for_velo_connection:bool=False,kinematic_bc_coordinate_sys:Optional[BaseCoordinateSystem]=None,additional_masstransfer_scale=1,additional_kin_bc_test_scale=1,static_normal_interface_motion:ExpressionOrNum=0,static_interface_motion_testfunction:ExpressionNumOrNone=None,project_interface_flux:bool=False,surface_tension_factor:ExpressionOrNum=1):
         super(MultiComponentNavierStokesInterface, self).__init__()
         self.interface_props = interface_props
         self.kinbc_name = kinbc_name
@@ -393,6 +394,7 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
         self.static_normal_interface_motion=static_normal_interface_motion
         self.static_interface_motion_testfunction=static_interface_motion_testfunction
         self.project_interface_flux=project_interface_flux
+        self.surface_tension_factor=surface_tension_factor
 
     def define_fields(self):
         # Add kinematic boundary condition multiplier
@@ -607,16 +609,16 @@ class MultiComponentNavierStokesInterface(InterfaceEquations):
             if self.surface_tension_theta != 1:
                 surf_tens_proj = evaluate_in_past(surf_tens_proj, 1 - self.surface_tension_theta)
             if self.surface_tension_gradient_directly:
-                self.add_residual(-weak(grad(surf_tens_proj), u_test))
+                self.add_residual(-weak( grad(self.surface_tension_factor*surf_tens_proj), u_test))
             else:
-                self.add_residual(weak(surf_tens_proj, div(u_test)))
+                self.add_residual(weak(self.surface_tension_factor*surf_tens_proj, div(u_test)))
         else:
             if self.surface_tension_theta != 1:
                 surf_tens = evaluate_in_past(surf_tens, 1 - self.surface_tension_theta)            
             if self.surface_tension_gradient_directly:
                 raise RuntimeError("Can only use surface_tension_gradient_directly if surface_tension_projection_space is set")
             else:
-                self.add_residual(weak(surf_tens, div(u_test)))
+                self.add_residual(weak(self.surface_tension_factor*surf_tens, div(u_test)))
 
         
         self.add_residual(weak(self.additional_normal_traction,dot(n,u_test)))
