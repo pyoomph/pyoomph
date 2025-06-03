@@ -429,7 +429,7 @@ def determinant(M:Expression,n:int=0)->Expression:
 	return _pyoomph.GiNaC_determinant(M,Expression(n))
 
 
-def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True,fill_to_vector_dim_3:bool=False)->Expression:
+def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True,fill_to_vector_dim_3:bool=False,skip_empty_rows_and_cols:bool=False)->Expression:
 	"""
 	Compute the inverse of a matrix expression.
 
@@ -437,6 +437,7 @@ def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True,fill
 		M (Expression): The matrix expression for which to compute the determinant.
 		n (int): Range of the matrix to consider for the inverse. Default is 0 (extract nonzero block), <0 means full matrix, >0 upper left matrix of n x n.
 		use_subexpression_for_det (bool): Flag indicating whether to use a subexpression for the determinant. Default is True.
+  		skip_empty_rows_and_cols: Analyze the input and skip empty rows and columns. These empty rows and columns will be added to the result as zero rows and columns of the inverse. Default is False.
   
 
 	Returns:
@@ -444,6 +445,7 @@ def inverse_matrix(M:Expression,n:int=0,use_subexpression_for_det:bool=True,fill
 	"""
 	flags=1 if use_subexpression_for_det else 0
 	flags+=2 if fill_to_vector_dim_3 else 0
+	flags+=4 if skip_empty_rows_and_cols else 0
 	return _pyoomph.GiNaC_inverse_matrix(M,Expression(n),Expression(flags))
 
 

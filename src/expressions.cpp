@@ -1735,8 +1735,72 @@ namespace pyoomph
 				int _n = GiNaC::ex_to<GiNaC::numeric>(n.evalf()).to_double();
 				int flag = GiNaC::ex_to<GiNaC::numeric>(flags.evalf()).to_double();
 				matrix ma = ex_to<matrix>(evmv);
+
+				if (flag & 4) // Identify the zero columns and rows
+				{
+					if (ma.cols()!=ma.rows())
+					{
+						throw_runtime_error("Matrix is not square, cannot identify zero rows/columns");
+					}
+					std::vector<bool> zero_cols(ma.cols(), true);
+					unsigned new_n=ma.cols();
+					unsigned zero_count=0;
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						for (unsigned int j = 0; j < ma.cols(); j++)
+						{
+							if (!ma(i, j).is_zero())
+							{
+								zero_cols[j] = false;
+								zero_cols[i] = false;
+							}
+						}
+					}
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						if (zero_cols[i])
+						{
+							//std::cout << "Zero row/column found at index " << i << std::endl;
+							new_n-=1;
+							zero_count+=1;
+						}
+					}
+					std::vector<GiNaC::ex> nonzero_entries;
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						for (unsigned int j = 0; j < ma.cols(); j++)
+						{
+							if (!zero_cols[i] && !zero_cols[j])
+							{
+								nonzero_entries.push_back(ma(i, j));
+							}
+						}
+					}
+					GiNaC::lst nonzero_entries_lst(GiNaC::lst(nonzero_entries.begin(), nonzero_entries.end()));
+					if (new_n*new_n!= nonzero_entries.size()) throw_runtime_error("Something strange happened, the number of non-zero entries does not match the expected size");
+					//std::cout << "Reduced matrix size is " << new_n << " and _n=" << _n << " and n=" << n << std::endl;
+				  	GiNaC::matrix reduced_mat(new_n, new_n, nonzero_entries_lst);				
+					GiNaC::ex reduced_ex =inverse_matrix_eval(reduced_mat,n,flags-4-2);
+					reduced_mat= GiNaC::ex_to<GiNaC::matrix>(reduced_ex.evalm());
+					unsigned int refilled_size=std::min((unsigned)3,reduced_mat.rows()+zero_count);
+					std::vector<GiNaC::ex> refilled_entries(refilled_size*refilled_size,0);
+					unsigned ii=0;
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						if (zero_cols[i])	continue;
+						unsigned jj=0;
+						for (unsigned int j = 0; j < ma.cols(); j++)
+						{
+							if (zero_cols[j]) continue;							
+							refilled_entries[i*refilled_size+j] = reduced_mat(ii,jj);
+							jj++;
+						}
+						ii++;
+					}
+					return GiNaC::matrix(refilled_size,refilled_size, GiNaC::lst(refilled_entries.begin(), refilled_entries.end()));				
+				}
 				
-				if (_n<0) return ma.inverse(); // Determinant of the whole matrix
+				if (_n<0) return ma.inverse(); // Inverse of the whole matrix
 				else if (_n==0)
 				{					
 					_n=get_nontrivial_matrix_dimension(ma);										
