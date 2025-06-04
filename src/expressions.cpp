@@ -3359,6 +3359,18 @@ namespace pyoomph
 			}
 			else
 			{
+				// There might be units which have not been cancelled out
+				GiNaC::ex factor, unit, rest;			  
+			    if (expressions::collect_base_units(inp, factor, unit, rest))
+				{
+					GiNaC::ex inp2=factor * unit * expressions::subexpression(rest);
+					gpsubst = uos(expand_params(inp2));
+					v = GiNaC::evalf(gpsubst);
+					if (GiNaC::is_a<GiNaC::numeric>(v))
+					{
+						return GiNaC::ex_to<GiNaC::numeric>(v).to_double();
+					}
+				}
 				std::ostringstream oss;
 				oss << "Cannot cast the following into a double: " << v;
 				throw_runtime_error(oss.str());
