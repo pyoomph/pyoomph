@@ -3,13 +3,13 @@ from pyoomph.expressions import *
 from pyoomph.equations.ALE import BaseMovingMeshEquations
 
 class BaseSolidConstitutiveLaw:
-    def __init__(self,use_subexpressions=True):
-        """
+    """
         Base class for solid constitutive laws. The method get_sigma must be implemented in derived classes.
 
         Args:
             use_subexpressions (bool, optional): Use subexpressions for the tensor entries. Defaults to True.
-        """
+    """
+    def __init__(self,use_subexpressions=True):        
         self.use_subexpressions=use_subexpressions
         
     def _subexpression(self,expr):
@@ -75,15 +75,16 @@ class IncompressibleSolidConstitutiveLaw(BaseSolidConstitutiveLaw):
         return True
     
 class GeneralizedHookeanSolidConstitutiveLaw(BaseSolidConstitutiveLaw):
-    def __init__(self, E:ExpressionOrNum=1, nu:ExpressionOrNum=0.4,use_subexpressions=True):
-        """
+    """
         Generalized Hookean solid constitutive law. 
         
         Args:
             E: Young's modulus
             nu: Poisson's ratio
             use_subexpressions (bool, optional): Use subexpressions for the tensor entries. Defaults to True.
-        """
+    """
+    def __init__(self, E:ExpressionOrNum=1, nu:ExpressionOrNum=0.4,use_subexpressions=True):
+        
         super().__init__()
         self.E=E
         self.nu=nu
@@ -120,9 +121,8 @@ class IncompressibleHookeanSolidConstitutiveLaw(IncompressibleSolidConstitutiveL
     
 
 class DeformableSolidEquations(BaseMovingMeshEquations):
-    # TODO: Bulk force density in Lagrangian or Eulerian coordinates? Make two or a flag?
-    def __init__(self, constitutive_law:BaseSolidConstitutiveLaw, mass_density:ExpressionOrNum=0,bulkforce:ExpressionOrNum=0,coordinate_space = None,first_order_time_derivative=False,pressure_space:FiniteElementSpaceEnum="DL",with_error_estimator=False,isotropic_growth_factor:ExpressionOrNum=1,modulus_for_scaling:ExpressionOrNum=None):
-        """Nonlinear solid elasticity equations for deformable solids. Requires a constitutive law, which gives the particular material properties.
+    
+    """Nonlinear solid elasticity equations for deformable solids. Requires a constitutive law, which gives the particular material properties.
 
         Args:
             constitutive_law: Particular solid constitutive law, which must be derived from BaseSolidConstitutiveLaw.
@@ -134,7 +134,10 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
             with_error_estimator: If set, error estimators based on the strain are introduced. Defaults to False.
             isotropic_growth_factor: Factor of growing with respect to the undeformed configuration. Defaults to 1.
             modulus_for_scaling: By default, nondimensionalization is made with respect to the scales ``mass_density``, ``spatial`` and ``temporal``. Here, you can set a reference Young's modulus to nondimensionalize with respect to this instead. Defaults to None.
-        """
+    """
+    # TODO: Bulk force density in Lagrangian or Eulerian coordinates? Make two or a flag?
+    def __init__(self, constitutive_law:BaseSolidConstitutiveLaw, mass_density:ExpressionOrNum=0,bulkforce:ExpressionOrNum=0,coordinate_space = None,first_order_time_derivative=False,pressure_space:FiniteElementSpaceEnum="DL",with_error_estimator=False,isotropic_growth_factor:ExpressionOrNum=1,modulus_for_scaling:ExpressionOrNum=None):
+        
         super().__init__(coordinate_space, False, None)
         self.constitutive_law=constitutive_law
         self.mass_density=mass_density
@@ -206,6 +209,11 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
 
 
 class SolidNormalTraction(InterfaceEquations):
+    """Imposes a normal traction on the solid interface. This is used to apply pressure loads on the solid surface.
+
+    Args:
+        P: Pressure to apply
+    """
     def __init__(self,P:ExpressionOrNum):
         super().__init__()
         self.P=P
