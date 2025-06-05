@@ -158,6 +158,18 @@ Tutorial
   :class: framed    
   :title: Mixture evaporation from a Hele-Shaw cell
   
+.. |tuto_solid| thumbnail:: tutorial/ale/solid/torsion_thumb.png
+  :width: 230px
+  :align: center 
+  :class: framed    
+  :title: Nonlinear elasticity
+
+.. |tuto_fsi| thumbnail:: tutorial/multidom/fsi_thumb.png
+  :width: 270px
+  :align: center 
+  :class: framed    
+  :title: Nonlinear elasticity
+  
 .. |tuto_dg| thumbnail:: tutorial/dg/dg_fvm_d2_thumb.png
   :width: 300px
   :align: center 
@@ -278,6 +290,14 @@ Tutorial
 	  - 	|tuto_heleshaw|
 	  
 		:ref:`Mixture evaporation from a Hele-Shaw cell<secRicardo>`
+		
+	* -	|tuto_solid|
+	
+		:ref:`Nonlinear elasticity<solidoscillations>`		
+		
+	  - 	|tuto_fsi|
+	  
+		:ref:`Fluid-structure interaction<simplefsi>`		
 		
 	* -	|tuto_dg|
 	

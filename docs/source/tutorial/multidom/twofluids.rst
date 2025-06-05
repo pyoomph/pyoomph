@@ -1,3 +1,5 @@
+.. _secconnectfluids:
+
 Connecting two fluid domains
 ----------------------------
 

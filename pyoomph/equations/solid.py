@@ -134,9 +134,10 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
             with_error_estimator: If set, error estimators based on the strain are introduced. Defaults to False.
             isotropic_growth_factor: Factor of growing with respect to the undeformed configuration. Defaults to 1.
             modulus_for_scaling: By default, nondimensionalization is made with respect to the scales ``mass_density``, ``spatial`` and ``temporal``. Here, you can set a reference Young's modulus to nondimensionalize with respect to this instead. Defaults to None.
+            scale_for_FSI: If set, the scaling of the test function agrees with the scaling of the velocity test function ([X]/[P]). This is important to balance the tractions correctly
     """
     # TODO: Bulk force density in Lagrangian or Eulerian coordinates? Make two or a flag?
-    def __init__(self, constitutive_law:BaseSolidConstitutiveLaw, mass_density:ExpressionOrNum=0,bulkforce:ExpressionOrNum=0,coordinate_space = None,first_order_time_derivative=False,pressure_space:FiniteElementSpaceEnum="DL",with_error_estimator=False,isotropic_growth_factor:ExpressionOrNum=1,modulus_for_scaling:ExpressionOrNum=None):
+    def __init__(self, constitutive_law:BaseSolidConstitutiveLaw, mass_density:ExpressionOrNum=0,bulkforce:ExpressionOrNum=0,coordinate_space = None,first_order_time_derivative=False,pressure_space:FiniteElementSpaceEnum="DL",with_error_estimator=False,isotropic_growth_factor:ExpressionOrNum=1,modulus_for_scaling:ExpressionOrNum=None,scale_for_FSI:bool=False):
         
         super().__init__(coordinate_space, False, None)
         self.constitutive_law=constitutive_law
@@ -148,6 +149,7 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
         self.with_error_estimator=with_error_estimator
         self.isotropic_growth_factor=isotropic_growth_factor
         self.modulus_for_scaling=modulus_for_scaling
+        self.scale_for_FSI=scale_for_FSI
         
     def define_fields(self):
         super().define_fields()        
@@ -158,13 +160,26 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
             if self.coordinate_space is None:
                 raise RuntimeError("coordinate_space must be specified for first order time derivative")
             self.define_vector_field("dt_mesh",self.coordinate_space,scale=scale_factor("spatial")/scale_factor("temporal"),testscale=scale_factor("temporal")/scale_factor("spatial"))
-            
+        
+        # Allow to access the deformed mass density
+        if self.constitutive_law.is_incompressible():
+            rho_deformed=self.mass_density
+        else:
+            dim=self.get_coordinate_system().get_actual_dimension(self.get_nodal_dimension())
+            detG=self.constitutive_law._subexpression(determinant(self.constitutive_law.get_Gij()))
+            detg=self.constitutive_law._subexpression(determinant(self.constitutive_law.get_gij(dim,self.isotropic_growth_factor)))
+            rho_deformed=self.constitutive_law._subexpression(self.mass_density*square_root(detg/detG))
+        self.define_field_by_substitution("deformed_mass_density",rho_deformed,also_on_interface=True)
+        
     def define_scaling(self):        
         self.set_scaling(mesh= scale_factor("spatial"))
-        if self.modulus_for_scaling is None:
-            self.set_test_scaling(mesh=1/(scale_factor("mass_density")/scale_factor("temporal")**2*scale_factor("spatial")))
+        if self.scale_for_FSI:
+            self.set_test_scaling(mesh=scale_factor("spatial")/scale_factor("pressure"))
         else:
-            self.set_test_scaling(mesh=1/self.modulus_for_scaling*scale_factor("spatial"))
+            if self.modulus_for_scaling is None:
+                self.set_test_scaling(mesh=1/(scale_factor("mass_density")/scale_factor("temporal")**2*scale_factor("spatial")))
+            else:
+                self.set_test_scaling(mesh=1/self.modulus_for_scaling*scale_factor("spatial"))
 
     def define_residuals(self):
         x,xtest=var_and_test("mesh")
@@ -184,15 +199,14 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
         #print(self.expand_expression_for_debugging(self.constitutive_law.get_gij(dim,self.isotropic_growth_factor)))
         #print(self.expand_expression_for_debugging(self.constitutive_law.get_G_up_ij()))
         #exit()
-        # For one element, these gives the same as oomph-lib        
-        self.add_weak( self.mass_density*accel-self.bulkforce,self.isotropic_growth_factor* xtest,lagrangian=True )
-        
+        # For one element, these gives the same as oomph-lib                
+        self.add_weak( self.mass_density*accel-self.bulkforce,self.isotropic_growth_factor* xtest,lagrangian=True )                
         self.add_weak((matproduct(grad(x,lagrangian=True),sigma)),self.isotropic_growth_factor*grad(xtest,lagrangian=True),lagrangian=True)
         
         
         if self.constitutive_law.is_incompressible():
-            detG=determinant(self.constitutive_law.get_Gij())
-            detg=determinant(self.constitutive_law.get_gij(dim,self.isotropic_growth_factor))
+            detG=self.constitutive_law._subexpression(determinant(self.constitutive_law.get_Gij()))
+            detg=self.constitutive_law._subexpression(determinant(self.constitutive_law.get_gij(dim,self.isotropic_growth_factor)))
             self.add_weak(detG - detg,testfunction(self.pressure_name),lagrangian=True)
 
     
@@ -208,15 +222,61 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
 
 
 
-class SolidNormalTraction(InterfaceEquations):
+class SolidTraction(InterfaceEquations):
+    """Imposes a traction vector on the solid interface. 
+
+    Args:
+        T: traction to apply
+    """
+    def __init__(self,T:ExpressionOrNum):
+        super().__init__()
+        self.T=T
+        
+    def define_residuals(self):
+        self.add_weak(-self.T,testfunction("mesh"),lagrangian=False)         
+
+class SolidNormalTraction(SolidTraction):
     """Imposes a normal traction on the solid interface. This is used to apply pressure loads on the solid surface.
 
     Args:
         P: Pressure to apply
     """
     def __init__(self,P:ExpressionOrNum):
-        super().__init__()
-        self.P=P
+        super().__init__(-P*var("normal"))
+        
+        
+
+
+class FSIConnection(InterfaceEquations):
+    """
+    Can be added to the fluid side of a fluid-structure interaction interface to couple the mesh deformation and the velocity.    
+    """
+    def define_fields(self):
+        self.define_vector_field("_mesh_connection","C2",testscale=1/scale_factor("spatial"),scale=scale_factor("spatial")**2)
+        self.define_vector_field("_velo_connection","C2",testscale=scale_factor("temporal")/scale_factor("spatial"),scale=scale_factor("pressure"))
         
     def define_residuals(self):
-        self.add_weak(self.P*var("normal"),testfunction("mesh"),lagrangian=False) 
+        from pyoomph.equations.navier_stokes import StokesEquations
+        floweqs=self.get_parent_domain().get_equations().get_equation_of_type(StokesEquations,always_as_list=True)
+        solideqs=self.get_opposite_parent_domain().get_equations().get_equation_of_type(DeformableSolidEquations,always_as_list=True)
+        if len(floweqs) != 1 or len(solideqs) != 1:
+            raise RuntimeError("FSIConnection can only be used with a single fluid on the inside domain and a single solid equation on the outside domain")
+        if not cast(DeformableSolidEquations,solideqs[0]).scale_for_FSI:
+            raise RuntimeError("FSIConnection can only be used with a solid equation that has scale_for_FSI=True. Otherwise, the stresses would be balanced wrongly.")
+        lm,lmtest=var_and_test("_mesh_connection")
+        lu,lutest=var_and_test("_velo_connection")
+        x,xtest=var_and_test("mesh")
+        u,utest=var_and_test("velocity")
+        xsol,xsoltest=var_and_test("mesh",domain="|.")        
+        usol=mesh_velocity()
+        self.add_weak(x-xsol,lmtest)
+        self.add_weak(lm,xtest)
+        self.add_weak(u-usol,lutest)
+        self.add_weak(lu,utest)
+        self.add_weak(-lu,xsoltest)
+        
+    def before_assigning_equations_postorder(self, mesh):
+        comps=[ x[-1] for x in self.get_combined_equations()._vectorfields["_mesh_connection"] ]
+        for direct in comps:
+            self.pin_redundant_lagrange_multipliers(mesh,"_mesh_connection_"+direct,["mesh_"+direct])
+            self.pin_redundant_lagrange_multipliers(mesh,"_velo_connection_"+direct,["velocity_"+direct])

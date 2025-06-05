@@ -52,7 +52,7 @@ With the previous examples in mind, it is trivial to setup the problem case. How
 	    problem.run(10*T,outstep=0.1*T,temporal_error=1)
 
 
-For the torsion, we use the original undeformed beam by accessing the Lagrangian coordinates and apply the deformation by setting an initial condition for the Eulerian mesh coordinates. Note that the code generation and compilation takes a while, since the three-dimensional dynamics involves a lot of higher order tensors, inverse matrices (the contravariant metric tensor) and nonlinearities. In particular, the entries of the analytic Jacobian with respect to the moving mesh coordinates hence constitute long expressions, which bloat up the generated C code to over 3 megabytes.
+For the torsion, we use the original undeformed beam by accessing the Lagrangian coordinates and apply the deformation by setting an initial condition for the Eulerian mesh coordinates. Note that the code generation and compilation takes a while, since the three-dimensional dynamics involves a lot of higher order tensors, inverse matrices (the contravariant metric tensor) and nonlinearities. In particular, the entries of the analytical Jacobian with respect to the moving mesh coordinates hence constitute long expressions, which bloat up the generated C code to over 3 megabytes.
 
 ..  figure:: solid_oscillations.*
 	:name: figalesolidoscillations

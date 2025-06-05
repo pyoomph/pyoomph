@@ -16,3 +16,4 @@ So far, we only considered a single bulk domain, sometimes with additional equat
    multidom/twofluids.rst
    multidom/stokeslaw.rst
    multidom/evap.rst
+   multidom/simple_fsi.rst   

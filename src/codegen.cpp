@@ -4206,7 +4206,8 @@ namespace pyoomph
 			}
 		}
 
-		os << "    const double dx = shapeinfo->int_pt_weight;" << std::endl; // TODO: Lagrangian part
+		os << "    const double dx = shapeinfo->int_pt_weight;" << std::endl;
+		os << "    const double dX = shapeinfo->int_pt_weight_Lagrangian;" << std::endl;
 		os << "    const double dx_unity = shapeinfo->int_pt_weight_unity;" << std::endl;
 		os << "    switch (index)" << std::endl;
 		os << "    {" << std::endl;

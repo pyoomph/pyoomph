@@ -326,7 +326,7 @@ class CartesianCoordinateSystem(BaseCoordinateSystem):
             res += diff(arg[i], coords[i])
         return res
     
-    def vector_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
+    def vector_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:        
         res:List[List[ExpressionOrNum]] = []
         for b in range(arg.nops()):
             line:List[ExpressionOrNum] = []
