@@ -737,7 +737,7 @@ namespace pyoomph
         oomph::BoundaryNodeBase *n1 = dynamic_cast<oomph::BoundaryNodeBase*>(fe_pt->vertex_node_pt((side+1)%3));
         if (!n0 || !n1)
         {
-          throw_runtime_error("Boundary element does not have boundary nodes on the required side: " + std::to_string(side)+"  "+std::to_string((long unsigned)n0)+"  "+std::to_string((long unsigned)n1));
+          throw_runtime_error("Boundary element does not have boundary nodes on the required side: " + std::to_string(side));//+"  "+std::to_string((long unsigned)n0)+"  "+std::to_string((long unsigned)n1));
         }
         if (!n0->is_on_boundary(i) || !n1->is_on_boundary(i))
         {
@@ -782,7 +782,7 @@ namespace pyoomph
           oomph::BoundaryNodeBase *n1 = dynamic_cast<oomph::BoundaryNodeBase*>(itt->second.FE_pt->vertex_node_pt((side+1)%3));
           if (!n0 || !n1)
           {
-            throw_runtime_error("Boundary element does not have boundary nodes on the required side: " + std::to_string(side)+"  "+std::to_string((long unsigned)n0)+"  "+std::to_string((long unsigned)n1));
+            throw_runtime_error("Boundary element does not have boundary nodes on the required side")//;: " + std::to_string(side)+"  "+std::to_string((long unsigned)n0)+"  "+std::to_string((long unsigned)n1));
           }
           if (!n0->is_on_boundary(i) || !n1->is_on_boundary(i))
           {
