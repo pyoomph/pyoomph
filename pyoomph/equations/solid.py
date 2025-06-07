@@ -181,6 +181,11 @@ class DeformableSolidEquations(BaseMovingMeshEquations):
             else:
                 self.set_test_scaling(mesh=1/self.modulus_for_scaling*scale_factor("spatial"))
 
+
+    def before_mesh_to_mesh_interpolation(self, eqtree, interpolator):
+        pass
+        #raise RuntimeError("DeformableSolidEquations does not support interpolation from mesh to mesh. It would mess up the undeformed configuration at the moment")
+        
     def define_residuals(self):
         x,xtest=var_and_test("mesh")
         X=var("lagrangian")
@@ -250,7 +255,14 @@ class SolidNormalTraction(SolidTraction):
 class FSIConnection(InterfaceEquations):
     """
     Can be added to the fluid side of a fluid-structure interaction interface to couple the mesh deformation and the velocity.    
+    
+    Args:
+        velocity_offset: An offset to the velocity. You can e.g. add/substract a normal velocity to allow for fluid penetration into the solid. 
     """
+    def __init__(self,*,velocity_offset:ExpressionOrNum=0):
+        super().__init__()
+        self.velocity_offset=velocity_offset
+        
     def define_fields(self):
         self.define_vector_field("_mesh_connection","C2",testscale=1/scale_factor("spatial"),scale=scale_factor("spatial")**2)
         self.define_vector_field("_velo_connection","C2",testscale=scale_factor("temporal")/scale_factor("spatial"),scale=scale_factor("pressure"))
@@ -271,7 +283,7 @@ class FSIConnection(InterfaceEquations):
         usol=mesh_velocity()
         self.add_weak(x-xsol,lmtest)
         self.add_weak(lm,xtest)
-        self.add_weak(u-usol,lutest)
+        self.add_weak(u-usol+self.velocity_offset,lutest)
         self.add_weak(lu,utest)
         self.add_weak(-lu,xsoltest)
         

@@ -58,6 +58,7 @@ namespace pyoomph
 		DynamicBulkElementInstance *codeinst = NULL;
 
 	public:
+		bool interpolated_lagrangian_coordinates_at_remeshing=false;
 		virtual pyoomph::Node *resolve_copy_master(pyoomph::Node *cpy);
 		std::vector<pyoomph::Node*> add_interpolated_nodes_at(const std::vector<std::vector<double> > & coords,bool all_as_boundary_nodes);
 		virtual void store_copy_master(pyoomph::Node *cpy, pyoomph::Node *mst);

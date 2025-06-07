@@ -442,7 +442,9 @@ namespace pyoomph
       // Get pointer to element
       oomph::FiniteElement *fe_pt = finite_element_pt(e);
       if (!dynamic_cast<oomph::TElementBase *>(fe_pt))
+      {
         continue; // Only on triangles
+      }
       if (doc)
       {
         outfile << "Element: " << e << " " << fe_pt << std::endl;
@@ -672,12 +674,43 @@ namespace pyoomph
 
     } // End of "adding-boundaries"-loop
 
+    // In mixed meshes, you can have a quad attached to a triangle at the sharp boundary corner. #> 
+    // This would then consider the following line as boundary as well: #|>
+    // So we must remove all quad boundaries again
+
     // Now copy everything across into permanent arrays
     //-------------------------------------------------
 
     // Loop over boundaries
     for (unsigned i = 0; i < nbound; i++)
     {
+
+      // Fill the boundaries of the quads
+      std::vector<std::set<oomph::Node*>> quad_boundary_nodes;
+      for (unsigned int iq=0;iq<Boundary_element_pt[i].size();iq++)
+      {
+        oomph::QuadElementBase *qeb=dynamic_cast<oomph::QuadElementBase *>(Boundary_element_pt[i][iq]);
+        
+        std::vector<unsigned> qboundinds;
+        int side=Face_index_at_boundary[i][iq];
+        if (side==-2) { qboundinds={0,1};}
+        else if (side==2) { qboundinds={2,3};}
+        else if (side==-1) { qboundinds={0,2};}
+        else if (side==1) { qboundinds={1,3};}
+        else throw_runtime_error("Unknown side for quad boundary");
+        std::set<oomph::Node*> qboundnodes;
+        for (unsigned vni : qboundinds)
+        {
+          if (!dynamic_cast<oomph::BoundaryNodeBase*>(qeb->vertex_node_pt(vni))) throw_runtime_error("Quad boundary node is not a boundary node: side "+std::to_string(side) );
+          if (!dynamic_cast<oomph::BoundaryNodeBase*>(qeb->vertex_node_pt(vni))->is_on_boundary(i)) throw_runtime_error("Quad boundary node is not on the required boundary: side "+std::to_string(side));
+          {
+            qboundnodes.insert(qeb->vertex_node_pt(vni));
+          }
+        }
+        quad_boundary_nodes.push_back(qboundnodes);
+        
+      }
+
       // Number of elements on this boundary that have to be added
       // in addition to other elements
       unsigned bonus1 = bonus[i];
@@ -698,10 +731,41 @@ namespace pyoomph
         // Recover pointer to element
         oomph::FiniteElement *fe_pt = *it;
 
+        // Find the vertex nodes
+        int side=face_identifier(i, fe_pt);
+        oomph::BoundaryNodeBase *n0 = dynamic_cast<oomph::BoundaryNodeBase*>(fe_pt->vertex_node_pt((side+2)%3));
+        oomph::BoundaryNodeBase *n1 = dynamic_cast<oomph::BoundaryNodeBase*>(fe_pt->vertex_node_pt((side+1)%3));
+        if (!n0 || !n1)
+        {
+          throw_runtime_error("Boundary element does not have boundary nodes on the required side: " + std::to_string(side)+"  "+std::to_string((long unsigned)n0)+"  "+std::to_string((long unsigned)n1));
+        }
+        if (!n0->is_on_boundary(i) || !n1->is_on_boundary(i))
+        {
+          throw_runtime_error("Boundary element does not have boundary nodes on the required boundary: " + std::to_string(i));
+        }
+        std::set<oomph::Node*> tboundnodes{dynamic_cast<oomph::Node*>(n0), dynamic_cast<oomph::Node*>(n1)};
+        bool found=false;
+        for (unsigned int iq=0;iq<quad_boundary_nodes.size();iq++)
+        {
+          if (quad_boundary_nodes[iq]==tboundnodes)
+          {
+            //std::cout << "Found quad boundary element on boundary " << i << " with nodes " << n0 << " and " << n1 << std::endl;
+            quad_boundary_nodes.erase(quad_boundary_nodes.begin()+iq); // Remove this quad boundary element
+            found=true;
+            break; // And do not add the triangle boundary element
+          }
+        }
+        if (found)
+        {
+          continue; // We have found a quad boundary element, so do not add the triangle boundary element
+        }
+
         // Add to permanent storage
         Boundary_element_pt[i].push_back(fe_pt);
 
         Face_index_at_boundary[i][e_count] = face_identifier(i, fe_pt);
+
+        
 
         // Increment counter
         e_count++;
@@ -711,6 +775,36 @@ namespace pyoomph
       {
         if (itt->second.Boundary == i)
         {
+
+            // Find the vertex nodes
+          int side=itt->second.Face_id;
+          oomph::BoundaryNodeBase *n0 = dynamic_cast<oomph::BoundaryNodeBase*>(itt->second.FE_pt->vertex_node_pt((side+2)%3));
+          oomph::BoundaryNodeBase *n1 = dynamic_cast<oomph::BoundaryNodeBase*>(itt->second.FE_pt->vertex_node_pt((side+1)%3));
+          if (!n0 || !n1)
+          {
+            throw_runtime_error("Boundary element does not have boundary nodes on the required side: " + std::to_string(side)+"  "+std::to_string((long unsigned)n0)+"  "+std::to_string((long unsigned)n1));
+          }
+          if (!n0->is_on_boundary(i) || !n1->is_on_boundary(i))
+          {
+            throw_runtime_error("Boundary element does not have boundary nodes on the required boundary: " + std::to_string(i));
+          }
+          std::set<oomph::Node*> tboundnodes{dynamic_cast<oomph::Node*>(n0), dynamic_cast<oomph::Node*>(n1)};
+          bool found=false;
+          for (unsigned int iq=0;iq<quad_boundary_nodes.size();iq++)
+          {
+            if (quad_boundary_nodes[iq]==tboundnodes)
+            {
+              //std::cout << "SECOND Found quad boundary element on boundary " << i << " with nodes " << n0 << " and " << n1 << std::endl;
+              quad_boundary_nodes.erase(quad_boundary_nodes.begin()+iq); // Remove this quad boundary element
+              found=true;
+              break; // And do not add the triangle boundary element
+            }
+          }
+          if (found)
+          {
+            continue; // We have found a quad boundary element, so do not add the triangle boundary element
+          }
+
           // Add to permanent storage
           Boundary_element_pt[i].push_back(itt->second.FE_pt);
 

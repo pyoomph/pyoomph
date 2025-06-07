@@ -12331,9 +12331,12 @@ namespace pyoomph
 
 	void InterfaceElementBase::add_interface_dofs()
 	{
-		for (unsigned l = 0; l < eleminfo.nnode; ++l)
-		{			
-			if (!dynamic_cast<BoundaryNode*>(this->node_pt(l))) throw_runtime_error("Interface element has a node which is not a BoundaryNode. This can happen in meshes when you have sharp corners in a boundary. Happened in "+this->codeinst->get_code()->get_file_name());
+		if (false && std::string(this->codeinst->get_code()->get_func_table()->domain_name)!="_internal_facets_")
+		{
+			for (unsigned l = 0; l < eleminfo.nnode; ++l)
+			{			
+				if (!dynamic_cast<BoundaryNode*>(this->node_pt(l))) throw_runtime_error("Interface element has a node which is not a BoundaryNode. This can happen in meshes when you have sharp corners in a boundary. Happened in "+this->codeinst->get_code()->get_file_name());
+			}
 		}
 		auto *ft = codeinst->get_func_table();
 		for (unsigned i = ft->numfields_C2TB_bulk; i < ft->numfields_C2TB; i++)

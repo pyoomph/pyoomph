@@ -768,6 +768,11 @@ void PyReg_Mesh(py::module &m)
     oomph::RefineableMeshBase* refmesh =dynamic_cast<oomph::RefineableMeshBase*>(self);
     if (refmesh) refmesh->enable_adaptation(); })
 		.def("nnode", &oomph::Mesh::nnode)
+		.def("_set_interpolate_lagrangian_on_remeshing", [](oomph::Mesh *self, bool lagr)
+			 {
+			pyoomph::Mesh* mesh =dynamic_cast<pyoomph::Mesh*>(self);
+			if (mesh) mesh->interpolated_lagrangian_coordinates_at_remeshing=lagr;
+			 })
 		.def("get_elemental_errors", [](oomph::Mesh *self)
 			 {
 			oomph::Vector<double> elerrs(self->nelement(),0.0);
