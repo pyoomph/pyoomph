@@ -35,10 +35,19 @@ if TYPE_CHECKING:
 
 class CustomAssemblyBase:    
     def __init__(self) -> None:
-        self.problem:Optional["Problem"]=None
+        self.problem:Optional["Problem"]=None            
 
     def _set_problem(self,problem:"Problem"):
         self.problem=problem
+        
+    def has_custom_solve_routine(self)->bool:
+        # You can override the default solve routine for J*dU=R
+        return False
+    
+    def custom_solve_routine(self, solve_Jx_b:Callable[[NPFloatArray],NPFloatArray], b:NPFloatArray) -> NPFloatArray:
+        # You can override the default solve routine for J*dU=R
+        # This is only called if has_custom_solve_routine() returns True
+        raise NotImplementedError("Custom solve routine not implemented")
 
     def invalidate_cache(self)->None:
         pass

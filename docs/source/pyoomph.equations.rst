@@ -27,6 +27,7 @@ Submodules
    pyoomph.equations.poisson
    pyoomph.equations.potential_flow
    pyoomph.equations.stokes_stream_func
+   pyoomph.equations.solid
    pyoomph.equations.topological_changes
    pyoomph.equations.tracers
 

@@ -498,7 +498,7 @@ class YoungLaplaceDropletShape(Problem):
 
         # Measures
         eqs+=IntegralObservables(volume=1/3* dot(var("mesh"), var("normal")),area=1)
-        eqs+=IntegralObservables(_contact_angle=acos(var("_norm_y")), _ca_denom=1,_coordinante_system=cartesian)@"right"
+        eqs+=IntegralObservables(cartesian,_contact_angle=acos(var("_norm_y")), _ca_denom=1,)@"right"
         eqs+=IntegralObservables(contact_angle=lambda _contact_angle,_ca_denom:_contact_angle/_ca_denom)@"right"
         eqs+=IntegralObservableOutput()+IntegralObservableOutput()@"right"
         self.define_named_var(force_factor=self.force_factor.get_symbol())

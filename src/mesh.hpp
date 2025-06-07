@@ -58,6 +58,7 @@ namespace pyoomph
 		DynamicBulkElementInstance *codeinst = NULL;
 
 	public:
+		bool interpolated_lagrangian_coordinates_at_remeshing=false;
 		virtual pyoomph::Node *resolve_copy_master(pyoomph::Node *cpy);
 		std::vector<pyoomph::Node*> add_interpolated_nodes_at(const std::vector<std::vector<double> > & coords,bool all_as_boundary_nodes);
 		virtual void store_copy_master(pyoomph::Node *cpy, pyoomph::Node *mst);
@@ -136,6 +137,7 @@ namespace pyoomph
 		virtual MeshKDTree *get_lagrangian_kdtree();
 		virtual std::map<std::string, std::string> get_field_information(); // first: names, second: list of spaces (C2,C1,DL,D0), but also (../C2 etc for elements defined on bulk domains)
 		virtual ~Mesh();
+		virtual void check_integrity();
 	};
 
 	class DummyErrorEstimator : public oomph::Z2ErrorEstimator // Only be used to make sure that the error_estimator_pt is not NULL, which causes problems if PARANOID

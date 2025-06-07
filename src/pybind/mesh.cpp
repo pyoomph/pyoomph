@@ -768,6 +768,11 @@ void PyReg_Mesh(py::module &m)
     oomph::RefineableMeshBase* refmesh =dynamic_cast<oomph::RefineableMeshBase*>(self);
     if (refmesh) refmesh->enable_adaptation(); })
 		.def("nnode", &oomph::Mesh::nnode)
+		.def("_set_interpolate_lagrangian_on_remeshing", [](oomph::Mesh *self, bool lagr)
+			 {
+			pyoomph::Mesh* mesh =dynamic_cast<pyoomph::Mesh*>(self);
+			if (mesh) mesh->interpolated_lagrangian_coordinates_at_remeshing=lagr;
+			 })
 		.def("get_elemental_errors", [](oomph::Mesh *self)
 			 {
 			oomph::Vector<double> elerrs(self->nelement(),0.0);
@@ -798,6 +803,7 @@ void PyReg_Mesh(py::module &m)
 	auto &decl_PyoomphMesh = (*py_decl_PyoomphMesh);
 	decl_PyoomphMesh
 		.def("activate_duarte_debug", &pyoomph::Mesh::activate_duarte_debug)
+		.def("check_integrity",&pyoomph::Mesh::check_integrity)
 		.def("prepare_zeta_interpolation", [](pyoomph::Mesh *self, pyoomph::Mesh *old_mesh){self->prepare_zeta_interpolation(old_mesh);})
 		.def("remove_boundary_nodes",[](pyoomph::Mesh *self) {self->remove_boundary_nodes();})		
 		.def("remove_boundary_nodes_of_bound",[](pyoomph::Mesh *self,unsigned b) {self->remove_boundary_nodes(b);})		

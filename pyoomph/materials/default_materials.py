@@ -230,8 +230,25 @@ class MixtureLiquidGlycerolWater(MixtureLiquidProperties):
         )
 
         # Fit of data from https://doi.org/10.1016/j.petrol.2012.09.003
-        self.default_surface_tension["gas"] = subexpression(
-            72.45e-3
+        #self.default_surface_tension["gas"] = subexpression(
+        #    72.45e-3
+        #    * (
+        #        (
+        #            1.0
+        #            - 0.1214690683 * yG
+        #            + 0.4874796412 * yG**2
+        #            - 2.208295376 * yG**3
+        #            + 3.412242927 * yG**4
+        #            - 1.698619738 * yG**5
+        #        )
+        #        - (0.0001455 * (1 - yG) + 0.00008845 * yG) * (TCelsius)
+        #    )
+        #    * newton
+        #    / meter
+        #)
+                
+        T_minus_T0_in_K=(var("temperature")-25*celsius)/kelvin
+        self.default_surface_tension["gas"]=subexpression((72.45
             * (
                 (
                     1.0
@@ -241,11 +258,9 @@ class MixtureLiquidGlycerolWater(MixtureLiquidProperties):
                     + 3.412242927 * yG**4
                     - 1.698619738 * yG**5
                 )
-                - (0.0001455 * (1 - yG) + 0.00008845 * yG) * (TCelsius)
-            )
-            * newton
-            / meter
-        )
+               
+            )            
+         - (72.75 * 0.002 * (1 - yG) + 0.0598 * yG) * (T_minus_T0_in_K) ) *milli*newton/meter)
 
         # Fit of data from https://doi.org/10.1021/je049917u
         D = (

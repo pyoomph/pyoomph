@@ -1136,6 +1136,14 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
         ny = self.mshcache.get_data("normal_y")
         assert nx is not None
         assert ny is not None
+        
+        # Scale by the aspect ratio
+        asp=float(self.plotter.aspect_ratio)
+        if self.plotter.aspect_ratio is not True and self.plotter.aspect_ratio!=1:            
+            nxl=numpy.sqrt(nx*nx+ny*ny*(asp*asp))
+            nx/=nxl
+            ny/=nxl*asp
+        
         dx=data*nx
         dy=data*ny
         if not self.transform is None:
@@ -1146,10 +1154,11 @@ class MatplotlibInterfaceArrows(MatplotLibPartWithMeshData):
 
         self._arrows=[]
 
+        
         for lentry in lines:
             x:List[float] = [coordinates[0, lentry[i]] for i in range(len(lentry))]
             y:List[float] = [coordinates[1, lentry[i]] for i in range(len(lentry))]
-            dxx:List[float]=[dx[lentry[i]] for i in range(len(lentry))]
+            dxx:List[float]=[dx[lentry[i]]*asp for i in range(len(lentry))]
             dyy:List[float] = [dy[lentry[i]] for i in range(len(lentry))]
             datasegs:List[float]=[self._data[lentry[i]] for i in range(len(lentry))]
 
@@ -2687,7 +2696,8 @@ class MatplotlibPlotter(BasePlotter):
             if self.aspect_ratio is True:
                 plt.gca().set_aspect('equal') #type:ignore
             else:
-                raise RuntimeError("TODO ASPECT")
+                #raise RuntimeError("TODO ASPECT")
+                plt.gca().set_aspect(self.aspect_ratio) #type:ignore
         if self.fullscreen:
             plt.margins(0, 0) #type:ignore
             plt.gca().set_axis_off() #type:ignore
@@ -2732,8 +2742,8 @@ class MatplotlibPlotter(BasePlotter):
 
     def ensure_spatial_nondim(self,x:ExpressionOrNum) -> float:
         if isinstance(x,Expression):
-            factor,_unit,_rest,_success=_pyoomph.GiNaC_collect_units(x)
-            return float(factor)
+            factor,_unit,rest,_success=_pyoomph.GiNaC_collect_units(x)
+            return float(factor*rest)
         else:
             return float(x)
 
@@ -2751,7 +2761,7 @@ class MatplotlibPlotter(BasePlotter):
         """
 
         if center is not None and size is not None:
-            self.set_view(xmin=center[0]-size[0]/2,xmax=center[0]+size[0]/2,ymin=center[1]-size[1]/2,ymax=center[1]+size[1]/2)
+            self.set_view(xmin=center[0]-size[0]/2,xmax=center[0]+size[0]/2,ymin=center[1]-size[1]/2,ymax=center[1]+size[1]/2)        
         if xmin is not None:
             self.xmin=self.ensure_spatial_nondim(xmin)
             plt.xlim(left=self.xmin) #type:ignore
@@ -2764,12 +2774,14 @@ class MatplotlibPlotter(BasePlotter):
         if ymax is not None:
             self.ymax=self.ensure_spatial_nondim(ymax)
             plt.ylim(top=self.ymax) #type:ignore
+        
 
         if self.aspect_ratio and self.fullscreen and (self.xmin is not None) and (self.xmax is not None) and (self.ymin is not None) and (self.ymax is not None):
             # Enforce the image size to match it
             dx=self.xmax-self.xmin
             dy=self.ymax-self.ymin
             #print("DX and DY",dx,dy,self.xmax,self.xmin,self.xmax-self.xmin)
+            ar=1 if self.aspect_ratio is True else self.aspect_ratio
             RX=self.image_size[0]/dx
             RY = self.image_size[1] / dy
 
@@ -2785,6 +2797,6 @@ class MatplotlibPlotter(BasePlotter):
                 hH=(int(hH*self.dpi)+1.00001)/self.dpi
             #print(W, H, W * self.dpi, H * self.dpi)
             #exit()
-            plt.gcf().set_size_inches(wW,hH)
+            plt.gcf().set_size_inches(wW,hH*ar)
 
 

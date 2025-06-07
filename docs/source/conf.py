@@ -134,3 +134,12 @@ def set_master_doc(app):
 
 def setup(app):
     app.connect('builder-inited', set_master_doc)
+
+
+from sphinx.builders.html import StandaloneHTMLBuilder
+StandaloneHTMLBuilder.supported_image_types = [
+    'image/svg+xml',
+    'image/gif',
+    'image/png',
+    'image/jpeg'
+]

@@ -1735,8 +1735,72 @@ namespace pyoomph
 				int _n = GiNaC::ex_to<GiNaC::numeric>(n.evalf()).to_double();
 				int flag = GiNaC::ex_to<GiNaC::numeric>(flags.evalf()).to_double();
 				matrix ma = ex_to<matrix>(evmv);
+
+				if (flag & 4) // Identify the zero columns and rows
+				{
+					if (ma.cols()!=ma.rows())
+					{
+						throw_runtime_error("Matrix is not square, cannot identify zero rows/columns");
+					}
+					std::vector<bool> zero_cols(ma.cols(), true);
+					unsigned new_n=ma.cols();
+					unsigned zero_count=0;
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						for (unsigned int j = 0; j < ma.cols(); j++)
+						{
+							if (!ma(i, j).is_zero())
+							{
+								zero_cols[j] = false;
+								zero_cols[i] = false;
+							}
+						}
+					}
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						if (zero_cols[i])
+						{
+							//std::cout << "Zero row/column found at index " << i << std::endl;
+							new_n-=1;
+							zero_count+=1;
+						}
+					}
+					std::vector<GiNaC::ex> nonzero_entries;
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						for (unsigned int j = 0; j < ma.cols(); j++)
+						{
+							if (!zero_cols[i] && !zero_cols[j])
+							{
+								nonzero_entries.push_back(ma(i, j));
+							}
+						}
+					}
+					GiNaC::lst nonzero_entries_lst(GiNaC::lst(nonzero_entries.begin(), nonzero_entries.end()));
+					if (new_n*new_n!= nonzero_entries.size()) throw_runtime_error("Something strange happened, the number of non-zero entries does not match the expected size");
+					//std::cout << "Reduced matrix size is " << new_n << " and _n=" << _n << " and n=" << n << std::endl;
+				  	GiNaC::matrix reduced_mat(new_n, new_n, nonzero_entries_lst);				
+					GiNaC::ex reduced_ex =inverse_matrix_eval(reduced_mat,n,flags-4-2);
+					reduced_mat= GiNaC::ex_to<GiNaC::matrix>(reduced_ex.evalm());
+					unsigned int refilled_size=std::min((unsigned)3,reduced_mat.rows()+zero_count);
+					std::vector<GiNaC::ex> refilled_entries(refilled_size*refilled_size,0);
+					unsigned ii=0;
+					for (unsigned int i = 0; i < ma.rows(); i++)
+					{
+						if (zero_cols[i])	continue;
+						unsigned jj=0;
+						for (unsigned int j = 0; j < ma.cols(); j++)
+						{
+							if (zero_cols[j]) continue;							
+							refilled_entries[i*refilled_size+j] = reduced_mat(ii,jj);
+							jj++;
+						}
+						ii++;
+					}
+					return GiNaC::matrix(refilled_size,refilled_size, GiNaC::lst(refilled_entries.begin(), refilled_entries.end()));				
+				}
 				
-				if (_n<0) return ma.inverse(); // Determinant of the whole matrix
+				if (_n<0) return ma.inverse(); // Inverse of the whole matrix
 				else if (_n==0)
 				{					
 					_n=get_nontrivial_matrix_dimension(ma);										
@@ -1771,8 +1835,26 @@ namespace pyoomph
 					entries.push_back((ma(0,0)*ma(1,1)-ma(0,1)*ma(1,0))/det);					
 				}
 				
-				GiNaC::lst entries_lst(GiNaC::lst(entries.begin(), entries.end()));
-				return GiNaC::matrix(_n, _n, entries_lst);				
+				if (flag & 2==0)
+				{
+				  GiNaC::lst entries_lst(GiNaC::lst(entries.begin(), entries.end()));
+				  return GiNaC::matrix(_n, _n, entries_lst);				
+				}
+				else
+				{
+					//Return a 3x3 matrix with zero filling
+					std::vector<GiNaC::ex> entries3x3(9,0);
+					for (unsigned int i = 0; i < _n; i++)
+					{
+						for (unsigned int j = 0; j < _n; j++)
+						{
+						  entries3x3[3*i+j] = entries[_n*i+j];
+						}
+					}
+					// TODO: Diag to 1 ?
+					GiNaC::lst entries_lst(GiNaC::lst(entries3x3.begin(), entries3x3.end()));
+					return GiNaC::matrix(3, 3, entries_lst);				
+				}
 			}
 			throw_runtime_error("inverse_matrix cannot be applied on a non-matrix/vector object");
 		}
@@ -3277,6 +3359,18 @@ namespace pyoomph
 			}
 			else
 			{
+				// There might be units which have not been cancelled out
+				GiNaC::ex factor, unit, rest;			  
+			    if (expressions::collect_base_units(inp, factor, unit, rest))
+				{
+					GiNaC::ex inp2=factor * unit * expressions::subexpression(rest);
+					gpsubst = uos(expand_params(inp2));
+					v = GiNaC::evalf(gpsubst);
+					if (GiNaC::is_a<GiNaC::numeric>(v))
+					{
+						return GiNaC::ex_to<GiNaC::numeric>(v).to_double();
+					}
+				}
 				std::ostringstream oss;
 				oss << "Cannot cast the following into a double: " << v;
 				throw_runtime_error(oss.str());

@@ -31,3 +31,7 @@ gas_constant=8.31446261815324*joule/(kelvin*mol)
 k_Boltzmann= 1.38064852e-23 * joule/kelvin
 
 N_Avogadro=6.02214076e23/mol
+
+epsilon_0=8.854187817e-12*farad/meter # vacuum permittivity
+c_of_light=2.99792458e8*meter/second # speed of light in vacuum
+mu_0=4*pi*1e-7*henry/meter # vacuum permeability

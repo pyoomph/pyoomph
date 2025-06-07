@@ -487,7 +487,8 @@ class ProjectExpression(Equations):
         import pyoomph.expressions.generic
         for n,e in self.projs.items():
             f,ftest=var_and_test(n)
-            self.add_residual(pyoomph.expressions.generic.weak(f-e,testfunction(n,dimensional=False)/scale_factor(n)))
+            self.add_residual(pyoomph.expressions.generic.weak(f,testfunction(n,dimensional=False)/scale_factor(n)))
+            self.add_residual(pyoomph.expressions.generic.weak(-e,testfunction(n,dimensional=False)/scale_factor(n)))
 
 class InitialCondition(BaseEquations):
     """
@@ -680,17 +681,18 @@ class IntegralObservables(Equations):
         _coordinate_system (Optional[BaseCoordinateSystem]): The coordinate system to use. Defaults to None, i.e. the one of the equations or the problem.
         **integral_observables (Union[ExpressionOrNum, Callable[..., ExpressionOrNum]]): Integral observables to be added.
     """
-    def __init__(self,_coordinate_system:Optional["BaseCoordinateSystem"]=None, **integral_observables:Union[ExpressionOrNum,Callable[...,ExpressionOrNum]]):
+    def __init__(self,_coordinate_system:Optional["BaseCoordinateSystem"]=None,_lagrangian:bool=False, **integral_observables:Union[ExpressionOrNum,Callable[...,ExpressionOrNum]]):
         super(IntegralObservables, self).__init__()
         self.integral_observables = {k:v for k,v in integral_observables.items() if not callable(v)}
         self.dependent_funcs={k:v for k,v in integral_observables.items() if callable(v)}
         self._coordinate_system=_coordinate_system
+        self._lagrangian=_lagrangian
 
     def define_additional_functions(self):
         if self._coordinate_system is None:
-            dx = self.get_dx()
+            dx = self.get_dx(lagrangian=self._lagrangian)
         else:
-            dx=self.get_dx(coordsys=self._coordinate_system)
+            dx=self.get_dx(coordsys=self._coordinate_system,lagrangian=self._lagrangian)
         for k,v in self.integral_observables.items():
             #import _pyoomph
             #_pyoomph.set_verbosity_flag(1)

@@ -517,6 +517,16 @@ namespace pyoomph
 			Jrow_start[i] = row_start[i];
 	}
 
+	unsigned Problem::get_max_dt_order() const
+	{
+		unsigned max_order = 0;
+		for (unsigned int i = 0; i < bulk_element_codes.size(); i++)
+		{
+			max_order = std::max(max_order, (unsigned)bulk_element_codes[i]->functable->max_dt_order);
+		}
+		return max_order;
+	}
+
 	void Problem::unload_all_dlls()
 	{
 		if (pyoomph_verbose)
@@ -1045,6 +1055,15 @@ namespace pyoomph
 			Dof_current[i] = curr[i];
 		}
     }
+
+	void Problem::update_param_info_for_continuation(double dp,double p0)
+	{
+		Parameter_current=p0;
+		if (dp>0) Continuation_direction=1; else  if (dp<0) Continuation_direction=-1; 
+		Parameter_derivative=abs(dp);
+		
+		Arc_length_step_taken=true;
+	}
 
 	
 
@@ -1825,7 +1844,7 @@ namespace pyoomph
 					<< row_or_column_start.size() << " does not equal "
 					<< "column_or_row_index.size() "
 					<< column_or_row_index.size() << std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 
@@ -1840,7 +1859,7 @@ namespace pyoomph
 			<< std::endl
 			<< std::endl
 			<< std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 #endif
@@ -2072,7 +2091,7 @@ namespace pyoomph
 					<< row_or_column_start.size() << " does not equal "
 					<< "column_or_row_index.size() "
 					<< column_or_row_index.size() << std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 
@@ -2087,7 +2106,7 @@ namespace pyoomph
 			<< std::endl
 			<< std::endl
 			<< std::endl;
-		throw OomphLibError(
+		throw oomph::OomphLibError(
 			error_stream.str(), OOMPH_CURRENT_FUNCTION, OOMPH_EXCEPTION_LOCATION);
 		}
 #endif

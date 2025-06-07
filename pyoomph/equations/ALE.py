@@ -52,7 +52,10 @@ class BaseMovingMeshEquations(Equations):
         if self.constrain_bulk_to_C1:
             raise RuntimeError("constrain_bulk_to_C1 is not working at the moment")
         self.coordinate_space=coordinate_space
+        
         self.min_coordinate_space:Optional[str]=None
+        if self.coordinate_space is not None:
+            self.min_coordinate_space = self.coordinate_space
 
     def define_fields(self):
         self.activate_coordinates_as_dofs(coordinate_space=self.min_coordinate_space)

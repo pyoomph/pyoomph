@@ -30,7 +30,7 @@ As in :cite:`Bonnefis2024`, we neglect the viscosity and the mass density inside
 
 The nondimensionalized equations read 
 
-.. math:: :label: eqmcflowwadvdiff
+.. math:: :label: eqadvstabrisingbubble
 
    \begin{aligned}
    \partial_t \vec{u}+\nabla\vec{u}\cdot\vec{u}&=-\nabla p+\frac{1}{Ga}\nabla\cdot\left[\left(\nabla\vec{u}+\nabla\vec{u}^\text{t}\right)\right]-\dot U e_y\\
@@ -163,7 +163,7 @@ Eventually, we get the eigenvalues shown below, which agree decently with the da
 	:class: with-shadow
 	:width: 60%
 	
-	Eigenvalues of the first :math:`m=1` instability of a rising bubble with :math:`Mo=6.2\times 10^{-7}` (DMS-T05), agreeing well with the literature data.
+	Eigenvalues of the first :math:`m=1` instability of a rising bubble with :math:`Mo=6.2\times 10^{-7}` (DMS-T05), agreeing well with the literature data. We thank Javier Sierra-Ausin and Jacques Magnaudet for providing the data of their paper.
 
 We can also generate a movie of the instability. Please refer to :numref:`secploteigendynamics` for a tutorial on this.
 

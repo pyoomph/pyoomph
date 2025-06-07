@@ -17,11 +17,15 @@ Verify whether everything runs fine by
 
 > python -m pyoomph check all
 
+If you encounter segmentation faults during solving, please try to downgrade your MKL package, e.g. via *python -m pip install mkl==2024.1.0*.
+
 ## On Linux
 
 If you have installed via pip (see above), just make sure that you have the `gcc` compiler installed and check via
 
 > python -m pyoomph check all
+
+If you encounter segmentation faults during solving, please try to downgrade your MKL package, e.g. via *python -m pip install mkl==2024.1.0*.
 
 ## On Mac
 
@@ -56,7 +60,7 @@ in your pyoomph directory.
 
 Install required and optional python modules via
 
-> python -m pip gmsh mkl mpi4py matplotlib numpy petsc4py pybind11 pygmsh scipy meshio pybind11-stubgen
+> python -m pip gmsh mkl mpi4py matplotlib numpy petsc4py pybind11 pygmsh scipy meshio pybind11-stubgen setuptools
 
 If you want to install pyoomph **for development**, it is best to install it via 
 

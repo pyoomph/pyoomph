@@ -17,5 +17,6 @@ We will develop this method in the following, address the necessary correction o
    ale/remesh.rst
    ale/freesurf.rst         
    ale/spread.rst            
+   ale/solid.rst      
 
 

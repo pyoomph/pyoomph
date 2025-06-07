@@ -193,7 +193,7 @@ class UnpinnedContactLine(GenericContactLineModel):
             rcl=var(rc_name)
             # Degrade automatically to BDF1 when pinning mode has changes
             must_degrade = heaviside(absolute(upind - evaluate_in_past(upind)) - 0.5)
-            dXdt = must_degrade * partial_t(rcl, scheme="BDF1") + (1 - must_degrade) * partial_t(rcl, scheme="BDF2")
+            dXdt = must_degrade * partial_t(rcl, scheme="BDF1",ALE=False) + (1 - must_degrade) * partial_t(rcl, scheme="BDF2",ALE=False)
             actual_cl_velo = dXdt
             desired_cl_velo = upind * self.get_unpinned_motion_velocity_expression(None,var(theta_act_name))
 
@@ -224,7 +224,7 @@ class UnpinnedContactLine(GenericContactLineModel):
         else:
             # Degrade automatically to BDF1 when pinning mode has changes
             must_degrade=heaviside(absolute(upind-evaluate_in_past(upind))-0.5)
-            dXdt=must_degrade*mesh_velocity(scheme="BDF1")+(1-must_degrade)*partial_t(X, scheme="BDF2")
+            dXdt=must_degrade*mesh_velocity(scheme="BDF1")+(1-must_degrade)*partial_t(X, scheme="BDF2",ALE=False)
             actual_cl_velo = dot(dXdt, dyncl.wall_tangent)
             desired_cl_velo=upind*self.get_unpinned_motion_velocity_expression(dyncl)
             dyncl.add_residual(weak(actual_cl_velo-desired_cl_velo, vl_test))

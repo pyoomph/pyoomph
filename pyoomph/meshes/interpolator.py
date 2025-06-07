@@ -86,15 +86,18 @@ class InternalInterpolator(BaseMeshToMeshInterpolator):
     def interpolate(self):
         self.new.nodal_interpolate_from(self.old,-1)
         for bn in self.new.get_boundary_names():
+            
             bi_new = self.new.get_boundary_index(bn)
             bi_old = self.old.get_boundary_index(bn)
             intermesh_new=self.new.get_mesh(bn,return_None_if_not_found=True)
             intermesh_old = self.old.get_mesh(bn, return_None_if_not_found=True)
             if intermesh_old is None and intermesh_new is None:
+                #print("No interface mesh for boundary",bn,"in old and new mesh, skipping interpolation")                                
+                self.new.nodal_interpolate_from(self.old,bi_old)
                 continue # Happens e.g. on corners to another domain
             assert intermesh_old is not None, "Old interface mesh "+bn+" of "+self.old.get_name()+" not found. Index: "+str(bi_old)
             assert intermesh_new is not None, "New interface mesh "+bn+" of "+self.new.get_name()+" not found. Index: "+str(bi_new)
-            boundary_interpolation_max_dist=self.boundary_max_distances.get(bn,0.0)
+            boundary_interpolation_max_dist=self.boundary_max_distances.get(bn,0.0)            
             #print("INTERPOLATE BOUNDARY ",bn)
             if self.try_to_use_zeta_on_boundary and self.old.is_boundary_coordinate_defined(bi_old):
                 if not self.new.is_boundary_coordinate_defined(bi_new):

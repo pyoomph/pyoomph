@@ -104,7 +104,10 @@ dyne = _power_of_ten(-5) * newton
 darcy = 9.86923e-13 * meter ** 2
 
 volt = watt / ampere
-
+coloumb = ampere * second
+farad= coloumb / volt
+henry = volt * second / ampere
+siemens = ampere / volt
 
 ## TODO Celsius conversion function
 class CelsiusClass:

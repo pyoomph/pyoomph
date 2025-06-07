@@ -149,6 +149,9 @@ class GenericProblemHooks:
     def actions_after_initialise(self):
         pass
     
+    def actions_on_output(self,outstep):
+        pass
+    
 
 
         
@@ -429,6 +432,8 @@ class Problem(_pyoomph.Problem):
         #:  There are different methods implemented in oomph-lib to fill the sparse matrices (Jacobian, mass matrix, etc.). Depending on the problem, one or the other method may be faster or more memory efficient. The default method is "vectors_of_pairs", which is the most general one.                
         self.sparse_assembly_method:Literal["vectors_of_pairs","two_vectors","lists","maps","two_arrays"]="vectors_of_pairs"
         self.only_write_logfile_on_proc0:bool=True
+        #: Checks whether the elements in the meshes are nicely oriented (facing) so that refinement works as it should. Can be only done once initially or at each refinement step
+        self.check_mesh_integrity:Union[bool,Literal["initially"]]="initially"
 
         self._meshtemplate_list:List[MeshTemplate]=[]
         self._meshdict={}
@@ -710,7 +715,10 @@ class Problem(_pyoomph.Problem):
             return J
 
     def remove_equations(self, path:str, of_type:Optional[Type[BaseEquations]]=None, only_if:Callable[[BaseEquations],bool]=lambda eqn: True,fail_if_not_exist:bool=False):
-        eqtree = self._equation_system.get_by_path(path)
+        if hasattr(self,"_equation_system"):
+            eqtree = self._equation_system.get_by_path(path)
+        else:
+            eqtree=self.additional_equations.get_by_path(path)
         if eqtree is None:
             if fail_if_not_exist:
                 raise RuntimeError("No equations found at the path "+str(path))
@@ -1322,6 +1330,9 @@ class Problem(_pyoomph.Problem):
                     print("OUTPUT at t=" + str(self.get_current_time()) + paramstr)
             else:
                 print("OUTPUT of proc " + str(get_mpi_rank()) + " at t=" + str(self.get_current_time()) + paramstr)
+                
+        for hook in self._hooks:
+            hook.actions_on_output(self._output_step)
         self._equation_system._do_output(self._output_step, stage)
 
         if self.write_states:
@@ -2556,6 +2567,13 @@ class Problem(_pyoomph.Problem):
             self.actions_before_distribute()
             self.distribute()
             self.actions_after_distribute()
+            
+            
+        if self.check_mesh_integrity:
+            for _,m in self._meshdict.items():
+                assert m._codegen is not None                                
+                if isinstance(m,(MeshFromTemplate1d,MeshFromTemplate2d,MeshFromTemplate3d)):
+                    m.check_integrity()
 
         if self._runmode!="continue" and self._runmode!="replot":
             if self.initial_adaption_steps is None:
@@ -3094,6 +3112,13 @@ class Problem(_pyoomph.Problem):
             m._connect_opposite_elements(self._equation_system)
         self.setup_pinning()
         self.reapply_boundary_conditions()
+        
+        if self.check_mesh_integrity is True:
+            for _,m in self._meshdict.items():
+                assert m._codegen is not None                                
+                if isinstance(m,(MeshFromTemplate1d,MeshFromTemplate2d,MeshFromTemplate3d)):
+                    m.check_integrity()
+                    
         if self._call_output_after_adapt:
             self.output()
         if self._custom_assembler:
@@ -3310,7 +3335,12 @@ class Problem(_pyoomph.Problem):
         """
         if not self.is_initialised():
             self.initialise()
-            
+        _dtorder=self._get_max_dt_order()
+        if _dtorder!=1:
+            if _dtorder==0:
+                raise RuntimeError("Cannot calculate eigenvalues/vectors without any time derivatives. This would give an empty mass matrix")
+            else:
+                raise RuntimeError("Cannot calculate eigenvalues/vectors when you have an time derivative order of "+str(_dtorder)+". Consider using auxiliary unknowns and equations to reduce the order of all time derivatives to 1.")
         if normal_mode_L is not None:
             if normal_mode_k is not None:
                 raise ValueError("Cannot specify both normal_mode_L and normal_mode_k")
@@ -4727,6 +4757,7 @@ class Problem(_pyoomph.Problem):
 
         if not self.is_initialised():
             self.initialise()
+            TSCALE=self.scaling.get("temporal",1)
             self._activate_solver_callback()
             if (timestep is not None):
                 timestep=timestep/TSCALE
@@ -5073,6 +5104,208 @@ class Problem(_pyoomph.Problem):
         self._nondim_time_after_last_run_statement=float(self.get_current_time()/TS)
         return currentdt
 
+
+    def iterate_over_multiple_solutions_by_deflation(self,deflation_alpha:float=0.1,deflation_p:int=2,perturbation_amplitude:float=0.5,max_newton_iterations:Optional[int]=None,newton_relaxation_factor:Optional[float]=None,use_eigenperturbation:bool=False,skip_initial_solution:bool=False,num_random_tries:int=1,keep_deflation_operator_active:bool=False)-> Generator[NPFloatArray,None,None]:
+        """Tries to find multiple stationary solutions by deflation. The procedure is implemented according to 'Deflation techniques for finding distinct solutions of nonlinear partial differential equations' by
+Patrick E. Farrell, Ásgeir Birkisson & Simon W. Funke, https://arxiv.org/pdf/1410.5620.pdf .
+
+        Args:
+            deflation_alpha (float, optional): Shift of the deflation operator. Defaults to 0.1.
+            deflation_p (int, optional): Order of the deflation. Defaults to 2.
+            perturbation_amplitude (float, optional): Perturbation amplitude to move away from the previous solution. Defaults to 0.5.
+            max_newton_iterations (Optional[int], optional): Optional override of the number of Newton iterations to try. Defaults to None.
+            newton_relaxation_factor (Optional[float], optional): Optional override of the Newton relaxation factor. Defaults to None.
+
+        Yields:
+            The found solutions as lists of degrees of freedom
+            
+        """        
+            
+        from pyoomph.generic.bifurcation_tools import DeflationAssemblyHandler
+        deflation=DeflationAssemblyHandler(alpha=deflation_alpha,p=deflation_p)
+        if not self.is_initialised():
+            self.initialise()
+        self.set_custom_assembler(deflation)
+        
+        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+        numtries=1
+        U=self.get_current_dofs()[0]
+        found_sols=[U]
+        eigen_perts=[]
+        if use_eigenperturbation:
+            self.solve_eigenproblem(1)
+            eigv=numpy.real(self.get_last_eigenvectors()[0])
+            eigv=eigv/numpy.amax(abs(eigv))
+            eigen_perts.append(eigv*perturbation_amplitude)
+        if not skip_initial_solution:
+            yield U
+        deflation.add_known_solution(U)
+        while True:
+            new_sols=[]
+            for i,Ustart in enumerate(found_sols):    
+                
+                if use_eigenperturbation:
+                    self.set_current_dofs(Ustart+eigen_perts[i])
+                    try:
+                        numtries+=1
+                        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+                        Unew=self.get_current_dofs()[0]
+                        self.solve_eigenproblem(1)
+                        eigv=numpy.real(self.get_last_eigenvectors()[0])
+                        eigv=eigv/numpy.amax(abs(eigv))
+                        eigen_perts.append(eigv*perturbation_amplitude)
+                        new_sols.append(Unew)
+                        deflation.add_known_solution(Unew)
+                        
+                        yield Unew
+                    except:
+                        print("Eigenperturbation of solution "+str(i)+" failed to converge. Trying random perturbation")
+                for j in range(num_random_tries):
+                    self.set_current_dofs(Ustart+(numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
+                    try:
+                        numtries+=1
+                        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+                        Unew=self.get_current_dofs()[0]
+                        new_sols.append(Unew)
+                        if use_eigenperturbation:
+                            self.solve_eigenproblem(1)
+                            eigv=numpy.real(self.get_last_eigenvectors()[0])
+                            eigv=eigv/numpy.amax(abs(eigv))
+                            eigen_perts.append(eigv*perturbation_amplitude)
+                        deflation.add_known_solution(Unew)
+                        yield Unew
+                    except:
+                        print("Random perturbation "+str(j+1)+"/"+str(num_random_tries)+" of solution "+str(i)+" failed to converge")
+            if len(new_sols)==0:
+                print("No new solutions found. Stopping deflation. Found in total "+str(len(found_sols))+" in "+str(numtries)+" attempts.")
+                if not keep_deflation_operator_active:
+                    self.set_custom_assembler(None)
+                self.set_current_dofs(U)                
+                return
+            else:
+                found_sols+=new_sols
+                
+
+    def deflated_continuation(self,deflation_alpha:float=0.1,deflation_p:int=2,perturbation_amplitude:float=0.5,max_newton_iterations:Optional[int]=None,newton_relaxation_factor:Optional[float]=None,use_eigenperturbation:bool=False,skip_initial_solution:bool=False,num_random_tries:int=1,max_branches:Optional[int]=None,branch_continue_iterations:int=10,**param_range):
+        """Scan over a parameter range and try to find multiple solutions for each parameter step by deflation
+        This is an implemetation according to: The computation of disconnected bifurcation diagrams by Patrick E. Farrell, Casper H. L. Beentjes, Ásgeir Birkisson
+         https://arxiv.org/pdf/1603.00809.pdf
+        
+        Args:
+            deflation_alpha : Shift of the deflation operator. Defaults to 0.1.
+            deflation_p: Order of the deflation. Defaults to 2.
+            perturbation_amplitude: Perturbation amplitude to move away from the previous solution. Defaults to 0.5.
+            max_newton_iterations: Optional override of the number of Newton iterations during deflated search for additional solutions. Defaults to None.
+            newton_relaxation_factor: Optional override of the Newton relaxation factor during deflated search for additional solutions. Defaults to None.
+            use_eigenperturbation: Whether to use eigen perturbation for the next solution during deflation. Defaults to False.            
+            num_random_tries: Number of random tries for finding solutions during deflation. Defaults to 1.
+            max_branches: Maximum number of branches to find. Defaults to None.
+            branch_continue_iterations: Number of iterations for continuing branches. Defaults to 10.
+            
+        Yields:
+            A tuple of branch index (from 0 to ...), the current parameter value and the current degrees of freedom (dofs) for the solution.
+        """ 
+        from pyoomph.generic.bifurcation_tools import DeflationAssemblyHandler
+        param=None
+        rang=None
+        for k,v in param_range.items():
+            if param is None:
+                param=k
+                rang=[pv for pv in v]
+            else:
+                raise RuntimeError("Please specify only one parameter range")
+        if param is None:
+            raise RuntimeError("Please specify a parameter range like e.g. parameter_name=linspace(0,1,10)")
+        if param not in self.get_global_parameter_names():
+            raise RuntimeError("Please specify a parameter that is defined in the problem")
+        param_obj=self.get_global_parameter(param)
+        active_branches={} # Branch index -> current dofs
+        
+        # Find the first solutions
+        self.go_to_param(**{param:rang.pop(0)})
+        self.solve()
+        branch_index=0
+        for dofs in self.iterate_over_multiple_solutions_by_deflation(max_newton_iterations=max_newton_iterations,perturbation_amplitude=perturbation_amplitude,deflation_alpha=deflation_alpha,deflation_p=deflation_p,newton_relaxation_factor=newton_relaxation_factor,use_eigenperturbation=use_eigenperturbation,skip_initial_solution=skip_initial_solution,num_random_tries=num_random_tries,keep_deflation_operator_active=True):
+            active_branches[branch_index]=dofs
+            yield branch_index,param_obj.value,dofs
+            branch_index+=1            
+        deflator=cast(DeflationAssemblyHandler,self._custom_assembler)
+        if len(active_branches)==0:
+            print("No solution found to start with")
+            self.set_custom_assembler(None)
+            return
+        
+        for pv in rang:
+            deflator.clear_known_solutions()
+            param_obj.value=pv
+            branches_to_remove=[]
+            branches_to_add={}
+            old_branches=active_branches.copy()
+            for bi,dofs in active_branches.items():
+                self.set_current_dofs(dofs)
+                param_obj.value=pv
+                try:
+                    self.solve(max_newton_iterations=branch_continue_iterations)
+                    newdofs=self.get_current_dofs()[0]
+                    deflator.add_known_solution(newdofs)
+                    active_branches[bi]=newdofs
+                    yield bi,param_obj.value,newdofs
+                except:
+                    branches_to_remove.append(bi)
+            
+            # It could have happened that we accidentially switched branches due to the order of the deflation selection
+            # Reorder them by distance in the dofs
+            new_branches_to_remove=[]
+            for bind_to_rem in branches_to_remove:
+                switch_index=None
+                mindist=numpy.linalg.norm(active_branches[bind_to_rem]-old_branches[bind_to_rem])
+                for other_branch,otherdofs in active_branches.items():
+                    if other_branch in branches_to_remove:
+                        continue
+                    cdist=numpy.linalg.norm(otherdofs-old_branches[bind_to_rem])
+                    if cdist<mindist:
+                        cdist=mindist
+                        switch_index=other_branch
+                if switch_index is not None:
+                    print("Switching branch {} with {}".format(bind_to_rem,switch_index))
+                    new_branches_to_remove.append(switch_index)
+                    active_branches[bind_to_rem]=active_branches[switch_index]
+                else:
+                    new_branches_to_remove.append(bind_to_rem)                        
+                
+            branches_to_remove=new_branches_to_remove
+                    
+            for bi,dofs in active_branches.items():
+                success=True
+                if max_branches is not None and len(active_branches)+len(branches_to_add)-len(branches_to_remove)>max_branches:
+                    break
+                remaining_perturbation_tries=num_random_tries
+                while success:
+                    
+                    print("Checking for a new solution",branch_index,branches_to_remove)
+                    self.set_current_dofs(dofs)
+                    self.perturb_dofs((numpy.random.rand(self.ndof())-0.5)*(perturbation_amplitude))
+                    param_obj.value=pv
+                    try:                    
+                        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor)
+                        print("Found new solution after ",len(self.get_last_residual_convergence()),"steps",self.get_last_residual_convergence())
+                        newdofs=self.get_current_dofs()[0]
+                        deflator.add_known_solution(newdofs)
+                        branches_to_add[branch_index]=newdofs                        
+                        yield branch_index,param_obj.value,newdofs
+                        branch_index+=1
+                    except:
+                        remaining_perturbation_tries-=1
+                        if remaining_perturbation_tries<=0:
+                            success=False
+                        
+            for bi in branches_to_remove:
+                del active_branches[bi]
+            for bi,newdofs in branches_to_add.items():
+                active_branches[bi]=newdofs
+        
+        self.set_custom_assembler(None)
+        return
 
     def force_remesh(self, only_domains:Optional[Set[MeshTemplate]]=None, num_adapt:Optional[int]=None,interpolator:Type["BaseMeshToMeshInterpolator"]=_DefaultInterpolatorClass):
         remeshers:List["RemesherBase"] = []

@@ -102,6 +102,18 @@ namespace pyoomph
     lagrangian_kdtree = NULL;
   }
 
+  void Mesh::check_integrity()
+  {
+    if (dynamic_cast<oomph::TreeBasedRefineableMeshBase *>(this) && dynamic_cast<oomph::TreeBasedRefineableMeshBase *>(this)->forest_pt())
+    {
+
+      oomph::DocInfo docinfo;
+      docinfo.disable_doc();
+      dynamic_cast<oomph::TreeBasedRefineableMeshBase *>(this)->forest_pt()->check_all_neighbours(docinfo);
+    }
+    
+  }
+
   unsigned Mesh::count_nnode(bool discontinuous)
   {
     if (!discontinuous)
@@ -600,7 +612,7 @@ namespace pyoomph
       nbe = internal_elements.size();
     }
 
-    auto gen_face_elem = [jitcode](BulkElementBase *be, int fi)
+    auto gen_face_elem = [jitcode,internal_facets](BulkElementBase *be, int fi)->oomph::FaceElement *
     {
       oomph::FaceElement *fe = NULL;
       if (dynamic_cast<BulkElementQuad2dC2 *>(be))
@@ -653,6 +665,20 @@ namespace pyoomph
       {
         dynamic_cast<BulkElementBase *>(fe)->set_integration_order(jitcode->get_func_table()->integration_order);
       }
+
+      if (!internal_facets)
+      {
+        for (unsigned int in=0;in<fe->nnode();in++)
+        {
+          oomph::Node *n = fe->node_pt(in);
+          if (!dynamic_cast<oomph::BoundaryNodeBase*>(n)) 
+          {
+            //std::cout << "ERROR: Node " << n << " in interface element " << fe << " is not a boundary node!" << std::endl;
+            return NULL; // Do not create such elements...
+          }
+        }
+      }
+
       return fe;
     };
 
@@ -673,6 +699,7 @@ namespace pyoomph
         fi = this->face_index_at_boundary(bind, ei);
       }
       oomph::FaceElement *fe = gen_face_elem(be, fi);
+      if (!fe) continue;
 
       if (restriction_index >= 0)
       {
@@ -710,7 +737,7 @@ namespace pyoomph
         }
         else
         {
-          ofe = gen_face_elem(opposite_elements[ei], opposite_face_dir[ei]);
+          ofe = gen_face_elem(opposite_elements[ei], opposite_face_dir[ei]);          
           dynamic_cast<InterfaceElementBase *>(ofe)->set_as_internal_facet_opposite_dummy();
         }
         generated_opposite_face_elems.push_back(ofe);
@@ -1811,6 +1838,7 @@ namespace pyoomph
 
   void Mesh::set_lagrangian_nodal_coordinates()
   {
+    std::cout << "Setting Lagrangian nodal coordinates for all nodes in mesh" << std::endl;
     unsigned long n_node = nnode();
     for (unsigned n = 0; n < n_node; n++)
     {
@@ -1934,13 +1962,13 @@ namespace pyoomph
 
   void Mesh::prepare_interpolation()
   {
-    this->set_lagrangian_nodal_coordinates();
+    if (!this->interpolated_lagrangian_coordinates_at_remeshing) this->set_lagrangian_nodal_coordinates();
   }
 
   // This only works in max. 2d well
   void Mesh::nodal_interpolate_along_boundary(Mesh *old, int bind, int oldbind, Mesh *imesh, Mesh *oldimesh, double boundary_max_dist)
   {
-
+    //std::cout << "Nodal interpolation along boundary " << bind << std::endl;
     // Bulk field mapping
     BulkElementBase *my_be0 = dynamic_cast<BulkElementBase *>(this->element_pt(0));
     BulkElementBase *from_be0 = dynamic_cast<BulkElementBase *>(old->element_pt(0));
@@ -2263,11 +2291,28 @@ namespace pyoomph
         for (unsigned i = 0; i < xn.size(); i++)
           n->x(time_ind, i) = bestnode->x(time_ind, i) * lambda1 + bestnode2->x(time_ind, i) * lambda2;
       }
+
+      if (this->interpolated_lagrangian_coordinates_at_remeshing) // Interpolate also the Lagrangian coordinates
+        {
+          if (dynamic_cast<pyoomph::Node*>(n)->nlagrangian()!=dynamic_cast<pyoomph::Node*>(bestnode)->nlagrangian())
+          {
+            throw_runtime_error("Cannot interpolate Lagrangian coordinates if the number of Lagrangian nodes is different");
+          }                    
+          for (unsigned int i = 0; i < dynamic_cast<pyoomph::Node*>(n)->nlagrangian(); i++)
+          {            
+            double xl=dynamic_cast<pyoomph::Node*>(bestnode)->lagrangian_position(i)*lambda1+dynamic_cast<pyoomph::Node*>(bestnode2)->lagrangian_position(i)*lambda2;
+            //std::cout << "SETTING LAGRANGIAN COORDINATE " << i << " from " << dynamic_cast<pyoomph::Node*>(n)->xi(i) << " to "  << xl << std::endl;
+            dynamic_cast<pyoomph::Node*>(n)->xi(i)=xl;
+          }
+        }
     }
   }
 
   void Mesh::nodal_interpolate_from(Mesh *from, int boundary_index)
   {
+    this->interpolated_lagrangian_coordinates_at_remeshing=from->interpolated_lagrangian_coordinates_at_remeshing;
+    auto old_setting=BulkElementBase::zeta_coordinate_type;
+    if (this->interpolated_lagrangian_coordinates_at_remeshing) BulkElementBase::zeta_coordinate_type=1;
     if (!this->nelement() || !from->nelement())
       return;
     BulkElementBase *my_be0 = dynamic_cast<BulkElementBase *>(this->element_pt(0));
@@ -2434,7 +2479,7 @@ namespace pyoomph
         srcelem = dynamic_cast<BulkElementBase *>(resgo);
         if (!srcelem)
         {
-          std::cerr << "MISSING_BULKONLY_ELEM_AT\t" << xnode[0] << "\t" << xnode[1] << "  " << completed_nodes.size() * 100.0 / this->nnode() << " % done  | resgo " << resgo  << std::endl;
+          if (boundary_index<0) std::cerr << "MISSING_BULKONLY_ELEM_AT\t" << xnode[0] << "\t" << xnode[1] << "  " << completed_nodes.size() * 100.0 / this->nnode() << " % done  | resgo " << resgo  << std::endl;
           missing_nodes.insert(n);
           continue;
         }
@@ -2450,6 +2495,20 @@ namespace pyoomph
           for (unsigned int time_ind = 1; time_ind < n->position_time_stepper_pt()->ntstorage(); time_ind++)
           {
             n->x(time_ind, i) = srcelem->interpolated_x(time_ind, s, i) + shift[i];
+          }
+        }
+
+        if (this->interpolated_lagrangian_coordinates_at_remeshing) // Interpolate also the Lagrangian coordinates
+        {
+          if (srcelem->nlagrangian()!=deste->nlagrangian())
+          {
+            throw_runtime_error("Cannot interpolate Lagrangian coordinates if the number of Lagrangian nodes is different");
+          }                    
+          for (unsigned int i = 0; i < srcelem->nlagrangian(); i++)
+          {            
+            double xl=srcelem->interpolated_xi(s,i);
+            //std::cout << "SETTING LAGRANGIAN COORDINATE " << i << " from " << dynamic_cast<pyoomph::Node*>(n)->xi(i) << " to "  << xl << std::endl;
+            dynamic_cast<pyoomph::Node*>(n)->xi(i)=xl;
           }
         }
 
@@ -2490,7 +2549,7 @@ namespace pyoomph
         srcelem = dynamic_cast<BulkElementBase *>(resgo);
         if (!srcelem)
         {
-          std::cerr << "MISSING_BULKONLY_ELEM_AT\t" << dmpt[0] << "\t" << dmpt[1] << "  INTERNAL CENTER " << ie * 100.0 / this->nelement() << " % done  | resgo " << resgo << std::endl;
+          if (boundary_index<0) std::cerr << "MISSING_BULKONLY_ELEM_AT\t" << dmpt[0] << "\t" << dmpt[1] << "  INTERNAL CENTER " << ie * 100.0 / this->nelement() << " % done  | resgo " << resgo << std::endl;
           continue;
         }
         // Interpolate all D0 fields
@@ -2539,7 +2598,7 @@ namespace pyoomph
       if (completed_nodes.count(n))
         continue;
       oomph::Vector<double> xnode = n->position();
-      std::cerr << "FOUND UNTREATED BULK NODE AT\t" << xnode[0] << "\t" << xnode[1] << std::endl;
+      if (boundary_index<0) std::cerr << "FOUND UNTREATED BULK NODE AT\t" << xnode[0] << "\t" << xnode[1] << std::endl;
       double mindist = 1e40;
       oomph::Node *bestnode = NULL;
       for (unsigned int mi = 0; mi < from->nnode(); mi++)
@@ -2586,7 +2645,7 @@ namespace pyoomph
         oomph::Vector<double> xm = bestnode->position();
         for (unsigned int time_ind = 0; time_ind < n->time_stepper_pt()->ntstorage(); time_ind++)
         {
-          for (unsigned vi = 0; vi < n->nvalue(); vi++)
+          for (unsigned vi = 0; vi < std::min((unsigned int)field_map.size(),n->nvalue()); vi++)
           {
             if (field_map[vi] >= 0)
             {
@@ -2601,6 +2660,20 @@ namespace pyoomph
             n->x(time_ind, i) = bestnode->x(time_ind, i) * lambda1 + bestnode2->x(time_ind, i) * lambda2;
         }
 
+        if (this->interpolated_lagrangian_coordinates_at_remeshing) // Interpolate also the Lagrangian coordinates
+        {
+          if (dynamic_cast<pyoomph::Node*>(n)->nlagrangian()!=dynamic_cast<pyoomph::Node*>(bestnode)->nlagrangian())
+          {
+            throw_runtime_error("Cannot interpolate Lagrangian coordinates if the number of Lagrangian nodes is different");
+          }                    
+          for (unsigned int i = 0; i < dynamic_cast<pyoomph::Node*>(n)->nlagrangian(); i++)
+          {            
+            double xl=dynamic_cast<pyoomph::Node*>(bestnode)->lagrangian_position(i)*lambda1+dynamic_cast<pyoomph::Node*>(bestnode2)->lagrangian_position(i)*lambda2;
+            //std::cout << "SETTING LAGRANGIAN COORDINATE " << i << " from " << dynamic_cast<pyoomph::Node*>(n)->xi(i) << " to "  << xl << std::endl;
+            dynamic_cast<pyoomph::Node*>(n)->xi(i)=xl;
+          }
+        }
+
         completed_nodes.insert(n);
       }
       else
@@ -2608,6 +2681,8 @@ namespace pyoomph
         std::cerr << "  NOT EVEN FOUND A NEAREST NODE" << std::endl;
       }
     }
+
+    BulkElementBase::zeta_coordinate_type=old_setting;
   }
 
   std::vector<pyoomph::Node*> Mesh::add_interpolated_nodes_at(const std::vector<std::vector<double> > & coords,bool all_as_boundary_nodes)
@@ -4546,7 +4621,9 @@ namespace pyoomph
           ind = treeB.point_present(nA->x(0));
         if (ind < 0)
         {
-          throw_runtime_error("Cannot locate opposite node");
+          std::string posstring="";
+          for (unsigned int inda=0;inda<ndimA;inda++) posstring+=std::to_string(nA->x(inda))+(inda+1<ndimA ? "," : "");
+          throw_runtime_error("Cannot locate opposite node at x=("+posstring+")");
         }
         indices.insert(ind);
         //  std::cout << ind << "  " ;
