@@ -349,14 +349,19 @@ verify_installation() {
     echo -e "\n${BLUE}Verifying installation...${NC}"
     
     # Try to import pyoomph
-    python -c "import pyoomph; print('pyoomph version:', pyoomph.__version__)" || {
+    python -c "import pyoomph; print('✓ pyoomph imported successfully')" || {
         echo -e "${RED}Failed to import pyoomph${NC}"
         return 1
     }
     
+    # Try importing key modules
+    python -c "from pyoomph import *; from pyoomph.expressions import *; print('✓ Basic imports working')" || {
+        echo -e "${YELLOW}Warning: Some imports failed${NC}"
+    }
+    
     # Run basic checks
     python -m pyoomph check compiler || {
-        echo -e "${YELLOW}Compiler check failed${NC}"
+        echo -e "${YELLOW}Compiler check failed - may need configuration${NC}"
     }
     
     echo -e "${GREEN}✓ Installation verified${NC}"
@@ -375,7 +380,7 @@ print("Testing pyoomph ARM64 installation...")
 
 try:
     import pyoomph
-    print(f"✓ pyoomph imported successfully (version: {pyoomph.__version__})")
+    print("✓ pyoomph imported successfully")
 except ImportError as e:
     print(f"✗ Failed to import pyoomph: {e}")
     sys.exit(1)
@@ -392,7 +397,8 @@ except Exception as e:
 try:
     class TestProblem(Problem):
         def define_problem(self):
-            self.add_mesh(LineMesh(minimum=0, maximum=1, size=0.1))
+            self.set_c_compiler("system")  # Explicitly set compiler
+            self.add_mesh(LineMesh(N=10))
     
     with TestProblem() as problem:
         problem.solve()
@@ -400,7 +406,20 @@ try:
 except Exception as e:
     print(f"✗ Problem solving error: {e}")
 
+# Quick compiler check
+try:
+    import subprocess
+    result = subprocess.run([sys.executable, "-m", "pyoomph", "check", "compiler"], 
+                          capture_output=True, text=True)
+    if result.returncode == 0:
+        print("✓ Compiler check passed")
+    else:
+        print("✗ Compiler check failed (may need configuration)")
+except:
+    pass
+
 print("\nARM64 installation test completed!")
+print("For more thorough testing, run: python -m pyoomph check all")
 EOF
     
     chmod +x test_arm64_install.py
@@ -441,6 +460,8 @@ restore_original_files() {
     # Clean up temporary patch files
     rm -f ccompiler_arm64_patch.py
     rm -f site.cfg
+    
+    # Note: test_arm64_install.py is kept for user to test installation later
     
     echo -e "${GREEN}✓ All cleanup completed${NC}"
 }
