@@ -63,26 +63,54 @@ install_system_deps() {
 setup_python_env() {
     echo -e "\n${BLUE}Setting up Python environment...${NC}"
     
+    # Ask user for installation directory
+    echo -e "${BLUE}Where would you like to install the virtual environment?${NC}"
+    echo -e "${YELLOW}Default: ~/${NC}"
+    read -p "Enter path (press Enter for default): " ENV_DIR
+    
+    # Use default if empty
+    if [ -z "$ENV_DIR" ]; then
+        ENV_DIR="$HOME"
+    fi
+    
+    # Expand tilde if present
+    ENV_DIR="${ENV_DIR/#\~/$HOME}"
+    
+    # Ensure directory exists
+    if [ ! -d "$ENV_DIR" ]; then
+        echo -e "${YELLOW}Directory $ENV_DIR does not exist. Creating it...${NC}"
+        mkdir -p "$ENV_DIR" || {
+            echo -e "${RED}Failed to create directory $ENV_DIR${NC}"
+            exit 1
+        }
+    fi
+    
+    # Full path to virtual environment
+    VENV_PATH="$ENV_DIR/py-oomph"
+    
+    # Store for later use
+    export PYOOMPH_VENV_PATH="$VENV_PATH"
+    
     # Create virtual environment
-    if [ -d "py-oomph" ]; then
-        echo -e "${YELLOW}Virtual environment 'py-oomph' already exists${NC}"
+    if [ -d "$VENV_PATH" ]; then
+        echo -e "${YELLOW}Virtual environment '$VENV_PATH' already exists${NC}"
         read -p "Remove and recreate? (y/N): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            rm -rf py-oomph
-            python3 -m venv py-oomph
+            rm -rf "$VENV_PATH"
+            python3 -m venv "$VENV_PATH"
         fi
     else
-        python3 -m venv py-oomph
+        python3 -m venv "$VENV_PATH"
     fi
     
     # Activate environment
-    source py-oomph/bin/activate
+    source "$VENV_PATH/bin/activate"
     
     # Upgrade pip
     pip install --upgrade pip
     
-    echo -e "${GREEN}✓ Python environment ready${NC}"
+    echo -e "${GREEN}✓ Python environment ready at: $VENV_PATH${NC}"
 }
 
 # Function to modify setup.py for ARM64
@@ -367,6 +395,37 @@ verify_installation() {
     echo -e "${GREEN}✓ Installation verified${NC}"
 }
 
+# Function to create alias
+create_activation_alias() {
+    echo -e "\n${BLUE}Creating pyoomph-activate alias...${NC}"
+    
+    # Determine which shell config file to use
+    if [ -n "$ZSH_VERSION" ]; then
+        SHELL_CONFIG="$HOME/.zshrc"
+    elif [ -n "$BASH_VERSION" ]; then
+        SHELL_CONFIG="$HOME/.bashrc"
+    else
+        # Default to .bashrc
+        SHELL_CONFIG="$HOME/.bashrc"
+    fi
+    
+    # Check if alias already exists
+    if grep -q "alias pyoomph-activate" "$SHELL_CONFIG" 2>/dev/null; then
+        echo -e "${YELLOW}Alias 'pyoomph-activate' already exists in $SHELL_CONFIG${NC}"
+        echo -e "${YELLOW}Updating it with new path...${NC}"
+        # Remove old alias
+        sed -i.bak '/alias pyoomph-activate/d' "$SHELL_CONFIG"
+    fi
+    
+    # Add new alias
+    echo "" >> "$SHELL_CONFIG"
+    echo "# PyOomph activation alias (added by installOnArm.sh)" >> "$SHELL_CONFIG"
+    echo "alias pyoomph-activate='source $PYOOMPH_VENV_PATH/bin/activate'" >> "$SHELL_CONFIG"
+    
+    echo -e "${GREEN}✓ Added 'pyoomph-activate' alias to $SHELL_CONFIG${NC}"
+    echo -e "${YELLOW}Note: Run 'source $SHELL_CONFIG' or start a new terminal to use the alias${NC}"
+}
+
 # Function to create test script
 create_test_script() {
     echo -e "\n${BLUE}Creating test script...${NC}"
@@ -494,10 +553,12 @@ main() {
     build_pyoomph
     verify_installation
     create_test_script
+    create_activation_alias
     
     echo -e "\n${GREEN}=== Installation Complete ===${NC}"
     echo -e "${BLUE}To use pyoomph:${NC}"
-    echo "  1. Activate the environment: source py-oomph/bin/activate"
+    echo "  1. Activate the environment: pyoomph-activate (after restarting terminal)"
+    echo "     OR: source $PYOOMPH_VENV_PATH/bin/activate"
     echo "  2. Test the installation: python test_arm64_install.py"
     echo "  3. Run full tests: python -m pyoomph check all"
     echo ""
@@ -506,9 +567,9 @@ main() {
     echo -e "${YELLOW}Report any issues with ARM64 compatibility.${NC}"
     
     # Auto-activate the environment if not already active
-    if [[ "$VIRTUAL_ENV" != *"py-oomph"* ]]; then
+    if [[ "$VIRTUAL_ENV" != "$PYOOMPH_VENV_PATH" ]]; then
         echo -e "\n${BLUE}Activating py-oomph environment...${NC}"
-        source py-oomph/bin/activate
+        source "$PYOOMPH_VENV_PATH/bin/activate"
         echo -e "${GREEN}✓ Environment activated. You are now in the py-oomph virtual environment.${NC}"
         echo -e "${YELLOW}To deactivate later, run: deactivate${NC}"
     else
@@ -520,3 +581,14 @@ main() {
 
 # Run main function
 main
+
+# Post-cleanup message
+echo -e "\n${GREEN}=== Ready to Use ===${NC}"
+echo -e "${BLUE}PyOomph has been installed successfully!${NC}"
+echo ""
+echo -e "To use pyoomph in the future:"
+echo -e "  ${GREEN}pyoomph-activate${NC} (in a new terminal)"
+echo -e "  OR"
+echo -e "  ${GREEN}source ${PYOOMPH_VENV_PATH}/bin/activate${NC}"
+echo ""
+echo -e "${YELLOW}The original files have been restored, but your installation is preserved.${NC}"
