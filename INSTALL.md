@@ -41,6 +41,11 @@ and test pyoomph via
 
 > python -m pyoomph check all
 
+Alternatively, if you do not want to use the `Rosetta 2 terminal` detour, you can also install it directly on arm64 systems. [Vatsal Sanjay](https://github.com/VatsalSy) from [CoMPhy Lab](https://comphy-lab.org/) has contributed an installation script
+
+> bash installOnArm.sh
+
+to perform this installation. The only downside is that the fast `MKL Pardiso` solver is not supported on native arm64 systems. For optimal performance, in particular for larger problems, one therefore should consider the `Rosetta 2 terminal` way for the time being.
 
 ## Compilation from source
 

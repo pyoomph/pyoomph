@@ -1,3 +1,5 @@
+.. _installonmac:
+
 On Mac
 ------
 
@@ -5,6 +7,17 @@ On Mac
 
    If you are using a recent Mac with an Apple silicon (arm64 architecture) processor, you might encounter some problems, since not all required python packages are present in the pip repository yet. Therefore, you must use Rosetta 2 to emulate the x86 64 architecture. You must execute the following commands in a Rosetta terminal. At https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/ you can find instructions how to create such a Rosetta terminal. On more recent systems, please refer to https://developer.apple.com/forums/thread/718666 to setup a corresponding terminal.
    
+   
+.. note::
+
+   If you do not want to use the `Rosetta 2 terminal` detour, you can also install it directly on arm64 systems. `Vatsal Sanjay <https://github.com/VatsalSy>`__ from `CoMPhy Lab <https://comphy-lab.org/>`__ has contributed an installation script
+   
+   .. code:: bash
+
+	bash installOnArm.sh
+
+   to perform this installation. The only downside is that the fast `MKL Pardiso` solver is not supported on native arm64 systems. For optimal performance, in particular for larger problems, one therefore should consider the `Rosetta 2 terminal` way for the time being.
+
 
 To clone the git repository, you require git, but this comes along with the Xcode developer tools, which is required anyhow. The latter can be installed via
 
