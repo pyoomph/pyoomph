@@ -29,9 +29,11 @@ If you encounter segmentation faults during solving, please try to downgrade you
 
 ## On Mac
 
-**If you have a recent Mac with an Apple silicon (arm64) chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up (**note**: recent systems must be handled differently, see [here](https://developer.apple.com/forums/thread/718666)) . Also, please downgrade `mkl` by
+**If you have a recent Mac with an Apple silicon (arm64) chip**, you must run all commands  in a `Rosetta 2 terminal`, see [here](https://www.courier.com/blog/tips-and-tricks-to-setup-your-apple-m1-for-development/) how to set it up (**note**: recent systems must be handled differently, see [here](https://developer.apple.com/forums/thread/718666)). Also, please downgrade `mkl` by
 
 > python3 -m pip install mkl==2021.4.0
+
+**Since the development of Intel MKL (containing the fast MKL Pardiso solver) was discontinued for Mac, using this solver might require installing a less recent version of python. See [`Mac_arm64_with_Pardiso.md`](https://github.com/pyoomph/pyoomph/blob/main/Mac_arm64_with_Pardiso.md) for more details.**
 
 Make sure to have the `XCode` developer tools, e.g. by installing them via
 
@@ -88,6 +90,8 @@ Verify whether everything runs fine by
 Besides XCode, you must install a few third-party tools. This can be done by e.g. [Homebrew](https://brew.sh):
 
 > brew install openmpi ccache ginac
+
+**Since the development of Intel MKL (containing the fast MKL Pardiso solver) was discontinued for Mac, using this solver might require installing a less recent version of python. See [`Mac_arm64_with_Pardiso.md`](https://github.com/pyoomph/pyoomph/blob/main/Mac_arm64_with_Pardiso.md) for more details.**
 
 Restart your (Rosatta) terminal afterwards.
 Install required python modules via
