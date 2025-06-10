@@ -18,7 +18,6 @@ Submodules
    pyoomph.equations.harmonic_oscillator
    pyoomph.equations.helmholtz
    pyoomph.equations.kuramoto_sivashinsky
-   pyoomph.equations.linear_elasticity
    pyoomph.equations.low_order_NSCH
    pyoomph.equations.lubrication
    pyoomph.equations.multi_component
