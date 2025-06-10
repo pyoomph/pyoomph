@@ -16,7 +16,7 @@ On Mac
 
 	bash installOnArm.sh
 
-   to perform this installation. The only downside is that the fast `MKL Pardiso` solver is not supported on native arm64 systems. For optimal performance, in particular for larger problems, one therefore should consider the `Rosetta 2 terminal` way for the time being.
+   to perform this installation. The only downside is that the fast `MKL Pardiso` solver is not supported on native arm64 systems. For optimal performance, in particular for larger problems, one therefore should consider the `Rosetta 2 terminal` way for the time being. Also, you might have to use a less recent version of python. See https://github.com/pyoomph/pyoomph/blob/main/Mac_arm64_with_Pardiso.md for details.
 
 
 To clone the git repository, you require git, but this comes along with the Xcode developer tools, which is required anyhow. The latter can be installed via
