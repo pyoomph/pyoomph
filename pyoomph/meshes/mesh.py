@@ -1449,6 +1449,46 @@ class InterfaceMesh(_pyoomph.InterfaceMesh, BaseMesh):
             e._elemental_error_max_override = 0.0
 
 
+    def _evaluate_extremum_wrapper(self,name:Union[str,List[str]],sign:int,dimensional:bool=True,as_float:bool=False,return_x:bool=True):
+        if not isinstance(name,str):
+            if return_x:
+                raise RuntimeError("Please set return_x=False for multiple extremum evaluations (or call them one by one)")
+            return [self._evaluate_extremum_wrapper(n,sign,dimensional=dimensional,as_float=as_float,return_x=False) for n in name]
+        flags=0
+        if dimensional:
+            flags|=1
+        val,s,elem=self._evaluate_extremum(name,sign,flags)        
+        #print(val,s,elem)
+        if return_x:
+            x=elem.get_interpolated_position_at_s(0,s,False)
+            #print("X",x)
+            if dimensional:
+                SS=self.get_problem().get_scaling("spatial")
+                x=[xc*SS for xc in x]
+        if not dimensional:
+            val=float(val)
+        else:
+            if as_float:
+                factor, _, _, _ = _pyoomph.GiNaC_collect_units(val)
+                val = float(factor)
+                if return_x:
+                    xn=[]
+                    for xc in x:
+                        factor, _, _, _ = _pyoomph.GiNaC_collect_units(xc)
+                        xn.append(float(factor))
+                    x=xn                
+        if return_x:
+            return val,x
+        else:
+            return val
+                    
+    def evaluate_maximum(self,name:Union[str,List[str]],dimensional:bool=True,as_float:bool=False,return_x:bool=False)->Union[ExpressionOrNum,List[ExpressionOrNum],Tuple[ExpressionOrNum,List[ExpressionOrNum]]]:
+        return self._evaluate_extremum_wrapper(name,1,dimensional=dimensional,as_float=as_float,return_x=return_x)
+           
+    def evaluate_minimum(self,name:Union[str,List[str]],dimensional:bool=True,as_float:bool=False,return_x:bool=False)->Union[ExpressionOrNum,List[ExpressionOrNum],Tuple[ExpressionOrNum,List[ExpressionOrNum]]]:
+        return self._evaluate_extremum_wrapper(name,-1,dimensional=dimensional,as_float=as_float,return_x=return_x)
+
+
 class ODEStorageMesh(_pyoomph.ODEStorageMesh):
     """
     A sort of a mesh storing ODE values. This is not a real mesh, but a container for ODE values.
