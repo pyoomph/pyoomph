@@ -869,8 +869,8 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
         
 
 
-        if base.tesselate_tri:
-            raise RuntimeError("Cartesian extrusion cannot be combined with tesselate_tri=True yet")
+        #if base.tesselate_tri:
+        #    raise RuntimeError("Cartesian extrusion cannot be combined with tesselate_tri=True yet")
         if base.discontinuous and (base.D0_data.shape[1]>0 or base.DL_data.shape[1]>0):
             raise RuntimeError("Cartesian extrusion does not work with discontinuous=True, at least if D0 or DL fields are defined")
         elem_types=base.elem_types
