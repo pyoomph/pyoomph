@@ -670,8 +670,11 @@ class MatplotlibVectorFieldArrows(MatplotlibTriangulationBased):
     arrowdensity:float=50
     use_quiver:bool=False # Quiver plots faster, but is less customizeable
 
+    invisible:bool=False
 
     def add_to_plot(self):
+        if self.invisible:
+            return
         vx=self.data[0]
         vy = self.data[1]
         if (self.plotter.xmin is None) or (self.plotter.xmax is None) or (self.plotter.ymax  is None) or (self.plotter.ymin  is None):
