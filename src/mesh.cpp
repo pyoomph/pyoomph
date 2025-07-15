@@ -1140,6 +1140,13 @@ namespace pyoomph
   void Mesh::_set_problem(Problem *p, DynamicBulkElementInstance *code)
   {
     problem = p;
+    #ifdef OOMPH_HAS_MPI
+    //This only for distributed meshes
+    /*if (p->is_distributed())
+    {
+      this->set_communicator_pt(p->communicator_pt());
+    }*/
+    #endif
     codeinst = code;
     if (code && dirichlet_active.empty())
     {

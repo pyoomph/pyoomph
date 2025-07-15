@@ -637,8 +637,10 @@ class Problem(_pyoomph.Problem):
         Returns:
             MeshDataCacheEntry: The combined information of the mesh cache
         """
+        
         if isinstance(msh,str):
             msh=self.get_mesh(msh)
+        
         return self._mesh_data_cache.get_data(msh,nondimensional=nondimensional,tesselate_tri=tesselate_tri,eigenvector=eigenvector,eigenmode=eigenmode,history_index=history_index,with_halos=with_halos,operator=operator,discontinuous=discontinuous,add_eigen_to_mesh_positions=add_eigen_to_mesh_positions)
 
     def invalidate_cached_mesh_data(self,only_eigens:bool=False):

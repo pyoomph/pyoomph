@@ -113,6 +113,7 @@ class GmshRemesher2d(GmshTemplate):
         assert isinstance(self.remesher,Remesher2d)
         if isinstance(self.remesher.template,GmshTemplate):
             self.mesh_mode=self.remesher.template.mesh_mode #TODO: Optionally also copy other props
+            self.use_macro_elements=self.remesher.template.use_macro_elements
             self.gmsh_options=self.remesher.template.gmsh_options.copy()
         self.remesher._define_geometry() 
 
@@ -457,7 +458,7 @@ class Remesher2d(RemesherBase):
             raise RuntimeError("Cannot identify remeshed mesh points by a 2d domain")
         dn=splt[0]
         if splt[1]  not in self._meshbounds[dn]:
-            raise RuntimeError("Cannot find an interface named "+splt[1]+" to remesh on domain "+splt[0])
+            raise RuntimeError("Cannot find an interface named "+splt[1]+" to remesh on domain "+splt[0]+"\n"+"Available interfaces: "+str(self._meshbounds[dn]))
         #boundline=self._boundary_nodes[splt[1]]
         if len(splt)==2:
             respts:List[List[RemesherPointEntry]]=[]

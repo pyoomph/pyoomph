@@ -946,6 +946,8 @@ void PyReg_Mesh(py::module &m)
 			 { return self->evaluate_local_expression_at_nodes(index, nondimensional,discontinuous); })
 		.def("to_numpy", [](pyoomph::Mesh *self, bool tesselate_tri, bool nondimensional, unsigned history_index,bool discontinuous)
 			 {
+				/*std::cout << self << std::endl;
+				std::cout << self->communicator_pt() << std::endl;*/
 			 unsigned nnode=self->count_nnode(discontinuous);
 			 pyoomph::Node* node0=self->get_some_node();
 			 unsigned nodal_dim=(node0 ? node0->ndim() : 0);

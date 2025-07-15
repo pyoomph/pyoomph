@@ -926,8 +926,8 @@ class GmshTemplate(MeshTemplate):
                 for vv in v:
                     revnamemap[vv]=k
             for hole in holes:
-                resolved = self._resolve_name("lines", *hole)
-                srted = self._sort_line_loop(resolved) #type:ignore
+                resolved = self._resolve_name("lines", *hole)                
+                srted = self._sort_line_loop(resolved) #type:ignore                
                 hole_names:List[str]=[]
                 for s in srted:
                     ll = self._geom.add_curve_loop(s) #type:ignore
@@ -937,6 +937,7 @@ class GmshTemplate(MeshTemplate):
                             ssn=revnamemap[ss]
                             if not ssn in hole_names:
                                 hole_names.append(ssn)
+                
                 if len(hole_names)>0:
                     holes_names.append(hole_names)
             if len(holes_names)>0 and self.remesher is not None and name is not None:
@@ -945,13 +946,22 @@ class GmshTemplate(MeshTemplate):
 
         resolved = self._resolve_name("lines", *args)
         resolved = [l for l in resolved if l is not None]
+        
         srted = self._sort_line_loop(resolved, name=name)  #type:ignore
         allres:List[PlaneSurface]=[]
         for s in srted:
             if reversed_order:
                 s = list(reversed([-x for x in s]))
             ll = self._geom.add_curve_loop(s) #type:ignore
-            #print("holes",holesO)
+            #print("holes",name,holesO,ll.curves)
+            is_hole = False
+            for h in holesO:
+                if h.curves == ll.curves:
+                    print("Found hole in surface",ll,holesO)
+                    is_hole = True
+                    break
+            if is_hole:
+                continue
             res = self._geom.add_plane_surface(ll,holes=holesO) #type:ignore
             self._entities2d[res._id] = res #type:ignore
             if name is not None:
@@ -960,6 +970,11 @@ class GmshTemplate(MeshTemplate):
                 self.set_recombined_surfaces(res)
             allres.append(res)
         self._maxdim = max(self._maxdim, 2)
+        
+        #print("resolved",allres,holesO)
+        #if name=="liquid":
+         #   exit()
+        
         return allres
 
     def ruled_surface(self, *args:Union[str,Line,Spline,BSpline,CircleArc], name:Optional[str]=None,reversed_order:bool=False) -> List[Surface]:
