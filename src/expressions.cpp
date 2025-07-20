@@ -2680,6 +2680,17 @@ namespace pyoomph
 			return minimum(a, b).hold();
 		}
 
+
+		static ex minimum_real_part(const ex &arg1,const ex &arg2)
+		{
+			return minimum(arg1,arg2).hold();
+		}
+
+		static ex minimum_imag_part(const ex &arg1,const ex &arg2)
+		{
+			return 0;
+		}
+
 		static void minimum_csrc_float(const ex &a, const ex &b, const print_context &c)
 		{
 			c.s << "fmin(";
@@ -2698,6 +2709,7 @@ namespace pyoomph
 									   .print_func<print_csrc_float>(minimum_csrc_float)
 									   .print_func<print_csrc_double>(minimum_csrc_float)
 									   .expl_derivative_func(minimum_expl_derivative)
+									   .real_part_func(minimum_real_part).imag_part_func(minimum_imag_part)
 									   .evalf_func(minimum_evalf)
 									   .set_return_type(GiNaC::return_types::commutative))
 
@@ -2743,10 +2755,21 @@ namespace pyoomph
 			return a.diff(deriv_arg) * heaviside(a - b) + b.diff(deriv_arg) * heaviside(b - a);
 		}
 
+		static ex maximum_real_part(const ex &arg1,const ex &arg2)
+		{
+			return maximum(arg1,arg2).hold();
+		}
+
+		static ex maximum_imag_part(const ex &arg1,const ex &arg2)
+		{
+			return 0;
+		}
+
 		REGISTER_FUNCTION(maximum, eval_func(maximum_eval)
 									   .print_func<print_csrc_float>(maximum_csrc_float)
 									   .print_func<print_csrc_double>(maximum_csrc_float)
 									   .expl_derivative_func(maximum_expl_derivative)
+									   .real_part_func(maximum_real_part).imag_part_func(maximum_imag_part)
 									   .evalf_func(maximum_evalf)
 									   .set_return_type(GiNaC::return_types::commutative))
 
