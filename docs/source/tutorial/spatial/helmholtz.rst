@@ -155,6 +155,10 @@ The results are depicted in :numref:`fighelmholtzPML` and speak for themselves. 
 	(left) Solution with zero Neumann conditions and (right) with PML.
 
 
+.. note::
+	
+	This example is a direct adaption of the case discussed in oomph-lib here:
+	https://oomph-lib.github.io/oomph-lib/doc/pml_helmholtz/scattering/scattering.pdf
 
 .. only:: html
 

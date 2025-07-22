@@ -2658,8 +2658,12 @@ namespace pyoomph
 			}
 			if (eleminfo.nodal_coords[i])
 			{
-				for (unsigned int j = 0; j < this->dim(); j++)
-					delete eleminfo.nodal_coords[i][eleminfo.nodal_dim + codeinst->get_func_table()->lagr_dim +j];
+				// Only these are allocated, the rest is allocated in the nodes
+				for (unsigned int j = eleminfo.nodal_dim + codeinst->get_func_table()->lagr_dim+this->dim() ; j < this->codeinst->get_func_table()->numfields_Pos; j++)
+				{
+					
+					if (eleminfo.nodal_coords[i][j]) delete eleminfo.nodal_coords[i][j];
+				}				
 				free(eleminfo.nodal_coords[i]);
 				eleminfo.nodal_coords[i] = NULL;
 			}
@@ -2739,14 +2743,46 @@ namespace pyoomph
 			{
 				this->local_coordinate_of_node(i,snode);
 			}
+						
+			//FiniteElement::interpolated_zeta(snode, zeta);
 			
-			eleminfo.nodal_coords[i] = (double **)calloc(eleminfo.nodal_dim + functable->lagr_dim +this->dim(), sizeof(double *));
+			//eleminfo.nodal_coords[i] = (double **)calloc(eleminfo.nodal_dim + functable->lagr_dim +this->dim(), sizeof(double *));
+			eleminfo.nodal_coords[i] = (double **)calloc(functable->numfields_Pos, sizeof(double *));
+			
 			for (unsigned int j = 0; j < eleminfo.nodal_dim; j++)
 				eleminfo.nodal_coords[i][j] = dynamic_cast<Node *>(node_pt(i))->variable_position_pt()->value_pt(j);
 			for (unsigned int j = 0; j < functable->lagr_dim; j++)
 				eleminfo.nodal_coords[i][eleminfo.nodal_dim + j] = &(dynamic_cast<Node *>(node_pt(i))->xi(j));
 			for (unsigned int j = 0; j < this->dim(); j++)
-				eleminfo.nodal_coords[i][eleminfo.nodal_dim + functable->lagr_dim +j] = new double(snode[j]);
+				eleminfo.nodal_coords[i][eleminfo.nodal_dim + functable->lagr_dim +j] = new double(snode[j]); // Local coordinate buffer
+				
+			if (dynamic_cast<oomph::FaceElement*>(this))
+			{
+				unsigned zeta_offset=eleminfo.nodal_dim + functable->lagr_dim+this->dim();
+				for (unsigned int j=zeta_offset;j<functable->numfields_Pos;j++)
+				{
+					double zeta=0.0;
+					
+					if ( dynamic_cast<oomph::BoundaryNodeBase*>(this->node_pt(i))  && this->node_pt(i)->boundary_coordinates_have_been_set_up()) 
+					{
+						//std::cout << "IN BC " << this->get_code_instance()->get_code()->get_file_name() << " i=" << i << " j=" << j << " zeta_offset=" << zeta_offset << " BULK INDEX " << dynamic_cast<oomph::FaceElement*>(this)->boundary_number_in_bulk_mesh() << std::endl;
+						oomph::Mesh * themesh=this->get_code_instance()->get_bulk_mesh();
+						while (dynamic_cast<pyoomph::InterfaceMesh*>(themesh))
+						{
+							themesh = dynamic_cast<pyoomph::InterfaceMesh*>(themesh)->get_bulk_mesh();
+						}
+						//std::cout << "BULKMESH NELEM " << themesh->nelement() << std::endl;
+						// This means that we have some boundary coordinates. But we do not really know whether we indeed have coordinates for this specific boundary
+						if (dynamic_cast<pyoomph::Mesh*>(themesh)->is_boundary_coordinate_defined(dynamic_cast<oomph::FaceElement*>(this)->boundary_number_in_bulk_mesh()))
+						{
+							
+							zeta= this->zeta_nodal(i,0,j-zeta_offset);
+							//std::cout << "  setting  zeta=" << zeta << std::endl;
+						}
+					}
+					eleminfo.nodal_coords[i][j] =   new double(zeta); // zeta coordinate buffer
+				}
+			}
 
 			/*			unsigned numfields=0;
 			//			numfields+=functable->numfields_Lagr; //Lagrangian everywhere

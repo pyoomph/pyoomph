@@ -364,6 +364,9 @@ namespace pyoomph
 		potential_real_symbol local_coordinate_1("local_coordinate_1");
 		potential_real_symbol local_coordinate_2("local_coordinate_2");
 		potential_real_symbol local_coordinate_3("local_coordinate_3");
+		potential_real_symbol zeta_coordinate_1("zeta_coordinate_1");
+		potential_real_symbol zeta_coordinate_2("zeta_coordinate_2");
+		potential_real_symbol zeta_coordinate_3("zeta_coordinate_3");
 		potential_real_symbol timefrac_tracer("timefrac_tracer");
 		potential_real_symbol t("t");
 		potential_real_symbol _dt_BDF1("_dt_BDF1");

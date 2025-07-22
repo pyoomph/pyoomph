@@ -1247,6 +1247,7 @@ void PyReg_Mesh(py::module &m)
 		.def("rebuild_after_adapt", &pyoomph::InterfaceMesh::rebuild_after_adapt)
 		.def("set_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::set_opposite_interface_offset_vector)
 		.def("get_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::get_opposite_interface_offset_vector)		
+		.def("update_zeta_in_buffer",&pyoomph::InterfaceMesh::update_zeta_in_buffer)
 		.def("get_bulk_mesh", &pyoomph::InterfaceMesh::get_bulk_mesh)
 		.def(
 			"_get_problem", [](pyoomph::InterfaceMesh *self)

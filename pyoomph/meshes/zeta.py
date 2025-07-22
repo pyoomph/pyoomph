@@ -87,7 +87,8 @@ class AssignZetaCoordinatesByEulerianCoordinate(AssignZetaCoordinatesBase):
                 maxzeta=max(zeta,maxzeta)
                 n.set_coordinates_on_boundary(bind,[zeta])
                 nodes_set+=1
-        bmesh.boundary_coordinate_bool(bind)        
+        bmesh.boundary_coordinate_bool(bind)  
+        mesh.update_zeta_in_buffer()      
         if maxzeta-minzeta<1e-10 and nodes_set>1:
             raise self.add_exception_info(RuntimeError("The assigned zeta coordinates are not meaningful. Probably align along another axis"))
 
@@ -188,6 +189,7 @@ class AssignZetaCoordinatesByArclength(AssignZetaCoordinatesBase):
             n=nodemap[pti]
             n.set_coordinates_on_boundary(bind,[al])
         bmesh.boundary_coordinate_bool(bind)
+        mesh.update_zeta_in_buffer()      
 
 
 
