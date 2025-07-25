@@ -517,6 +517,7 @@ class EnforcedInterfacialLaplaceSmoothing(InterfaceEquations):
     def __init__(self,coordinate_system=cartesian):
         super().__init__()
         self.coordsys=coordinate_system
+        self.verbose=True
         
     def define_fields(self):        
         # Get the coordinate space
@@ -529,19 +530,28 @@ class EnforcedInterfacialLaplaceSmoothing(InterfaceEquations):
         self.define_scalar_field("_s_solved_"+iname,space,testscale=scale_factor("spatial")**2) # solved arclength between start and end points
         self.define_scalar_field("_tang_shift_"+iname,space,scale=1/test_scale_factor("mesh")) # Lagrange multiplier for the tangential shift of the interface nodes, which is used to enforce the tangential movement of the interface nodes along the line.
         
+                    
+
+        
     def define_residuals(self):
         if self.get_nodal_dimension()!=2: 
             raise RuntimeError("EnforcedInterfacialLaplaceSmoothing is only implemented for 2d meshes")
         # Bind everything
         fn=self._get_combined_element()._assert_codegen().get_full_name()
         iname="__".join(fn.split("/")[1:])
-        s,stest=var_and_test("_s_solved_"+iname)        
+        s,stest=var_and_test("_s_solved_"+iname)
+        
         s0=var("_s_fixed_"+iname)
         l,ltest=var_and_test("_tang_shift_"+iname)
         
-        # Solve the Laplace equation along the line => corresponds to the current arclength parameterization 
-        self.add_weak(grad(s,coordsys=self.coordsys),grad(stest,coordsys=self.coordsys),coordinate_system=self.coordsys)
+        # If you want to use it with normal mode expansion eigenproblems, we don't have to expand it
+        s=var("_s_solved_"+iname,only_base_mode=True) # This is the arclength between the start and end points of the interface
+        s0=var("_s_fixed_"+iname,only_base_mode=True)
+        l=var("_tang_shift_"+iname,only_base_mode=True)
         n=var("normal")
+        
+        self.add_weak(grad(s,coordsys=self.coordsys),grad(stest,coordsys=self.coordsys),coordinate_system=self.coordsys)
+        
         t=vector(-n[1],n[0])  # Tangential vector
         self.add_weak(s-s0,ltest,coordinate_system=self.coordsys) # Ensure that the arclength is equal to the initial arclength 
         # by shifting the nodes tangentially along the line
@@ -578,6 +588,24 @@ class EnforcedInterfacialLaplaceSmoothing(InterfaceEquations):
         for c in corners:
             res+=EnforcedInterfacialLaplaceSmoothingCorner()@c
         return res
+    
+           
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree, eigensolver, angular_mode, normal_k):
+        if angular_mode is None:
+            return set()
+        
+        angular_mode=int(angular_mode)
+        fn=self._get_combined_element()._assert_codegen().get_full_name()
+        iname="__".join(fn.split("/")[1:])        
+        
+        if angular_mode==0:
+            return set()
+        else:            
+            info={fn+"/_s_fixed_"+iname,fn+"/_s_solved_"+iname,fn+"/_tang_shift_"+iname}
+            print("EnforcedInterfacialLaplaceSmoothing (mode m="+str(angular_mode)+"): Imposed zero tangential shift correction",self.get_current_code_generator().get_full_name(),"for",info)
+            return info
+        
+            
 
 class EnforcedInterfacialLaplaceSmoothingCorner(InterfaceEquations):
     """Helper class to pin the arclength and deactivate the tangential shift at a corner of an interface. This is used in EnforcedInterfacialLaplaceSmoothing.with_corners"""
