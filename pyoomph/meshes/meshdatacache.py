@@ -1215,27 +1215,27 @@ class MeshDataRotationalExtrusion(MeshDataCacheOperatorBase):
                             #print(new_nodal_field_inds,vector_fields)
 
                 
-        # Also assemble the eigenperturbation of the position
-        if "EigenRe_coordinate_x" in base.nodal_field_inds:
-            
-            def get_x_component(ReR,ImR): #type:ignore
-                Vr_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImR).flatten() #type:ignore
-                #Vphi_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImP).flatten() #type:ignore
-                return Vr_cos_phi#+Vphi_sin_phi #type:ignore
-            def get_y_component(ReR,ImR): #type:ignore
-                Vr_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImR).flatten() #type:ignore
-                #Vphi_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImP).flatten() #type:ignore
-                return Vr_sin_phi#-Vphi_cos_phi #type:ignore
-            field_operators["Eigen_coordinate_x"]= [get_x_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
-            field_operators["Eigen_coordinate_y"]= [get_y_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
-            if "EigenRe_coordinate_y" in base.nodal_field_inds:
-                field_operators["Eigen_coordinate_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),"EigenRe_coordinate_y","EigenIm_coordinate_y"] #type:ignore
-                new_nodal_field_inds["Eigen_coordinate_z"] = max(new_nodal_field_inds.values()) + 1
-                vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y","_z"]]
-            else:                
-                new_nodal_field_inds["Eigen_coordinate_y"] = max(new_nodal_field_inds.values()) + 1
-                vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y"]]
-            completed_eigen_vector_fields.add("Eigen_coordinate")
+            # Also assemble the eigenperturbation of the position
+            if "EigenRe_coordinate_x" in base.nodal_field_inds:
+                
+                def get_x_component(ReR,ImR): #type:ignore
+                    Vr_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImR).flatten() #type:ignore
+                    #Vphi_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImP).flatten() #type:ignore
+                    return Vr_cos_phi#+Vphi_sin_phi #type:ignore
+                def get_y_component(ReR,ImR): #type:ignore
+                    Vr_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImR).flatten() #type:ignore
+                    #Vphi_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImP).flatten() #type:ignore
+                    return Vr_sin_phi#-Vphi_cos_phi #type:ignore
+                field_operators["Eigen_coordinate_x"]= [get_x_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
+                field_operators["Eigen_coordinate_y"]= [get_y_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
+                if "EigenRe_coordinate_y" in base.nodal_field_inds:
+                    field_operators["Eigen_coordinate_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),"EigenRe_coordinate_y","EigenIm_coordinate_y"] #type:ignore
+                    new_nodal_field_inds["Eigen_coordinate_z"] = max(new_nodal_field_inds.values()) + 1
+                    vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y","_z"]]
+                else:                
+                    new_nodal_field_inds["Eigen_coordinate_y"] = max(new_nodal_field_inds.values()) + 1
+                    vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y"]]
+                completed_eigen_vector_fields.add("Eigen_coordinate")
 
         for vfield,components in vector_fields.items(): #type:ignore
             if vfield in completed_eigen_vector_fields:
