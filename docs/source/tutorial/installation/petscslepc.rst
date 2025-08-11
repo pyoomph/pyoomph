@@ -47,7 +47,7 @@ You can also add optimization or OpenMP support, e.g. ``--with-debugging=0``, ``
 .. note::
 	If you should have issues with `cmake` on Ubuntu (and potentially other distros), try
 		#. Install cmake (updated version, see https://askubuntu.com/questions/355565/how-do-i-install-the-latest-version-of-cmake-from-the-command-line) 
-		#. add flag --download-fblasapack=1 when configuring
+		#. add flag ``--download-fblasapack=1`` when configuring
 	
 
 At the end of the configuration process, a ``make`` command will be written, which you have to execute as a next step.
