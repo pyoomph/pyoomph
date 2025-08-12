@@ -96,6 +96,7 @@ before-all = [
 "echo set extra flags to $PYOOMPH_CXXFLAGS_EXTRA",
 "./clean.sh all",
 "brew install automake",
+"brew install autoconf-archive",
 "bash citools/download_and_build_static_ginac.sh",
 "bash ./prebuild.sh",
 "make -C src clean",
