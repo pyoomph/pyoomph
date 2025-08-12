@@ -946,6 +946,8 @@ void PyReg_Mesh(py::module &m)
 			 { return self->evaluate_local_expression_at_nodes(index, nondimensional,discontinuous); })
 		.def("to_numpy", [](pyoomph::Mesh *self, bool tesselate_tri, bool nondimensional, unsigned history_index,bool discontinuous)
 			 {
+				/*std::cout << self << std::endl;
+				std::cout << self->communicator_pt() << std::endl;*/
 			 unsigned nnode=self->count_nnode(discontinuous);
 			 pyoomph::Node* node0=self->get_some_node();
 			 unsigned nodal_dim=(node0 ? node0->ndim() : 0);
@@ -1245,6 +1247,7 @@ void PyReg_Mesh(py::module &m)
 		.def("rebuild_after_adapt", &pyoomph::InterfaceMesh::rebuild_after_adapt)
 		.def("set_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::set_opposite_interface_offset_vector)
 		.def("get_opposite_interface_offset_vector",&pyoomph::InterfaceMesh::get_opposite_interface_offset_vector)		
+		.def("update_zeta_in_buffer",&pyoomph::InterfaceMesh::update_zeta_in_buffer)
 		.def("get_bulk_mesh", &pyoomph::InterfaceMesh::get_bulk_mesh)
 		.def(
 			"_get_problem", [](pyoomph::InterfaceMesh *self)

@@ -75,7 +75,7 @@ Before the :py:class:`~pyoomph.generic.problem.Problem` class will be described,
 
 .. math:: \left(\partial_t-c\vec{n}\cdot\nabla\right)\left(\partial_t+c\vec{n}\cdot\nabla\right)u=0\,.
 
-The equation is obviously fulfilled if :math:`\partial_t u\pm c\nabla u\cdot \vec{n}=0`, reflecting the fact that the wave equation allows for traveling solutions. As a Neumann flux, however, we can impose :math:`-c^2\nabla u\cdot \vec{n}` at interfaces. Hence, when imposing :math:`c\:\partial_t u` as Neumann flux, we will not influence the wave equation due to the presence of the boundary, however, only if the wave approaches in normal direction. More sophisticated solutions are e.g. *perfectly matched layers*.
+The equation is obviously fulfilled if :math:`\partial_t u\pm c\nabla u\cdot \vec{n}=0`, reflecting the fact that the wave equation allows for traveling solutions. As a Neumann flux, however, we can impose :math:`-c^2\nabla u\cdot \vec{n}` at interfaces. Hence, when imposing :math:`c\:\partial_t u` as Neumann flux, we will not influence the wave equation due to the presence of the boundary, however, only if the wave approaches in normal direction. More sophisticated solutions are e.g. *perfectly matched layers*, as discussed in :numref:`secspatialhelmholtz`.
 
 This finally brings us the specification of the :py:class:`~pyoomph.generic.problem.Problem` class:
 

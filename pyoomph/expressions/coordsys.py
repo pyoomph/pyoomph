@@ -40,11 +40,32 @@ pi = 2 * _pyoomph.GiNaC_asin(1)
 
 
 class BaseCoordinateSystem(_pyoomph.CustomCoordinateSystem):
+    
+    expansion_eps=_pyoomph.GiNaC_new_symbol("eps") # One epsilon to rule them all, one epsilon to find them, one epsilon to bring them all and in the darkness bind them
+    # This is used to expand the normal mode in the eigenvalue problem, but if you have e.g. some Cartesian coordinates on in an azimuthal eigenproblem, you want to set epsilon to zero to calculate e.g. the grad(f) in Caretsian, which otherwise does not work
+    has_normal_mode_expasion:bool=False # If False, it removes all epsilon terms in the coordinates
+    
     def __init__(self):
         super(BaseCoordinateSystem, self).__init__()
         self.x_rel_scale=1
         self.y_rel_scale=1
         self.z_rel_scale=1
+
+    def map_to_zero_epsilon(self,input):
+        if isinstance(input,list):
+            return [self.map_to_zero_epsilon(i) for i in input]
+        else:
+            return  _pyoomph.GiNaC_SymSubs(input,self.expansion_eps,Expression(0))
+        
+    def map_to_first_order_epsilon(self,input,with_epsilon:bool=True):
+        if isinstance(input,list):
+            return [self.map_to_first_order_epsilon(i,with_epsilon) for i in input]
+        else:
+            return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
+
+
+    def define_scalar_field(self, name:str, space:"FiniteElementSpaceEnum", element:"Equations", scale:Optional[ExpressionOrNum]=None, testscale:Optional[ExpressionOrNum]=None, discontinuous_refinement_exponent:Optional[ExpressionOrNum]=None):
+        element._internal_define_scalar_field(name, space, scale=scale, testscale=testscale, discontinuous_refinement_exponent=discontinuous_refinement_exponent)
 
     def define_vector_field(self, name:str, space:"FiniteElementSpaceEnum", ndim:int, element:"Equations")->Tuple[List[Expression],List[Expression],List[str]]:
         raise RuntimeError("Implement the define_vector_field function for this coordinate system")
@@ -169,11 +190,11 @@ class BaseCoordinateSystem(_pyoomph.CustomCoordinateSystem):
             else:
                 return nondim("dx")
 
-    def get_coords(self, ndim:int, with_scales:bool, lagrangian:bool,mesh_coords:bool=False) -> List[Expression]:
+    def get_coords(self, ndim:int, with_scales:bool, lagrangian:bool,mesh_coords:bool=False,only_base_mode:bool=False) -> List[Expression]:
         rel_scales = [self.x_rel_scale, self.y_rel_scale, self.z_rel_scale]
         if lagrangian:
             if with_scales:
-                x, y, z = var(["lagrangian_x", "lagrangian_y", "lagrangian_z"])
+                x, y, z = var(["lagrangian_x", "lagrangian_y", "lagrangian_z"]) 
                 x,y,z=rel_scales[0]*x,rel_scales[1]*y,rel_scales[2]*z
             else:
                 x, y, z = nondim(["lagrangian_x", "lagrangian_y", "lagrangian_z"])
@@ -182,15 +203,17 @@ class BaseCoordinateSystem(_pyoomph.CustomCoordinateSystem):
                 if mesh_coords:
                     x, y, z = var(["mesh_x", "mesh_y", "mesh_z"])
                 else:
-                    x, y, z = var(["coordinate_x", "coordinate_y", "coordinate_z"])
+                    x, y, z = var(["coordinate_x", "coordinate_y", "coordinate_z"],only_base_mode=only_base_mode) # In case combined with something else
                 x,y,z=rel_scales[0]*x,rel_scales[1]*y,rel_scales[2]*z
             else:
                 if mesh_coords:
                     x, y, z = nondim(["mesh_x", "mesh_y", "mesh_z"])
                 else:
-                    x, y, z = nondim(["coordinate_x", "coordinate_y", "coordinate_z"])
+                    x, y, z = nondim(["coordinate_x", "coordinate_y", "coordinate_z"],only_base_mode=only_base_mode) # In case combined with something else
                 
         all_coords = [x, y, z]
+        if not self.has_normal_mode_expasion:
+            all_coords = self.map_to_zero_epsilon(all_coords)
         if ndim == 1:
             return [x]
         else:
@@ -549,11 +572,12 @@ class AxisymmetricCoordinateSystem(BaseCoordinateSystem):
 
 
 class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSystem):
+    has_normal_mode_expasion = True
     def __init__(self,normal_mode:Expression,map_real_part_of_mode0:bool=False):
         super().__init__()
         self.imaginary_i=_pyoomph.GiNaC_imaginary_i()
         self.normal_mode=normal_mode
-        self.expansion_eps=_pyoomph.GiNaC_new_symbol("eps")
+        
         self.k_symbol = _pyoomph.GiNaC_new_symbol("k_normal_mode")
         self.xadd = _pyoomph.GiNaC_new_symbol("xadd_normal_mode")
         self.field_mode=_pyoomph.GiNaC_FakeExponentialMode(self.imaginary_i*self.k_symbol*self.xadd)
@@ -631,19 +655,7 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
     def get_id_name(self)->str:
         raise RuntimeError("Is this required?")
-        return "Cartesian"
-
-    def map_to_zero_epsilon(self,input):
-        if isinstance(input,list):
-            return [self.map_to_zero_epsilon(i) for i in input]
-        else:
-            return  _pyoomph.GiNaC_SymSubs(input,self.expansion_eps,Expression(0))
-        
-    def map_to_first_order_epsilon(self,input,with_epsilon:bool=True):
-        if isinstance(input,list):
-            return [self.map_to_first_order_epsilon(i,with_epsilon) for i in input]
-        else:
-            return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
+        return "Cartesian"    
 
     def scalar_gradient(self, arg:Expression, ndim:int, edim:int, with_scales:bool, lagrangian:bool)->Expression:
         res:List[ExpressionOrNum] = []
@@ -953,12 +965,13 @@ class CartesianCoordinateSystemWithAdditionalNormalMode(CartesianCoordinateSyste
 
 
 class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
+    has_normal_mode_expasion=True
     def __init__(self,angular_mode:Expression,map_real_part_of_mode0:bool=False):        
         self.imaginary_i=_pyoomph.GiNaC_imaginary_i()
         super(AxisymmetryBreakingCoordinateSystem, self).__init__()
         self.angular_mode = angular_mode
         # Expansion smallness parameters epsilon: U=U_base+epsilon*U_angular
-        self.expansion_eps=_pyoomph.GiNaC_new_symbol("eps")
+        #self.expansion_eps=_pyoomph.GiNaC_new_symbol("eps")
         # m_angular and angular variable phi.
         # We first take a generic symbol for m and replace it later with the parameter or 0 (base state)
         self.m_angular_symbol = _pyoomph.GiNaC_new_symbol("m_angular")
@@ -1030,18 +1043,6 @@ class AxisymmetryBreakingCoordinateSystem(AxisymmetricCoordinateSystem):
     def get_id_name(self)->str:
         raise RuntimeError("Is this required?")
         return "Axisymmetric"
-
-    def map_to_zero_epsilon(self,input):
-        if isinstance(input,list):
-            return [self.map_to_zero_epsilon(i) for i in input]
-        else:
-            return  _pyoomph.GiNaC_SymSubs(input,self.expansion_eps,Expression(0))
-        
-    def map_to_first_order_epsilon(self,input,with_epsilon:bool=True):
-        if isinstance(input,list):
-            return [self.map_to_first_order_epsilon(i,with_epsilon) for i in input]
-        else:
-            return _pyoomph.GiNaC_SymSubs(diff(_pyoomph.GiNaC_expand(input), self.expansion_eps), self.expansion_eps, Expression(0))*(self.expansion_eps if with_epsilon else 1)            
 
 
     def integral_dx(self, nodal_dim:int, edim:int, with_scale:bool, spatial_scale:ExpressionOrNum, lagrangian:bool) -> Expression:        

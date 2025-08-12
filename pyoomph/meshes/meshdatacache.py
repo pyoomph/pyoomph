@@ -38,6 +38,7 @@ MeshDataEigenModes=Literal["abs","real","imag","merge","angle"]
 class MeshDataCacheEntry:
     def __init__(self,msh:AnySpatialMesh,tesselate_tri:bool=True,nondimensional:bool=False,eigenvector:Optional[Union[int,Sequence[int]]]=None,eigenmode:MeshDataEigenModes="abs",history_index:int=0,with_halos:bool=False,operator:Optional["MeshDataCacheOperatorBase"]=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True):
         assert isinstance(msh,(MeshFromTemplate1d,MeshFromTemplate2d,MeshFromTemplate3d,InterfaceMesh))
+        
         self.mesh=msh
         self.eigenvector = eigenvector
         self.eigenmode = eigenmode
@@ -72,12 +73,14 @@ class MeshDataCacheEntry:
                 assert backup_pinned is not None
                 self.mesh.get_problem().set_all_values_at_current_time(backup_dofs, backup_pinned, not self.add_eigen_to_mesh_positions)
         assert isinstance(msh,(MeshFromTemplateBase,InterfaceMesh))
+        
         self.nodal_values, self.elem_indices, self.elem_types, self.nodal_field_inds, self.D0_data, self.DL_data, self.elemental_field_inds = msh.to_numpy(tesselate_tri,nondimensional,history_index,discontinuous)
-
+        
         if (not self.with_halos) and msh.is_mesh_distributed():
             newei:List[List[int]]=[]
             newet:List[int]=[]
             for i,(ei,et) in enumerate(zip(self.elem_indices,self.elem_types)):
+                #print("Element",i,"has proc ID",i,ei,et)
                 if msh.element_pt(i).non_halo_proc_ID()<0:
                     newei.append(ei)
                     newet.append(et)
@@ -406,9 +409,11 @@ class MeshDataCache:
         self._cache:Dict[AnySpatialMesh,MeshDataCacheEntry]=dict()
 
     def get_data(self,msh:AnySpatialMesh) -> MeshDataCacheEntry:
+        
         if not (msh in self._cache.keys()):
             #print("CREATING MESH DATA",msh.get_full_name(),self.tesselate_tri,self.nondimensional)
             msh._setup_output_scales()
+            
             self._cache[msh] = MeshDataCacheEntry(msh,tesselate_tri=self.tesselate_tri,nondimensional=self.nondimensional,eigenvector=self.eigenvector,eigenmode=self.eigenmode,history_index=self.history_index,with_halos=self.with_halos,operator=self.operator,discontinuous=self.discontinuous,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
         else:
             pass
@@ -442,13 +447,16 @@ class MeshDataCacheStorage:
         if isinstance(eigenvector,list):
             eigenvector=tuple(set(eigenvector))
         key:Tuple[Any, ...] = (nondimensional, tesselate_tri,eigenvector,eigenmode,history_index,with_halos,operator,discontinuous,add_eigen_to_mesh_positions)
-        if not key in self._storage.keys():            
+        if not key in self._storage.keys():                        
             #print("CREATING",key)
             msh._setup_output_scales()
+            
             self._storage[key]=MeshDataCache(tesselate_tri=tesselate_tri, nondimensional=nondimensional,eigenvector=eigenvector,eigenmode=eigenmode,history_index=history_index,with_halos=with_halos,operator=operator,discontinuous=discontinuous,add_eigen_to_mesh_positions=add_eigen_to_mesh_positions)
+            
         else:
             pass
             #print("REUSING",key)
+        
         return self._storage[key].get_data(msh)
 
 
@@ -869,8 +877,8 @@ class MeshDataCartesianExtrusion(MeshDataCacheOperatorBase):
         
 
 
-        if base.tesselate_tri:
-            raise RuntimeError("Cartesian extrusion cannot be combined with tesselate_tri=True yet")
+        #if base.tesselate_tri:
+        #    raise RuntimeError("Cartesian extrusion cannot be combined with tesselate_tri=True yet")
         if base.discontinuous and (base.D0_data.shape[1]>0 or base.DL_data.shape[1]>0):
             raise RuntimeError("Cartesian extrusion does not work with discontinuous=True, at least if D0 or DL fields are defined")
         elem_types=base.elem_types
@@ -1207,27 +1215,27 @@ class MeshDataRotationalExtrusion(MeshDataCacheOperatorBase):
                             #print(new_nodal_field_inds,vector_fields)
 
                 
-        # Also assemble the eigenperturbation of the position
-        if "EigenRe_coordinate_x" in base.nodal_field_inds:
-            
-            def get_x_component(ReR,ImR): #type:ignore
-                Vr_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImR).flatten() #type:ignore
-                #Vphi_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImP).flatten() #type:ignore
-                return Vr_cos_phi#+Vphi_sin_phi #type:ignore
-            def get_y_component(ReR,ImR): #type:ignore
-                Vr_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImR).flatten() #type:ignore
-                #Vphi_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImP).flatten() #type:ignore
-                return Vr_sin_phi#-Vphi_cos_phi #type:ignore
-            field_operators["Eigen_coordinate_x"]= [get_x_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
-            field_operators["Eigen_coordinate_y"]= [get_y_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
-            if "EigenRe_coordinate_y" in base.nodal_field_inds:
-                field_operators["Eigen_coordinate_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),"EigenRe_coordinate_y","EigenIm_coordinate_y"] #type:ignore
-                new_nodal_field_inds["Eigen_coordinate_z"] = max(new_nodal_field_inds.values()) + 1
-                vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y","_z"]]
-            else:                
-                new_nodal_field_inds["Eigen_coordinate_y"] = max(new_nodal_field_inds.values()) + 1
-                vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y"]]
-            completed_eigen_vector_fields.add("Eigen_coordinate")
+            # Also assemble the eigenperturbation of the position
+            if "EigenRe_coordinate_x" in base.nodal_field_inds:
+                
+                def get_x_component(ReR,ImR): #type:ignore
+                    Vr_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImR).flatten() #type:ignore
+                    #Vphi_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImP).flatten() #type:ignore
+                    return Vr_cos_phi#+Vphi_sin_phi #type:ignore
+                def get_y_component(ReR,ImR): #type:ignore
+                    Vr_sin_phi=numpy.outer(numpy.cos(m * phis)*numpy.sin(phis),ReR).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.sin(phis),ImR).flatten() #type:ignore
+                    #Vphi_cos_phi=numpy.outer(numpy.cos(m * phis)*numpy.cos(phis),ReP).flatten()+numpy.outer(numpy.sin(m * phis)*numpy.cos(phis),ImP).flatten() #type:ignore
+                    return Vr_sin_phi#-Vphi_cos_phi #type:ignore
+                field_operators["Eigen_coordinate_x"]= [get_x_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
+                field_operators["Eigen_coordinate_y"]= [get_y_component,"EigenRe_coordinate_x","EigenIm_coordinate_x"] #type:ignore
+                if "EigenRe_coordinate_y" in base.nodal_field_inds:
+                    field_operators["Eigen_coordinate_z"]= [lambda ReVy,ImVy: numpy.outer(numpy.cos(m * phis), ReVy).flatten()+numpy.outer(numpy.sin(m * phis), ImVy).flatten(),"EigenRe_coordinate_y","EigenIm_coordinate_y"] #type:ignore
+                    new_nodal_field_inds["Eigen_coordinate_z"] = max(new_nodal_field_inds.values()) + 1
+                    vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y","_z"]]
+                else:                
+                    new_nodal_field_inds["Eigen_coordinate_y"] = max(new_nodal_field_inds.values()) + 1
+                    vector_fields["Eigen_coordinate"]=["Eigen_coordinate"+component for component in ["_x","_y"]]
+                completed_eigen_vector_fields.add("Eigen_coordinate")
 
         for vfield,components in vector_fields.items(): #type:ignore
             if vfield in completed_eigen_vector_fields:

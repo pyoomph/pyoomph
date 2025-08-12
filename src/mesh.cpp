@@ -1140,6 +1140,13 @@ namespace pyoomph
   void Mesh::_set_problem(Problem *p, DynamicBulkElementInstance *code)
   {
     problem = p;
+    #ifdef OOMPH_HAS_MPI
+    //This only for distributed meshes
+    /*if (p->is_distributed())
+    {
+      this->set_communicator_pt(p->communicator_pt());
+    }*/
+    #endif
     codeinst = code;
     if (code && dirichlet_active.empty())
     {
@@ -4005,6 +4012,29 @@ namespace pyoomph
       delete opposite_interior_facets[i];
     opposite_interior_facets.clear();
     //	 if (this->spatial_error_estimator_pt()) delete this->spatial_error_estimator_pt();
+  }
+
+  void InterfaceMesh::update_zeta_in_buffer()
+  {
+    for (unsigned int ie = 0; ie < this->nelement(); ie++)
+    {
+      BulkElementBase *be = dynamic_cast<BulkElementBase *>(this->element_pt(ie));
+      DynamicBulkElementInstance *ci = be->get_code_instance();
+      auto *functable = ci->get_func_table();
+      auto &eleminfo = *be->get_eleminfo();
+      unsigned offset_zeta=eleminfo.nodal_dim + functable->lagr_dim +be->dim(); // This is the offset for the zeta coordinate in the nodal data ( first Eulerian, then Lagrangian, then local coords. Finally zeta coords)
+      auto *ft = ci->get_func_table();
+      oomph::Vector<double> zeta(be->dim(), 0.0);
+      oomph::Vector<double> sinter(be->dim(), 0.0);
+      for (unsigned int in=0;in<be->nnode();in++)
+      {                        
+        for (unsigned int iz=0;iz<be->dim();iz++)
+        {
+          //std::cout << "SETTING ZETA " << in << "  " << iz << " to ["<< offset_zeta+iz <<"]" << be->zeta_nodal(in,0,iz) << std::endl;
+          *(be->get_eleminfo()->nodal_coords[in][offset_zeta+iz])=be->zeta_nodal(in,0,iz);
+        }        
+      }
+    }
   }
 
   void InterfaceMesh::fill_internal_facet_buffers(std::vector<BulkElementBase *> &internal_elements, std::vector<int> &internal_face_dir, std::vector<BulkElementBase *> &opposite_elements, std::vector<int> &opposite_face_dir, std::vector<int> &opposite_already_at_index)

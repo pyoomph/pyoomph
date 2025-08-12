@@ -13,3 +13,4 @@ While the previous chapter was dedicated on temporal ODEs, this section will foc
    spatial/math.rst   
    spatial/mesh.rst
    spatial/stokes.rst               
+   spatial/helmholtz.rst                  

@@ -43,6 +43,7 @@ axisymmetric=AxisymmetricCoordinateSystem()
 axisymmetric_flipped=AxisymmetricCoordinateSystem(use_x_as_symmetry_axis=True)
 radialsymmetric=RadialSymmetricCoordinateSystem()
 
+pi=pi
 
 debug_ex=_pyoomph.GiNaC_debug_ex
 

@@ -2007,7 +2007,32 @@ class Equations(BaseEquations):
         if zcomponent is not None:
             master._azimuthal_r0_info[1].add("mesh"+zcomponent)
             master._azimuthal_r0_info[2].add("mesh"+zcomponent)
-        
+    
+    def _internal_define_scalar_field(self,name:str, space:"FiniteElementSpaceEnum", scale:Optional[Union["ExpressionOrNum",str]]=None, testscale:Optional[Union["ExpressionOrNum",str]]=None, discontinuous_refinement_exponent:Optional[float]=None):
+        master = self._get_combined_element()
+        if _pyoomph.get_verbosity_flag() != 0:
+            print("REGISTER", name, self, master, self == master, space)
+        master._register_field(name, space)
+        self._fields_defined_on_my_domain[name]=space
+        master._fields_defined_on_my_domain[name]=space
+        cg = master._assert_codegen()
+        if discontinuous_refinement_exponent is not None:
+            if discontinuous_refinement_exponent!=0:
+                if space!="D0":
+                    raise RuntimeError("Discontinuous refinement exponents only work for D0 at the moment")
+                cg._set_discontinuous_refinement_exponent(name,discontinuous_refinement_exponent)
+        cg._coordinate_space=find_dominant_element_space(cg._coordinate_space,space)
+                
+        if scale is not None:
+            self.set_scaling(**{name: scale})
+        if testscale is not None:
+            self.set_test_scaling(**{name:testscale})
+            
+        # Scalar fields are pinned by default for |m|=1 and |m|>=2
+        if space!="D0" and space!="DL":
+            master._azimuthal_r0_info[1].add(name)
+            master._azimuthal_r0_info[2].add(name)
+
 
     def define_scalar_field(self, name:Union[str,List[str]], space:"FiniteElementSpaceEnum",scale:Optional[Union["ExpressionOrNum",str]]=None,testscale:Optional[Union["ExpressionOrNum",str]]=None,discontinuous_refinement_exponent:Optional[float]=None):
         """
@@ -2023,36 +2048,8 @@ class Equations(BaseEquations):
         if not isinstance(name, str):
             for n in name:
                 self.define_scalar_field(n, space, scale=scale, testscale=testscale,discontinuous_refinement_exponent=discontinuous_refinement_exponent)
-            return
-        master = self._get_combined_element()
-        if _pyoomph.get_verbosity_flag() != 0:
-            print("REGISTER", name, self, master, self == master, space)
-        master._register_field(name, space)
-        self._fields_defined_on_my_domain[name]=space
-        master._fields_defined_on_my_domain[name]=space
-        cg = master._assert_codegen()
-        if discontinuous_refinement_exponent is not None:
-            if discontinuous_refinement_exponent!=0:
-                if space!="D0":
-                    raise RuntimeError("Discontinuous refinement exponents only work for D0 at the moment")
-                cg._set_discontinuous_refinement_exponent(name,discontinuous_refinement_exponent)
-        cg._coordinate_space=find_dominant_element_space(cg._coordinate_space,space)
-        #if cg._coordinate_space == "" and (space == "C1" or space=="D1"):
-        #    cg._coordinate_space = "C1"
-        #if (cg._coordinate_space == "" or cg._coordinate_space == "C1") and (space == "C2" or space=="D2"):
-        #    cg._coordinate_space = "C2"
-        #if (cg._coordinate_space == "" or cg._coordinate_space == "C1" or cg._coordinate_space == "C2") and (space == "C2TB" or space=="D2TB"):
-        #    cg._coordinate_space = "C2TB"            
-        if scale is not None:
-            self.set_scaling(**{name: scale})
-        if testscale is not None:
-            self.set_test_scaling(**{name:testscale})
-            
-        # Scalar fields are pinned by default for |m|=1 and |m|>=2
-        if space!="D0" and space!="DL":
-            master._azimuthal_r0_info[1].add(name)
-            master._azimuthal_r0_info[2].add(name)
-
+            return        
+        self.get_coordinate_system().define_scalar_field(name, space, self,scale,testscale,discontinuous_refinement_exponent)
 
     def define_vector_field(self, name:str, space:"FiniteElementSpaceEnum", dim:Optional[int]=None,scale:"ExpressionNumOrNone"=None,testscale:"ExpressionNumOrNone"=None):
         """

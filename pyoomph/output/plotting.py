@@ -670,8 +670,11 @@ class MatplotlibVectorFieldArrows(MatplotlibTriangulationBased):
     arrowdensity:float=50
     use_quiver:bool=False # Quiver plots faster, but is less customizeable
 
+    invisible:bool=False
 
     def add_to_plot(self):
+        if self.invisible:
+            return
         vx=self.data[0]
         vy = self.data[1]
         if (self.plotter.xmin is None) or (self.plotter.xmax is None) or (self.plotter.ymax  is None) or (self.plotter.ymin  is None):
@@ -1013,8 +1016,8 @@ class MatplotLibInterfaceLine(MatplotLibPartWithMeshData):
     def __init__(self,plotter:"MatplotlibPlotter"):
         super(MatplotLibInterfaceLine, self).__init__(plotter=plotter)
 
-    def add_to_plot(self):
-        coordinates = self.mshcache.get_coordinates(lagrangian=self.use_lagrangian_coordinates)
+    def add_to_plot(self):        
+        coordinates = self.mshcache.get_coordinates(lagrangian=self.use_lagrangian_coordinates)        
         data=self.mshcache.get_data(self.field)
         #assert data is not None
         if not self.transform is None:
@@ -2316,7 +2319,8 @@ class MatplotlibPlotter(BasePlotter):
 
 
     def _get_mesh_data(self,msh:Union[str,AnySpatialMesh],problem_name:str="",ignore_eigenfactors:bool=False,mirror_x:bool=False):
-        if ignore_eigenfactors or (self._eigenfactor_right is None or self._eigenfactor_left is None or self._eigenvector_for_animation is None):
+        
+        if ignore_eigenfactors or (self._eigenfactor_right is None or self._eigenfactor_left is None or self._eigenvector_for_animation is None):            
             return self.get_problem(problem_name=problem_name).get_cached_mesh_data(msh,nondimensional=False,tesselate_tri=True,eigenvector=self.eigenvector,eigenmode=self.eigenmode,add_eigen_to_mesh_positions=self.add_eigen_to_mesh_positions)
         else:
             self.get_problem(problem_name=problem_name).invalidate_cached_mesh_data()
@@ -2609,7 +2613,7 @@ class MatplotlibPlotter(BasePlotter):
         if mode=="image":
             pass
         else:
-            msh=infield.split("/")
+            msh=infield.split("/")            
             if len(msh)<2:
                 if len(msh)==1:
                     # Assuming no data to be plotted on a bulk mesh
@@ -2627,12 +2631,15 @@ class MatplotlibPlotter(BasePlotter):
             if msh is None:
                 raise ValueError("Cannot find the mesh "+mshname+" in the problem to plot "+str(field))
             dim=msh.get_dimension()
+            
             cached=self._get_mesh_data(msh,problem_name=problem_name,ignore_eigenfactors=True)
+            
+            
             if mode is None:
                 if field is None:
                     if dim==2:
                         mode="outlines"
-                    else:
+                    else:                        
                         mode="interfaceline"
                 elif dim==2:
                     mode="tricontourf"
@@ -2678,7 +2685,7 @@ class MatplotlibPlotter(BasePlotter):
         if isinstance(part,MatplotLibPartWithMeshData):
             mirror_x=False
             if transformG is not None:
-                mirror_x=transformG.get_mirror()[0]
+                mirror_x=transformG.get_mirror()[0]            
             part.set_mesh_data(self._get_mesh_data(msh,problem_name=problem_name,mirror_x=mirror_x),field,transformG) #type:ignore
         elif isinstance(part,MatplotLibTracers):
             part.set_tracer_data(field,msh,transformG) #type:ignore

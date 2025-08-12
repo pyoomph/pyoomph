@@ -44,6 +44,12 @@ Alternatively, you can let PETSc download it as well by adding ``--download-biso
 	
 You can also add optimization or OpenMP support, e.g. ``--with-debugging=0``, ``-with-openmp``,  ``--with-openmp-kernels``. For all details, please call ``./configure --help``.
 
+.. note::
+	If you should have issues with `cmake` on Ubuntu (and potentially other distros), try
+		#. Install cmake (updated version, see https://askubuntu.com/questions/355565/how-do-i-install-the-latest-version-of-cmake-from-the-command-line) 
+		#. add flag ``--download-fblasapack=1`` when configuring
+	
+
 At the end of the configuration process, a ``make`` command will be written, which you have to execute as a next step.
 
 Afterwards, PETSc/SLEPc is installed to the folder ``A_FOLDER_OF_YOUR_CHOICE/petsc/pyoomph_petsc_arch``.

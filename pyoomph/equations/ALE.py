@@ -474,6 +474,11 @@ class VolumeEnforcingBoundary(Equations):
 
 
 class EnforceVolumeByPressure(IntegralConstraint):
+    """Enforces a volume of an ALE mesh with a (Navier-)Stokes equation by adjusting the pressure until the volume is correct. Usually, you need a free surface for this as well which can deform to grow or shrink until the desired volume is reached by adjusting the pressure.
+
+    Args:
+        volume: The desired volume to be enforced. This can be a constant or any expression, e.g. a global parameter or a function of time.
+    """
     def __init__(self,volume:ExpressionOrNum,*,ode_storage_domain: Optional[str] = None, only_for_stationary_solve: bool = False, set_zero_on_normal_mode_eigensolve: bool = True, scaling_factor:Union[str,ExpressionNumOrNone]=None):
         if scaling_factor is None:
             scaling_factor=1
@@ -488,3 +493,125 @@ class EnforceVolumeByPressure(IntegralConstraint):
             raise RuntimeError("EnforceVolumeByPressure only works with moving meshes")
         return super().define_residuals()
         
+        
+        
+
+
+class EnforcedInterfacialLaplaceSmoothing(InterfaceEquations):
+    """
+    This class can be attached to interfaces of a moving mesh. It ensures that the nodes along this boundary will be placed equidistantly along the interface line with respect to the initial configuration.
+    This can be helpful if you e.g. add a mesh deformation at a single point, e.g. a contact line, which will deform the bulk elements quite dramatically. If the interfaces are associated with this class, the interfaces will move nicely along, keeping the bulk elements in better shape.
+    In order to use it, add it to the interface and use the `with_corners` method to specify the corners of the interface. 
+    So if e.g. a line "substrate" of a domain "droplet" starts at a corner with the boundary "axis" and ends at a corner at the boundary "liquid_gas", just add
+    
+        EnforcedInterfacialLaplaceSmoothing().with_corners("axis","liquid_gas")@"substrate"
+        
+    to the droplet domain. The same should be done with 
+    
+        EnforcedInterfacialLaplaceSmoothing().with_corners("axis","substrate")@"liquid_gas"
+        
+    So that a motion of the contact line will be smooth.
+    
+    """
+    required_parent_type=BaseMovingMeshEquations
+    def __init__(self,coordinate_system=cartesian):
+        super().__init__()
+        self.coordsys=coordinate_system
+        self.verbose=True
+        
+    def define_fields(self):        
+        # Get the coordinate space
+        space=self._get_combined_element()._assert_codegen()._coordinate_space
+        # each interface will need a unique name, so that we have individual fields for each interface
+        # This won't be necessary in the general case, since usually, you have corners between two boundaries
+        fn=self._get_combined_element()._assert_codegen().get_full_name()
+        iname="__".join(fn.split("/")[1:])        
+        self.define_scalar_field("_s_fixed_"+iname,space) # Fixed arclength of the reference configuration
+        self.define_scalar_field("_s_solved_"+iname,space,testscale=scale_factor("spatial")**2) # solved arclength between start and end points
+        self.define_scalar_field("_tang_shift_"+iname,space,scale=1/test_scale_factor("mesh")) # Lagrange multiplier for the tangential shift of the interface nodes, which is used to enforce the tangential movement of the interface nodes along the line.
+        
+                    
+
+        
+    def define_residuals(self):
+        if self.get_nodal_dimension()!=2: 
+            raise RuntimeError("EnforcedInterfacialLaplaceSmoothing is only implemented for 2d meshes")
+        # Bind everything
+        fn=self._get_combined_element()._assert_codegen().get_full_name()
+        iname="__".join(fn.split("/")[1:])
+        s,stest=var_and_test("_s_solved_"+iname)
+        
+        s0=var("_s_fixed_"+iname)
+        l,ltest=var_and_test("_tang_shift_"+iname)
+        
+        # If you want to use it with normal mode expansion eigenproblems, we don't have to expand it
+        s=var("_s_solved_"+iname,only_base_mode=True) # This is the arclength between the start and end points of the interface
+        s0=var("_s_fixed_"+iname,only_base_mode=True)
+        l=var("_tang_shift_"+iname,only_base_mode=True)
+        n=var("normal")
+        
+        self.add_weak(grad(s,coordsys=self.coordsys),grad(stest,coordsys=self.coordsys),coordinate_system=self.coordsys)
+        
+        t=vector(-n[1],n[0])  # Tangential vector
+        self.add_weak(s-s0,ltest,coordinate_system=self.coordsys) # Ensure that the arclength is equal to the initial arclength 
+        # by shifting the nodes tangentially along the line
+        self.add_weak(l*t,testfunction("mesh"),coordinate_system=self.coordsys)
+        # Fix the reference configuration
+        self.set_Dirichlet_condition("_s_fixed_"+iname,True)
+        
+    def before_assigning_equations_postorder(self, mesh):
+        # Just make sure to initialize the arclengths of the interface nodes
+        fn=self._get_combined_element()._assert_codegen().get_full_name()
+        iname="__".join(fn.split("/")[1:])
+        data=mesh.get_problem().get_cached_mesh_data(mesh)
+        segs,_=data.get_interface_line_segments()
+        coords=data.get_coordinates()                
+        nodes=mesh.fill_node_index_to_node_map()
+        fixed_index=mesh.has_interface_dof_id("_s_fixed_"+iname)
+        dyn_index=mesh.has_interface_dof_id("_s_solved_"+iname)        
+        for seg in segs:
+            al=0.0
+            lastx=coords[0,seg[0]]
+            lasty=coords[1,seg[0]]
+            for s in seg:
+                x,y=coords[0,s],coords[1,s]
+                delta=numpy.sqrt((x-lastx)**2+(y-lasty)**2)
+                al+=delta
+                nodes[s].set_value(nodes[s].additional_value_index(fixed_index),al)
+                nodes[s].set_value(nodes[s].additional_value_index(dyn_index),al)
+                lastx,lasty=x,y
+
+
+    def with_corners(self, *corners):
+        """Easy wrapper to add corners to the interface equations. These will pin the values of the arclength and deactivate the tangential shift at this nodes"""
+        res=self
+        for c in corners:
+            res+=EnforcedInterfacialLaplaceSmoothingCorner()@c
+        return res
+    
+           
+    def _get_forced_zero_dofs_for_eigenproblem(self, eqtree, eigensolver, angular_mode, normal_k):
+        if angular_mode is None:
+            return set()
+        
+        angular_mode=int(angular_mode)
+        fn=self._get_combined_element()._assert_codegen().get_full_name()
+        iname="__".join(fn.split("/")[1:])        
+        
+        if angular_mode==0:
+            return set()
+        else:            
+            info={fn+"/_s_fixed_"+iname,fn+"/_s_solved_"+iname,fn+"/_tang_shift_"+iname}
+            print("EnforcedInterfacialLaplaceSmoothing (mode m="+str(angular_mode)+"): Imposed zero tangential shift correction",self.get_current_code_generator().get_full_name(),"for",info)
+            return info
+        
+            
+
+class EnforcedInterfacialLaplaceSmoothingCorner(InterfaceEquations):
+    """Helper class to pin the arclength and deactivate the tangential shift at a corner of an interface. This is used in EnforcedInterfacialLaplaceSmoothing.with_corners"""
+    required_parent_type=EnforcedInterfacialLaplaceSmoothing
+    def define_residuals(self):
+        fn=self._get_combined_element()._assert_codegen().get_full_name()
+        iname="__".join(fn.split("/")[1:-1])
+        self.set_Dirichlet_condition("_s_solved_"+iname,True) # fix the arclength of the corner
+        self.set_Dirichlet_condition("_tang_shift_"+iname,0) # deactivate the tangential shift of the corner

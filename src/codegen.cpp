@@ -2616,13 +2616,37 @@ namespace pyoomph
 
 			coordinates_as_dofs = bulk_code->coordinates_as_dofs; // We need to transfer the information regarding moving nodes
 																  // Copy the coordinates
+
+			int bulk_coordinate_index_max=0;
 			for (unsigned int j = 0; j < bulk_code->myfields.size(); j++)
 			{
 				FiniteElementSpace *bulkspace = bulk_code->myfields[j]->get_space();
 				if (dynamic_cast<PositionFiniteElementSpace *>(bulkspace))
 				{
+					std::string n=bulk_code->myfields[j]->get_name();					
+					if (n.rfind("zeta_coordinate_", 0) == 0)
+					{
+						continue; // We do not index or copy zeta coordinates
+					}
+					if (n.rfind("local_coordinate_", 0) == 0)
+					{
+						int index=std::stoi(n.substr(17));												
+						if (index>element_dim) continue;
+					}
 					FiniteElementField *f = this->register_field(bulk_code->myfields[j]->get_name(), bulk_code->myfields[j]->get_space()->get_name());
 					f->index = bulk_code->myfields[j]->index;
+					bulk_coordinate_index_max= std::max(bulk_coordinate_index_max, f->index);
+				}
+			}
+
+			// Now check the zeta coordinates, which are not indexed yet
+			for (unsigned int j = 0; j < this->myfields.size(); j++)
+			{
+				std::string n=this->myfields[j]->get_name();					
+				if (n.rfind("zeta_coordinate_", 0) == 0)
+				{
+					this->myfields[j]->index = bulk_coordinate_index_max + 1; // We just take the next index
+					bulk_coordinate_index_max++;
 				}
 			}
 
@@ -5669,6 +5693,16 @@ namespace pyoomph
 			this->register_field("local_coordinate_" + dir[i], "Pos")->no_jacobian_at_all = true; // Lagrangian coordinates never have Jacobian entries, since they are fixed
 		}		
 
+		if (this->bulk_code && !this->bulk_code->bulk_code) 
+		{
+			// Only do this on co-dim 1 interfaces for now, then zetas are unique
+			for (unsigned int i = 0; i < this->element_dim; i++)
+			{
+				std::vector<std::string> dir{"1", "2", "3"};
+				this->register_field("zeta_coordinate_" + dir[i], "Pos")->no_jacobian_at_all = true; // Lagrangian coordinates never have Jacobian entries, since they are fixed
+			}		
+		}
+
 		for (unsigned int i = 0; i < this->nodal_dim; i++) // Adding the mesh coordinates -> They in fact can be derived by t, whereas the partial_t( coordinate) =0
 		{
 			std::vector<std::string> dir{"x", "y", "z"};
@@ -6814,6 +6848,8 @@ namespace pyoomph
 				continue;
 			if (nam == "local_coordinate_1" || nam == "local_coordinate_2" || nam == "local_coordinate_3")
 				continue;				
+			if (nam == "zeta_coordinate_1" || nam == "zeta_coordinate_2" || nam == "zeta_coordinate_3")
+				continue;								
 			if (nam == "mesh_x")
 				nam = "coordinate_x";
 			else if (nam == "mesh_y")
@@ -8189,6 +8225,8 @@ namespace GiNaC
 					return 0;
 				if (sp.field->get_name() == "local_coordinate_1" || sp.field->get_name() == "local_coordinate_2" || sp.field->get_name() == "local_coordinate_3")
 					return 0;
+				if (sp.field->get_name() == "zeta_coordinate_1" || sp.field->get_name() == "zeta_coordinate_2" || sp.field->get_name() == "zeta_coordinate_3")
+					return 0;
 			}
 			std::string timescheme;
 			unsigned dt_order = sp.dt_order + 1;
@@ -8370,6 +8408,10 @@ namespace GiNaC
 			return GiNaCShapeExpansion(se);
 		}
 
+		else if (s == pyoomph::expressions::zeta_coordinate_1 || s == pyoomph::expressions::zeta_coordinate_2 || s == pyoomph::expressions::zeta_coordinate_3)
+		{
+			throw_runtime_error("Cannot derive with respect to zeta coordinates yet. This is not implemented in the code, as it is not needed for the current applications. If you need this, please contact the developers.");
+		}
 		// Local coordinate diffs
 		else if (s == pyoomph::expressions::local_coordinate_1 || s == pyoomph::expressions::local_coordinate_2 || s == pyoomph::expressions::local_coordinate_3)
 		{
@@ -8662,7 +8704,11 @@ namespace GiNaC
 				return 0;
 			else
 				return GiNaCTestFunction(pyoomph::TestFunction(sp.field, sp.basis->get_diff_S(2)));
-		}				
+		}			
+		else if (s==pyoomph::expressions::zeta_coordinate_1 || s==pyoomph::expressions::zeta_coordinate_2 || s==pyoomph::expressions::zeta_coordinate_3)	
+		{
+			throw_runtime_error("Cannot derive with respect to zeta coordinates yet. This is not implemented in the code, as it is not needed for the current applications. If you need this, please contact the developers.");
+		}
 		else
 		{
 			std::ostringstream oss;

@@ -13,6 +13,7 @@ We slowly generalize the example problem to more and more complex scenarios:
    spread/free.rst
    spread/navier.rst   
    spread/threedim.rst   
-   spread/maraandgrav.rst   
+   spread/maraandgrav.rst
+   spread/hyperelastic.rst         
 
 

@@ -637,8 +637,10 @@ class Problem(_pyoomph.Problem):
         Returns:
             MeshDataCacheEntry: The combined information of the mesh cache
         """
+        
         if isinstance(msh,str):
             msh=self.get_mesh(msh)
+        
         return self._mesh_data_cache.get_data(msh,nondimensional=nondimensional,tesselate_tri=tesselate_tri,eigenvector=eigenvector,eigenmode=eigenmode,history_index=history_index,with_halos=with_halos,operator=operator,discontinuous=discontinuous,add_eigen_to_mesh_positions=add_eigen_to_mesh_positions)
 
     def invalidate_cached_mesh_data(self,only_eigens:bool=False):
@@ -1778,14 +1780,14 @@ class Problem(_pyoomph.Problem):
 
 
     def __iadd__(self,other:Union[MeshTemplate,EquationTree,GenericProblemHooks,"MatplotlibPlotter"]):
-        from pyoomph.output.plotting import MatplotlibPlotter
-        if self._initialised and not isinstance(other,(MatplotlibPlotter,GenericProblemHooks)):
+        from pyoomph.output.plotting import BasePlotter
+        if self._initialised and not isinstance(other,(BasePlotter,GenericProblemHooks)):
             raise RuntimeError("Cannot add anything to a problem once it is initialized!")
         if isinstance(other,MeshTemplate):
             self.add_mesh(other)
         elif isinstance(other,EquationTree):
             self.additional_equations+=other
-        elif isinstance(other,MatplotlibPlotter):
+        elif isinstance(other,BasePlotter):
             if self.plotter is None:
                 self.plotter=other
             elif isinstance(self.plotter,list):
@@ -5103,7 +5105,41 @@ class Problem(_pyoomph.Problem):
 
         self._nondim_time_after_last_run_statement=float(self.get_current_time()/TS)
         return currentdt
+    
 
+    def deflated_solve_by_eigenperturbation(self, eigenindex:int=0, keep_deflation_active:bool=False, perturbation_factor:float=1,deflation_alpha:float=0.1,deflation_power:int=2,*, max_newton_iterations:Optional[int]=None, newton_relaxation_factor:Optional[float]=None, newton_solver_tolerance:Optional[float]=None, globally_convergent_newton:bool=False):        
+        """Tries to find another stationary solution by deflation. The procedure is implemented according to 'Deflation techniques for finding distinct solutions of nonlinear partial differential equations' by
+Patrick E. Farrell, Ásgeir Birkisson & Simon W. Funke, https://arxiv.org/pdf/1410.5620.pdf .
+
+        Args:
+            deflation_alpha (float, optional): Shift of the deflation operator. Defaults to 0.1.
+            deflation_p (int, optional): Order of the deflation. Defaults to 2.
+            perturbation_amplitude (float, optional): Perturbation amplitude to move away from the previous solution. Defaults to 1.
+            max_newton_iterations (Optional[int], optional): Optional override of the number of Newton iterations to try. Defaults to None.
+            newton_relaxation_factor (Optional[float], optional): Optional override of the Newton relaxation factor. Defaults to None.        
+            
+        """
+        if eigenindex < 0:
+            raise ValueError("Eigenindex must be non-negative.")
+        if self.get_last_eigenvectors() is None or len(self.get_last_eigenvectors())<=eigenindex:            
+            raise ValueError("No eigenvector at index "+str(eigenindex)+" available to perturb. Please solve the eigenproblem first.")
+
+        from pyoomph.generic.bifurcation_tools import DeflationAssemblyHandler        
+        old=self.get_custom_assembler()
+        if not isinstance(old, DeflationAssemblyHandler):
+            defl=DeflationAssemblyHandler(alpha=deflation_alpha, p=deflation_power)
+            self.set_custom_assembler(defl)            
+            defl.add_known_solution(self.get_current_dofs()[0])  
+        else:
+            defl=old
+        self.perturb_dofs(self.get_last_eigenvectors()[0]*perturbation_factor)
+        self.solve(max_newton_iterations=max_newton_iterations,newton_relaxation_factor=newton_relaxation_factor,newton_solver_tolerance=newton_solver_tolerance,globally_convergent_newton=globally_convergent_newton)
+        
+        if not keep_deflation_active:
+            self.set_custom_assembler(old)
+        else:
+            defl.add_known_solution(self.get_current_dofs()[0])
+            
 
     def iterate_over_multiple_solutions_by_deflation(self,deflation_alpha:float=0.1,deflation_p:int=2,perturbation_amplitude:float=0.5,max_newton_iterations:Optional[int]=None,newton_relaxation_factor:Optional[float]=None,use_eigenperturbation:bool=False,skip_initial_solution:bool=False,num_random_tries:int=1,keep_deflation_operator_active:bool=False)-> Generator[NPFloatArray,None,None]:
         """Tries to find multiple stationary solutions by deflation. The procedure is implemented according to 'Deflation techniques for finding distinct solutions of nonlinear partial differential equations' by

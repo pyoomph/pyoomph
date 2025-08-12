@@ -290,6 +290,7 @@ namespace pyoomph
     extern GiNaC::potential_real_symbol Y; // Lagrangian
     extern GiNaC::potential_real_symbol Z;
     extern GiNaC::potential_real_symbol local_coordinate_1,local_coordinate_2,local_coordinate_3;
+    extern GiNaC::potential_real_symbol zeta_coordinate_1, zeta_coordinate_2, zeta_coordinate_3; 
     extern GiNaC::potential_real_symbol nx;
     extern GiNaC::potential_real_symbol ny;
     extern GiNaC::potential_real_symbol nz;
