@@ -19,6 +19,8 @@ export PYOOMPH_CONFIG_FILE=$(readlink -f ./citools/pyoomph_config_windows_cross.
 # if this is set, you must first call the Makefile in src/ to build everything unrelated of python
 export PYOOMPH_FAST_MULTI_VERSION_BUILD=true
 
+AUTOTTOLS_FILES=$(readlink -f "citools/autotools_files")
+
 export CFLAGS="-O2 -g0 -DNDEBUG"
 export CXXFLAGS="-O2 -g0 -DNDEBUG"
 export CPPFLAGS="-DNO_ASM -g0 -DNDEBUG"
@@ -37,6 +39,8 @@ mkdir -p $PREFIX || exit 1
 rm -rf "$PYOOMPH_STATIC_GINAC_DIR/cln"  || exit 1
 cd $PYOOMPH_STATIC_GINAC_DIR || exit 1
 git clone git://www.ginac.de/cln.git || exit 1
+cp -r $AUTOTTOLS_FILES/m4 cln/ || exit 1
+cp -r $AUTOTTOLS_FILES/build-aux cln/ || exit 1
 cd cln || exit 1
 ./autogen.sh || exit 1
 ./configure --without-gmp --disable-shared --enable-static --with-pic=yes --prefix "$PREFIX" $PYOOMPH_GINAC_CONFIGURE_OPTIONS || exit 1
