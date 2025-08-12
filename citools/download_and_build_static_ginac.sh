@@ -21,15 +21,21 @@ fi
 mkdir -p "$PYOOMPH_STATIC_GINAC_DIR" || exit 1
 
 PYOOMPH_STATIC_GINAC_DIR=$(readlink -f "$PYOOMPH_STATIC_GINAC_DIR")
+AUTOTTOLS_FILES=$(readlink -f "citools/autotools_files")
 
 
 rm -rf "$PYOOMPH_STATIC_GINAC_DIR/cln"  || exit 1
 rm -rf "$PYOOMPH_STATIC_GINAC_DIR/ginac"  || exit 1
 
 
+
+
 cd $PYOOMPH_STATIC_GINAC_DIR || exit 1
 git clone git://www.ginac.de/cln.git || exit 1
 git clone git://www.ginac.de/ginac.git || exit 1
+
+cp -r $AUTOTTOLS_FILES/m4 cln/
+cp -r $AUTOTTOLS_FILES/build-aux cln/
 
 mkdir -p $PYOOMPH_STATIC_GINAC_DIR/install || exit 1
 
