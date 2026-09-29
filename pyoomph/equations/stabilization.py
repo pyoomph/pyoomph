@@ -194,9 +194,11 @@ class ScalarTransportStabilization:
     field, :math:`\\vec{a}=\\vec{u}-\\vec{u}_\\text{mesh}` the advecting velocity relative to the
     mesh and :math:`R` the strong residual of the transport equation,
 
-    .. math:: \\text{SUPG}\\quad &\\sum_K (\\tau\\,\\vec{a}\\cdot\\nabla v,\\; R)_K
-    .. math:: \\text{GLSDIFF/ASGSDIFF}\\quad &\\mp\\sum_K (\\tau\\,D\\,\\nabla^2 v,\\; R)_K
-    .. math:: \\text{DC}\\quad &\\sum_K (\\hat\\rho\\,\\nu_\\text{dc}\\,\\mathbf{P}\\nabla c,\\;\\nabla v)_K
+    .. math::
+
+        \\text{SUPG}\\quad &\\sum_K (\\tau\\,\\vec{a}\\cdot\\nabla v,\\; R)_K \\\\
+        \\text{GLSDIFF/ASGSDIFF}\\quad &\\mp\\sum_K (\\tau\\,D\\,\\nabla^2 v,\\; R)_K \\\\
+        \\text{DC}\\quad &\\sum_K (\\hat\\rho\\,\\nu_\\text{dc}\\,\\mathbf{P}\\nabla c,\\;\\nabla v)_K
 
     The first two are proportional to :math:`R` and hence vanish for the exact solution. The
     discontinuity capturing term does not: it is an artificial diffusivity whose *magnitude* is
@@ -232,34 +234,9 @@ class ScalarTransportStabilization:
             BDF1 weight, which pyoomph zeroes in a steady solve, so the term switches itself off
             there.
         include_diffusion_in_residual: keep the second-derivative diffusive term
-            :math:`\\nabla\\cdot(D\\nabla c)` in the strong residual.
-
-            **Switch it off on a mesh of linear simplices.** On an affine element map the second
-            derivatives of C1 shape functions vanish identically, so the term contributes nothing
-            and computing it is pure cost -- measured, dropping it changes the residual by 0 on
-            triangles and 0 on tets, and saves about 1.37x on Jacobian assembly (the whole
-            second-derivative shape machinery stops being generated). This is the case where
-            turning it off is free rather than an approximation.
-
-            Measured relative change of the residual when dropping it elsewhere:
-
-            ===========================  ========
-            C1 triangles / tets           0
-            C1 quads, undistorted         1.8e-17
-            C1 quads, bilinearly warped   2.4e-02
-            C2 triangles                  1.4e-01
-            C2 tets                       1.6e-01
-            ===========================  ========
-
-            The undistorted-quad entry is real but fragile, and not a reason to switch this on for a
-            quad mesh: a bilinear Q1 function has :math:`\\partial_{xx}=\\partial_{yy}=0` only while
-            the elements stay rectangles, which any mesh distortion -- and every moving mesh -- ends.
-            The safe rule is the simplex one.
-
-            It must also be off on wedges, pyramids and 0d domains, where second derivatives are
-            unavailable at all.
-
-            The momentum counterpart is
+            :math:`\\nabla\\cdot(D\\nabla c)` in the strong residual. Switch it off on a mesh of
+            linear simplices, and on wedges, pyramids and 0d domains it must be off; see
+            *When to switch off the diffusive term* below. The momentum counterpart is
             :py:attr:`~pyoomph.equations.stabilized_ns.StabilizedNavierStokes.include_viscous_in_residual`.
         conservative_residual: whether the *advective* part of the strong residual is written in
             conservative form :math:`\\nabla\\cdot(\\vec{a}c)` or convective form
@@ -286,6 +263,27 @@ class ScalarTransportStabilization:
             flux rather than the physical flux plus that footprint. ``True`` for all of them,
             ``False`` (the default) for none, or an iterable of ``"SUPG"``, ``"DC"``. See
             :py:meth:`ScalarTransportStabilizationMixin.get_stabilization_flux`.
+
+    **When to switch off the diffusive term.** On an affine element map the second derivatives of C1
+    shape functions vanish identically, so ``include_diffusion_in_residual`` contributes nothing and
+    computing it is pure cost -- measured, dropping it changes the residual by 0 on triangles and 0
+    on tets, and saves about 1.37x on Jacobian assembly (the whole second-derivative shape machinery
+    stops being generated). This is the case where turning it off is free rather than an
+    approximation. Measured relative change of the residual when dropping it elsewhere:
+
+    ===========================  ========
+    C1 triangles / tets           0
+    C1 quads, undistorted         1.8e-17
+    C1 quads, bilinearly warped   2.4e-02
+    C2 triangles                  1.4e-01
+    C2 tets                       1.6e-01
+    ===========================  ========
+
+    The undistorted-quad entry is real but fragile, and not a reason to switch this on for a quad
+    mesh: a bilinear Q1 function has :math:`\\partial_{xx}=\\partial_{yy}=0` only while the elements
+    stay rectangles, which any mesh distortion -- and every moving mesh -- ends. The safe rule is the
+    simplex one. It must also be off on wedges, pyramids and 0d domains, where second derivatives are
+    unavailable at all.
     """
 
     def __init__(self, terms: "str | Iterable[str] | None" = "SUPG", *,

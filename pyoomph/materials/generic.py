@@ -2903,17 +2903,19 @@ class MixtureLiquidProperties(BaseLiquidProperties,BaseMixedProperties):
             :py:func:`~pyoomph.materials.diffusivity_estimates.scan_thermodynamic_factor` to find
             where it happens.
 
-        Args:
-            method: How the Maxwell-Stefan diffusivities are obtained.
+        The ``method`` argument selects how the Maxwell-Stefan diffusivities are obtained:
 
-                * ``"vignes"``: the Wesselingh-Krishna generalization of the Vignes interpolation
-                  between the infinite-dilution values, which come from the Wilke-Chang correlation.
-                * ``"stokes_einstein"``: :math:`k_\mathrm{B}T/(6\pi\mu\bar{r}_{ij})` with the mean of
-                  the two hydrodynamic radii.
-                * ``"darken"``: :math:`x_jD_i^\mathrm{self}+x_iD_j^\mathrm{self}`, from
-                  :py:attr:`PureLiquidProperties.self_diffusivity` where set and from Stokes-Einstein
-                  otherwise.
-                * ``"given"``: every pair has to be supplied in ``maxwell_stefan_diffusivities``.
+        * ``"vignes"``: the Wesselingh-Krishna generalization of the Vignes interpolation
+          between the infinite-dilution values, which come from the Wilke-Chang correlation.
+        * ``"stokes_einstein"``: :math:`k_\mathrm{B}T/(6\pi\mu\bar{r}_{ij})` with the mean of
+          the two hydrodynamic radii.
+        * ``"darken"``: :math:`x_jD_i^\mathrm{self}+x_iD_j^\mathrm{self}`, from
+          :py:attr:`PureLiquidProperties.self_diffusivity` where set and from Stokes-Einstein
+          otherwise.
+        * ``"given"``: every pair has to be supplied in ``maxwell_stefan_diffusivities``.
+
+        Args:
+            method: How the Maxwell-Stefan diffusivities are obtained, see the list above.
             maxwell_stefan_diffusivities: Overrides individual Maxwell-Stefan diffusivities, keyed by
                 the component pair. They are symmetric, so either order may be given.
             infinite_dilution_diffusivities: Overrides individual infinite-dilution diffusivities

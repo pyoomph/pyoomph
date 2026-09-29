@@ -1387,8 +1387,7 @@ class GmshTemplate(MeshedMeshTemplate):
                 by spatial refinement are placed on the sphere rather than on the surface Gmsh
                 actually meshed. Pass ``True`` to work the sphere out from the bounding curves, or a
                 ``(cx, cy, cz)`` centre to state it explicitly.
-
-                This is opt-in on purpose. A ruled surface is *not* in general a sphere -- Gmsh's
+                This is opt-in on purpose: a ruled surface is *not* in general a sphere -- Gmsh's
                 built-in kernel does not produce an exact sphere from one even when the bounding
                 curves are great-circle arcs -- so pyoomph cannot assume it. Say so only when the
                 surface really is meant to be spherical; the mesh's own nodes on it are then also

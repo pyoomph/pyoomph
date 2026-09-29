@@ -89,9 +89,11 @@ class StabilizedNavierStokes(NavierStokesEquations):
 
     The added terms are, per element interior,
 
-    .. math:: \\text{SUPG}\\quad &\\sum_K (\\tau_M\\,\\vec{a}\\cdot\\nabla\\vec{v},\\; \\vec{R}_M)_K
-    .. math:: \\text{PSPG}\\quad &\\sum_K (\\tau_M/\\rho\\; \\nabla q,\\; \\vec{R}_M)_K
-    .. math:: \\text{LSIC}\\quad &\\sum_K (\\tau_C\\rho\\,\\nabla\\cdot\\vec{u},\\; \\nabla\\cdot\\vec{v})_K
+    .. math::
+
+        \\text{SUPG}\\quad &\\sum_K (\\tau_M\\,\\vec{a}\\cdot\\nabla\\vec{v},\\; \\vec{R}_M)_K \\\\
+        \\text{PSPG}\\quad &\\sum_K (\\tau_M/\\rho\\; \\nabla q,\\; \\vec{R}_M)_K \\\\
+        \\text{LSIC}\\quad &\\sum_K (\\tau_C\\rho\\,\\nabla\\cdot\\vec{u},\\; \\nabla\\cdot\\vec{v})_K
 
     with :math:`\\vec{a}=\\vec{u}-\\vec{u}_\\text{mesh}` and the strong momentum residual
 
@@ -120,26 +122,9 @@ class StabilizedNavierStokes(NavierStokesEquations):
             squares), ``"codina"`` (inverse of the sum) or ``"tezduyar"``.
         tauC_formula: ``"codina"`` (:math:`h^2/(c_C\\tau_M)`) or ``"tezduyar"``.
         include_viscous_in_residual: keep :math:`-\\nabla\\cdot(2\\mu\\mathbf{D})` in the strong
-            residual.
-
-            **Switch it off on a mesh of linear simplices.** On an affine element map the second
-            derivatives of C1 shape functions vanish identically, so the term contributes nothing
-            and computing it is pure cost -- measured, dropping it changes the residual by exactly 0
-            on C1 triangles, and saves about 1.37x on Jacobian assembly.
-
-            **On C1 quads it depends on the viscous form, which is easy to get wrong.** The stress
-            form assembles :math:`\\mu(\\nabla\\cdot\\nabla\\vec{u} + \\nabla(\\nabla\\cdot\\vec{u}))`,
-            and the second term contains the *mixed* derivative
-            :math:`\\partial_{xy}u`, which a bilinear map does not kill even on an undistorted
-            rectangle. Measured on C1 quads: **4.0e-01** with ``viscous_form="stress"`` (the default)
-            against 0 with ``"laplace"``. So the simplex rule is the safe one; a quad mesh only
-            qualifies in the Laplace form, and then only while it stays undistorted.
-
-            Dropping it on C2 velocities costs three orders of magnitude in the pressure error
-            (dev_docs §2). It must also be off on wedges, pyramids and 0d domains, where second
-            derivatives do not exist.
-
-            The scalar-transport counterpart is
+            residual. Switch it off on a mesh of linear simplices, and on wedges, pyramids and 0d
+            domains it must be off; see *When to switch off the viscous term* below. The
+            scalar-transport counterpart is
             :py:attr:`~pyoomph.equations.stabilization.ScalarTransportStabilization.include_diffusion_in_residual`.
         constant_viscosity: assume :math:`\\nabla\\mu=0` when forming
             :math:`\\nabla\\cdot(2\\mu\\mathbf{D})`. Set to False for a variable viscosity, which
@@ -151,17 +136,8 @@ class StabilizedNavierStokes(NavierStokesEquations):
             condition the traction boundary conditions should subtract, so that they impose the
             physical traction rather than the physical traction plus that footprint. ``True`` for
             all of them, ``False`` (the default) for none, or an iterable of ``"SUPG"``, ``"LSIC"``,
-            ``"REYNOLDS"``.
-
-            It defaults to off because it is a trade-off rather than a free improvement. Measured on
-            C1/C1 Poiseuille with the exact traction prescribed at the outflow (so that the parabola
-            is not representable and the footprint is genuinely nonzero), switching the LSIC
-            correction on reduces the pressure error *at* that boundary by a uniform 21 % but
-            degrades the global pressure convergence from O(h^1.9) to O(h^1.6); the SUPG part
-            contributes almost nothing either way. On a static free surface the whole thing is a
-            wash. Switch it on when the traction on a particular boundary is the quantity of
-            interest -- an imposed load, a measured force, a coupling to another domain -- and leave
-            it off when the field in the interior is.
+            ``"REYNOLDS"``. It defaults to off because it is a trade-off rather than a free
+            improvement, see *When to correct the natural boundary condition* below.
         C_I: coefficient of the viscous term in :math:`\\tau_M`; :math:`\\tau_M\\to h^2/(C_I\\nu)` in
             the Stokes limit. The default 4 is what the textbook formula writes but is on the
             diffusive side; 36 converges measurably better.
@@ -174,6 +150,28 @@ class StabilizedNavierStokes(NavierStokesEquations):
             differentiable at rest. Given *relative* to the velocity scale, so that it remains
             meaningful in a dimensional problem.
         stab_factor: global prefactor on both :math:`\\tau`'s, for sensitivity studies.
+
+    **When to switch off the viscous term.** On an affine element map the second derivatives of C1
+    shape functions vanish identically, so ``include_viscous_in_residual`` contributes nothing and
+    computing it is pure cost -- measured, dropping it changes the residual by exactly 0 on C1
+    triangles, and saves about 1.37x on Jacobian assembly. On C1 quads it depends on the viscous
+    form, which is easy to get wrong: the stress form assembles
+    :math:`\\mu(\\nabla\\cdot\\nabla\\vec{u} + \\nabla(\\nabla\\cdot\\vec{u}))`, and the second term
+    contains the *mixed* derivative :math:`\\partial_{xy}u`, which a bilinear map does not kill even
+    on an undistorted rectangle. Measured on C1 quads: **4.0e-01** with ``viscous_form="stress"``
+    (the default) against 0 with ``"laplace"``. So the simplex rule is the safe one; a quad mesh only
+    qualifies in the Laplace form, and then only while it stays undistorted. Dropping it on C2
+    velocities costs three orders of magnitude in the pressure error (dev_docs §2). It must also be
+    off on wedges, pyramids and 0d domains, where second derivatives do not exist.
+
+    **When to correct the natural boundary condition.** Measured on C1/C1 Poiseuille with the exact
+    traction prescribed at the outflow (so that the parabola is not representable and the footprint
+    is genuinely nonzero), switching the LSIC correction on reduces the pressure error *at* that
+    boundary by a uniform 21 % but degrades the global pressure convergence from O(h^1.9) to
+    O(h^1.6); the SUPG part contributes almost nothing either way. On a static free surface the whole
+    thing is a wash. Switch ``natural_bc_correction`` on when the traction on a particular boundary
+    is the quantity of interest -- an imposed load, a measured force, a coupling to another domain --
+    and leave it off when the field in the interior is.
     """
 
     # Which intermediate quantities get their own named temporary in the generated C. Measured:
