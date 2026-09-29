@@ -139,3 +139,39 @@ def test_a_text_output_file_is_written_once(tmp_path, nproc, distribute):
             len(lines), "\n".join(lines[:8]))
     for i, line in enumerate(lines[1:]):
         assert line.split("\t") == [str(i), str(10.0 * i)], "row %d is garbled: %r" % (i, line)
+
+
+# An output that interpolates onto points given in the coordinates of the whole domain has to see the
+# whole mesh. TextFileOutputAlongLine and GridFileOutput each took THIS rank's partition and wrote the
+# result to a file name carrying no rank, so under --distribute the ranks overwrote one another and
+# whichever wrote last kept only the points inside its own share - at four ranks the line came out
+# with 11 of its 21 points. They now merge to rank 0, the way TextFileOutput already did.
+
+def _numeric_rows(path):
+    with open(path) as f:
+        return [l for l in f.read().splitlines() if l.strip() and not l.startswith("#")]
+
+
+@pytest.mark.parametrize("nproc", [2, 4])
+@pytest.mark.parametrize("distribute", [False, True])
+@pytest.mark.parametrize("trunk", ["line", "grid"])
+def test_interpolated_outputs_cover_the_whole_domain(tmp_path, nproc, distribute, trunk):
+    reference = _run(tmp_path / "serial", [])
+    assert reference.returncode == 0, "the serial reference run failed:\n%s" % reference.stdout[-2000:]
+    ref_rows = _numeric_rows(os.path.join(str(tmp_path / "serial"), trunk, trunk + "_000000.txt"))
+
+    args = ["--distribute"] if distribute else []
+    proc = _run(tmp_path / "mpi", args, nproc=nproc)
+    assert proc.returncode == 0, \
+        "the run failed:\n--- stdout tail ---\n%s\n--- stderr tail ---\n%s" % (
+            proc.stdout[-2000:], proc.stderr[-2000:])
+    got_rows = _numeric_rows(os.path.join(str(tmp_path / "mpi"), trunk, trunk + "_000000.txt"))
+
+    assert len(got_rows) == len(ref_rows), \
+        "%s has %d points at %d ranks but %d serially - the ranks wrote their own partitions over " \
+        "each other" % (trunk, len(got_rows), nproc, len(ref_rows))
+    for i, (a, b) in enumerate(zip(ref_rows, got_rows)):
+        av = [float(x) for x in a.split("\t")]
+        bv = [float(x) for x in b.split("\t")]
+        assert bv == pytest.approx(av, rel=1e-10, abs=1e-12), \
+            "%s row %d differs from the serial run: %r vs %r" % (trunk, i, a, b)

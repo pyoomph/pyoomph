@@ -59,9 +59,21 @@ class DrivenOde(ODEEquations):
         self.add_residual(weak(partial_t(u) + u ** 3 - 0.3 * u - sin(2 * var("time")), v))
 
 
+# Whether the ODE writes a text output. Off by default so the tests that only care about the step
+# sequence keep the directory they always had; the ones about what a resumed run leaves behind in its
+# OUTPUT files switch it on, because without an output equation there is no file to look at.
+WITH_OUTPUT = os.environ.get("PYOOMPH_WITH_OUTPUT", "") not in ("", "0")
+# first_column="" makes the ODEFileOutput write no time column, which is the configuration that cannot
+# be trimmed on a continue and has to warn instead.
+WITHOUT_TIME_COLUMN = os.environ.get("PYOOMPH_NO_TIME_COLUMN", "") not in ("", "0")
+
+
 class ContinueProblem(Problem):
     def define_problem(self):
-        self += (DrivenOde() + InitialCondition(u=1)) @ "osc"
+        eqs = DrivenOde() + InitialCondition(u=1)
+        if WITH_OUTPUT:
+            eqs += ODEFileOutput(first_column=[] if WITHOUT_TIME_COLUMN else ["time"])
+        self += eqs @ "osc"
 
     def actions_after_transient_solve(self):
         if ABORT_AT > 0 and self.get_current_time(as_float=True, dimensional=False) >= ABORT_AT:

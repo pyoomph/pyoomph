@@ -37,7 +37,8 @@ from pathlib import Path
 import meshio #type:ignore
 
 from ..meshes.meshdatacache import MeshDataEigenModes,MeshDataCacheOperatorBase,MeshDataCombineWithEigenfunction,MeshDataCartesianExtrusion,MeshDataRotationalExtrusion
-from ..generic.mpi import has_mpi
+from ..generic.mpi import has_mpi, get_mpi_nproc
+import re
 
 if has_mpi():
 	from mpi4py import MPI
@@ -320,7 +321,50 @@ class _MeshFileOutput(_BaseNumpyOutput):
 				cll=self.pvddata.find("Collection")
 				assert isinstance(cll,ET.Element)
 				self.pvdcollection=cll
+				if self.is_resuming():
+					self._drop_pvd_entries_from_step(self.get_resume_step())
 
+
+	_step_in_name=re.compile(r"_(\d{6})(?:_\d+)?\.[^.]+$")
+
+	def _step_of_vtu_name(self,name:str)->"int | None":
+		"""The output step a written file name stands for, from the _%06d[_rank] in it."""
+		m=self._step_in_name.search(os.path.basename(name))
+		return None if m is None else int(m.group(1))
+
+	def _drop_pvd_entries_from_step(self,from_step:int)->None:
+		"""Forget the timesteps of the interrupted run that the resumed one is about to replace.
+
+		Without this a resumed run appends its timesteps to the collection the aborted run left, so the
+		PVD lists the same step twice and ParaView animates forwards to where that run stopped and then
+		jumps back.
+		"""
+		for entry in list(self.pvdcollection.findall("DataSet")):
+			fname=entry.get("file")
+			step=None if fname is None else self._step_of_vtu_name(fname)
+			if step is not None and step>=from_step:
+				self.pvdcollection.remove(entry)
+
+	def _cleanup_covers_all_ranks(self)->bool:
+		# A distributed run writes <trunk>_<step>_<rank>.vtu, so rank 0 cannot name the other ranks'
+		# files through get_filename. It deletes them by the same scheme instead, see below.
+		return True
+
+	def get_filename(self,step:int) -> "list[str] | str":
+		"""Every file this output writes for one step, this rank's and the other ranks' alike.
+
+		Used by the cleanup only; the writing path in output() builds its own name. Under --distribute
+		one step is one file per contributing rank, and rank 0 has to remove all of them.
+		"""
+		assert self.file_ext is not None
+		outdir=self.problem.get_output_directory(self._orbit_subdir)
+		names:list[str]=[self.fname_trunk + "_{:06d}".format(step) + "." + self.file_ext]
+		nproc=get_mpi_nproc()
+		if nproc>1:
+			names=[self.fname_trunk + "_{:06d}_{:d}".format(step,i) + "." + self.file_ext
+				   for i in range(nproc)]
+		return [os.path.join(outdir,self.fname_trunk,n) if self.in_subdir else os.path.join(outdir,n)
+				for n in names]
 
 	def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
 		"""Redirect to newdir, stored relative to the problem's base directory - as _TextOutput does."""

@@ -93,13 +93,123 @@ class _BaseOutputter:
     def init(self,eqtree:"EquationTree",continue_info:dict[str, Any] | None=None,rank:int=0):
         self._eqtree=eqtree
         self._mpi_rank=rank
-        pass
+        self._set_resume_info(continue_info)
+
+    # ---- What a --runmode c is resuming from, or nothing when this is not one ----------------------
+    #
+    # Deliberately not "continue_info is not None": that dict is also handed over by
+    # Problem.redefine_problem as {"redefined":True} and synthesised by
+    # _ODEFileOutput.change_output_directory as {"TODO":...}, neither of which is a resume and neither
+    # of which carries a step or a time. Only the presence of "outstep" says a state was loaded.
+
+    def _set_resume_info(self,continue_info:dict[str, Any] | None)->None:
+        self._resume_step:int | None=None
+        self._resume_time:float | None=None
+        self._resume_time_nondim:float | None=None
+        if continue_info is None or "outstep" not in continue_info:
+            return
+        self._resume_step=int(continue_info["outstep"])
+        self._resume_time=float(continue_info["floattime"])
+        self._resume_time_nondim=float(continue_info["nondimtime"])
+
+    def is_resuming(self)->bool:
+        """Whether this outputter was initialised by a --runmode c that loaded a state."""
+        return getattr(self,"_resume_step",None) is not None
+
+    def get_resume_step(self)->int:
+        """The first output step the resumed run will write, i.e. the first one that is now stale."""
+        assert self._resume_step is not None
+        return self._resume_step
+
+    def get_resume_time(self,nondimensional:bool=False)->float:
+        """The time of the state resumed from, in the units the files carry (seconds, or nondimensional)."""
+        t=self._resume_time_nondim if nondimensional else self._resume_time
+        assert t is not None
+        return t
 
     def output(self,step:int)->None:
         raise NotImplementedError("Not implemented")
 
-    def delete_files_from_previous_simulation(self)->None:
-        pass
+    # Overloaded like Problem.get_cached_mesh_data itself: only a global request can come back empty,
+    # so a local one does not force every caller to rule None out.
+    @overload
+    def get_cached_mesh_data(self,mesh:"AnySpatialMesh",nondimensional:bool=...,tesselate_tri:bool=...,eigenvector:int | Sequence[int] | None=...,eigenmode:"MeshDataEigenModes"=...,history_index:int=...,with_halos:bool=...,operator:"MeshDataCacheOperatorBase | None"=...,discontinuous:bool=...,add_eigen_to_mesh_positions:bool=...,global_mesh:Literal[False]=...)->"MeshDataCacheEntry": ...
+
+    @overload
+    def get_cached_mesh_data(self,mesh:"AnySpatialMesh",nondimensional:bool=...,tesselate_tri:bool=...,eigenvector:int | Sequence[int] | None=...,eigenmode:"MeshDataEigenModes"=...,history_index:int=...,with_halos:bool=...,operator:"MeshDataCacheOperatorBase | None"=...,discontinuous:bool=...,add_eigen_to_mesh_positions:bool=...,global_mesh:bool=...)->"MeshDataCacheEntry | None": ...
+
+    def get_cached_mesh_data(self,mesh:"AnySpatialMesh",nondimensional:bool=False,tesselate_tri:bool=False,eigenvector:int | Sequence[int] | None=None,eigenmode:"MeshDataEigenModes"="abs",history_index:int=0,with_halos:bool=False,operator:"MeshDataCacheOperatorBase | None"=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True,global_mesh:bool=False)->"MeshDataCacheEntry | None":
+        """The mesh data this outputter writes.
+
+        With ``global_mesh`` this is **collective** on a distributed mesh and returns ``None`` off
+        rank 0 - every rank has to reach it, and only rank 0 has anything to write."""
+        pr = self.mesh.get_problem()
+        cache = pr.get_cached_mesh_data(mesh, tesselate_tri=tesselate_tri, nondimensional=nondimensional,eigenvector=eigenvector,eigenmode=eigenmode,history_index=history_index,with_halos=with_halos,operator=operator,discontinuous=discontinuous,add_eigen_to_mesh_positions=add_eigen_to_mesh_positions,global_mesh=global_mesh)
+        return cache
+
+    def get_filename(self,step:int)->"list[str] | str":
+        """The file(s) this outputter writes for one output step, for those that write one per step.
+
+        Overridden by every such outputter; the default refuses rather than inventing a name, because
+        the growing-file outputters have no per-step name at all.
+        """
+        raise NotImplementedError("This outputter does not write one file per output step")
+
+    def _numbered_filename(self,step:int)->"list[str] | str":
+        """``<trunk>_%06d.<ext>``, in ``<trunk>/`` when in_subdir - the scheme shared by every
+        per-step outputter. It was spelled out separately in each of them; the only difference was
+        that some passed _orbit_subdir to get_output_directory() and some did not, which is the same
+        thing when there is no orbit subdirectory."""
+        assert self.file_ext is not None #type:ignore
+        exts=self.file_ext if isinstance(self.file_ext,(list,set)) else [self.file_ext] #type:ignore
+        outdir=self.problem.get_output_directory(getattr(self,"_orbit_subdir",None))
+        res:list[str]=[]
+        for e in exts: #type:ignore
+            fname=self.fname_trunk+"_{:06d}".format(step)+"."+e #type:ignore
+            res.append(os.path.join(outdir,self.fname_trunk,fname) if self.in_subdir #type:ignore
+                       else os.path.join(outdir,fname))
+        return res if isinstance(self.file_ext,(list,set)) else res[0] #type:ignore
+
+    def _cleanup_covers_all_ranks(self)->bool:
+        """Whether get_filename() names the files of every rank, so rank 0 can clean up for all of them.
+
+        False means the name carries no rank and is therefore the same everywhere, which is why the
+        cleanup runs on rank 0 alone: if every rank deleted it, the one that lost the race would take
+        its FileNotFoundError for "the run did not get this far" and leave every later step behind.
+        """
+        return True
+
+    def delete_files_from_previous_simulation(self,from_step:int=0)->None:
+        """Remove the per-step files from ``from_step`` upwards.
+
+        Called when a --runmode c resumes from an earlier state than the interrupted run reached: the
+        steps in between are written again, but anything past the end of the resumed run would stay
+        behind as a frame of a simulation that no longer exists. Only files this outputter itself
+        names through get_filename are ever removed - never a glob of the output directory.
+        """
+        step=from_step
+        while True:
+            try:
+                fn=self.get_filename(step)
+            except NotImplementedError:
+                return  # not a per-step outputter; nothing numbered to remove
+            names=fn if isinstance(fn,list) else [fn]
+            removed=False
+            for f in names:
+                try:
+                    os.remove(f)
+                    removed=True
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    # Anything other than "it is not there" is worth saying out loud: silently
+                    # swallowing a permission error used to leave the stale file in place and claim
+                    # the directory described one run.
+                    print("Could not remove the outdated output file "+f+": "+str(e))
+                    return
+            if not removed:
+                return  # the run did not get this far
+            step+=1
 
     def get_time(self,nondimensional:bool=False)->float:
         return self.problem.get_current_time(dimensional=not nondimensional,as_float=True)
@@ -150,22 +260,6 @@ class _BaseNumpyOutput(_BaseOutputter):
         assert not isinstance(m,ODEStorageMesh)
         self.mesh=m
 
-    # Overloaded like Problem.get_cached_mesh_data itself: only a global request can come back empty,
-    # so a local one does not force every caller to rule None out.
-    @overload
-    def get_cached_mesh_data(self,mesh:"AnySpatialMesh",nondimensional:bool=...,tesselate_tri:bool=...,eigenvector:int | Sequence[int] | None=...,eigenmode:"MeshDataEigenModes"=...,history_index:int=...,with_halos:bool=...,operator:"MeshDataCacheOperatorBase | None"=...,discontinuous:bool=...,add_eigen_to_mesh_positions:bool=...,global_mesh:Literal[False]=...)->"MeshDataCacheEntry": ...
-
-    @overload
-    def get_cached_mesh_data(self,mesh:"AnySpatialMesh",nondimensional:bool=...,tesselate_tri:bool=...,eigenvector:int | Sequence[int] | None=...,eigenmode:"MeshDataEigenModes"=...,history_index:int=...,with_halos:bool=...,operator:"MeshDataCacheOperatorBase | None"=...,discontinuous:bool=...,add_eigen_to_mesh_positions:bool=...,global_mesh:bool=...)->"MeshDataCacheEntry | None": ...
-
-    def get_cached_mesh_data(self,mesh:"AnySpatialMesh",nondimensional:bool=False,tesselate_tri:bool=False,eigenvector:int | Sequence[int] | None=None,eigenmode:"MeshDataEigenModes"="abs",history_index:int=0,with_halos:bool=False,operator:"MeshDataCacheOperatorBase | None"=None,discontinuous:bool=False,add_eigen_to_mesh_positions:bool=True,global_mesh:bool=False)->"MeshDataCacheEntry | None":
-        """The mesh data this outputter writes.
-
-        With ``global_mesh`` this is **collective** on a distributed mesh and returns ``None`` off
-        rank 0 - every rank has to reach it, and only rank 0 has anything to write."""
-        pr = self.mesh.get_problem()
-        cache = pr.get_cached_mesh_data(mesh, tesselate_tri=tesselate_tri, nondimensional=nondimensional,eigenvector=eigenvector,eigenmode=eigenmode,history_index=history_index,with_halos=with_halos,operator=operator,discontinuous=discontinuous,add_eigen_to_mesh_positions=add_eigen_to_mesh_positions,global_mesh=global_mesh)
-        return cache
 
 
 
@@ -236,25 +330,8 @@ class _TextOutput(_BaseNumpyOutput):
         if self.file_ext is None:
             self.file_ext=_default_file_extension(self.problem)
 
-    def get_filename(self, step:int):
-        assert self.file_ext is not None
-        if isinstance(self.file_ext, (list,set)):
-            res:list[str] = []
-            for e in self.file_ext:
-                fname = self.fname_trunk + "_{:06d}".format(step) + "." + e
-                if self.in_subdir:
-                    fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), self.fname_trunk, fname)
-                else:
-                    fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), fname)
-                res.append(fname)
-            return res
-        else:
-            fname = self.fname_trunk + "_{:06d}".format(step) + "." + self.file_ext
-            if self.in_subdir:
-                fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), self.fname_trunk, fname)
-            else:
-                fname = os.path.join(self.problem.get_output_directory(self._orbit_subdir), fname)
-            return fname
+    def get_filename(self,step:int) -> list[str] | str:
+        return self._numbered_filename(step)
 
     def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
         basedir=self.problem.get_output_directory()
@@ -348,19 +425,6 @@ class _TextOutput(_BaseNumpyOutput):
 
 
 
-    def delete_files_from_previous_simulation(self):
-        try:
-            step=0
-            while True:
-                fn=self.get_filename(step)
-                if isinstance(fn,list):
-                    for f in fn:
-                        os.remove(f)
-                else:
-                    os.remove(fn)
-                step+=1
-        except:
-            pass
 
 
 
@@ -403,8 +467,9 @@ def save_by_extension(fname:str,data:NPFloatArray,header:list[str],timeinfo:floa
 
 
 class _OutputTxtAlongLine(_BaseOutputter):
-    def __init__(self,*fields:str,coords:NPFloatArray | list[Sequence[ExpressionOrNum]] | None=None,start:list[ExpressionOrNum] | None=None,end:list[ExpressionOrNum] | None=None,N:int | None=None,isovalue:tuple[str, ExpressionOrNum] | None=None,mesh:"AnySpatialMesh | None"=None,ftrunk:str="along_line",in_subdir:bool=True,file_ext:FileExtensionType=None,hide_lagrangian:bool=True,hide_underscore:bool=True,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs",NaN_outside:bool=False):
+    def __init__(self,*fields:str,coords:NPFloatArray | list[Sequence[ExpressionOrNum]] | None=None,start:list[ExpressionOrNum] | None=None,end:list[ExpressionOrNum] | None=None,N:int | None=None,isovalue:tuple[str, ExpressionOrNum] | None=None,mesh:"AnySpatialMesh | None"=None,ftrunk:str="along_line",in_subdir:bool=True,file_ext:FileExtensionType=None,hide_lagrangian:bool=True,hide_underscore:bool=True,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs",NaN_outside:bool=False,global_mesh:bool=True):
         super().__init__()
+        self.global_mesh=global_mesh
         if mesh is None:
             raise ValueError("Need to supply at least a mesh")
         self.fname_trunk=ftrunk
@@ -460,24 +525,7 @@ class _OutputTxtAlongLine(_BaseOutputter):
 
 
     def get_filename(self,step:int) -> list[str] | str:
-        assert self.file_ext is not None
-        if isinstance(self.file_ext,list):
-            res:list[str]=[]
-            for e in self.file_ext:
-                fname = self.fname_trunk + "_{:06d}".format(step) + "." + e
-                if self.in_subdir:
-                    fname = os.path.join(self.problem.get_output_directory(), self.fname_trunk, fname)
-                else:
-                    fname = os.path.join(self.problem.get_output_directory(), fname)
-                res.append(fname)
-            return res
-        else:
-            fname = self.fname_trunk + "_{:06d}".format(step) + "." + self.file_ext
-            if self.in_subdir:
-                fname = os.path.join(self.problem.get_output_directory(), self.fname_trunk, fname)
-            else:
-                fname = os.path.join(self.problem.get_output_directory(), fname)
-            return fname
+        return self._numbered_filename(step)
 
     def after_remeshing(self,eqtree:"EquationTree"):
         m=eqtree.get_mesh()
@@ -485,11 +533,17 @@ class _OutputTxtAlongLine(_BaseOutputter):
         self.mesh=m
 
 
-    def get_data_and_descs(self)->tuple[NPFloatArray,list[str]]:
+    def get_data_and_descs(self)->"tuple[NPFloatArray,list[str]] | None":
 
         if self.use_tri_interpolator:
-            meshdata = self.mesh.get_problem().get_cached_mesh_data(self.mesh, tesselate_tri=True, nondimensional=False,eigenmode=self.eigenmode,eigenvector=self.eigenvector)
-            
+            # global_mesh, because this interpolates onto points that are given in the coordinates of
+            # the WHOLE domain: on one rank's partition every point outside it comes out masked, and
+            # the file name carries no rank, so each rank used to overwrite the others with its own
+            # slice. Returns None on the ranks that only contributed to the merge.
+            meshdata = self.get_cached_mesh_data(self.mesh, tesselate_tri=True, nondimensional=False,eigenmode=self.eigenmode,eigenvector=self.eigenvector,global_mesh=self.global_mesh)
+            if meshdata is None:
+                return None
+
             coordinates:NPFloatArray=meshdata.get_coordinates()
             import matplotlib.tri as tri
 
@@ -548,7 +602,10 @@ class _OutputTxtAlongLine(_BaseOutputter):
             if self.eigenvector >= len(self.mesh.get_problem()._last_eigenvectors): #type:ignore
                 return  # No output hrere
 
-        data,header=self.get_data_and_descs()
+        res=self.get_data_and_descs()
+        if res is None:
+            return  # a rank that only contributed to the merge; rank 0 writes the file
+        data,header=res
         fname=self.get_filename(step)
         params = {}
         for n in self.mesh.get_problem().get_global_parameter_names():
@@ -560,27 +617,15 @@ class _OutputTxtAlongLine(_BaseOutputter):
             save_by_extension(fname,data,header=header,timeinfo=mesh.get_problem().get_current_time(dimensional=True,as_float=True),params=params)
         self.clean_up()
 
-    def delete_files_from_previous_simulation(self):
-        try:
-            step = 0
-            while True:
-                fn = self.get_filename(step)
-                if isinstance(fn, list):
-                    for f in fn:
-                        os.remove(f)
-                else:
-                    os.remove(fn)
-                step += 1
-        except:
-            pass
 
 
 
 
 
 class _GridFileOutput(_BaseOutputter):
-    def __init__(self,*fields:str,lower:NPFloatArray | list[ExpressionOrNum],upper:list[ExpressionOrNum],N:list[int] | None=None,dx:list[ExpressionOrNum] | None,mesh:"AnySpatialMesh | None"=None,ftrunk:str="grid_out",in_subdir:bool=True,file_ext:FileExtensionType=None,hide_lagrangian:bool=True,hide_underscore:bool=True,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs"):
+    def __init__(self,*fields:str,lower:NPFloatArray | list[ExpressionOrNum],upper:list[ExpressionOrNum],N:list[int] | None=None,dx:list[ExpressionOrNum] | None,mesh:"AnySpatialMesh | None"=None,ftrunk:str="grid_out",in_subdir:bool=True,file_ext:FileExtensionType=None,hide_lagrangian:bool=True,hide_underscore:bool=True,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs",global_mesh:bool=True):
         super().__init__()
+        self.global_mesh=global_mesh
         if mesh is None:
             raise ValueError("Need to supply at least a mesh")
         self.fname_trunk=ftrunk
@@ -635,24 +680,7 @@ class _GridFileOutput(_BaseOutputter):
 
 
     def get_filename(self,step:int) -> list[str] | str:
-        assert self.file_ext is not None
-        if isinstance(self.file_ext,list):
-            res:list[str]=[]
-            for e in self.file_ext:
-                fname = self.fname_trunk + "_{:06d}".format(step) + "." + e
-                if self.in_subdir:
-                    fname = os.path.join(self.problem.get_output_directory(), self.fname_trunk, fname)
-                else:
-                    fname = os.path.join(self.problem.get_output_directory(), fname)
-                res.append(fname)
-            return res
-        else:
-            fname = self.fname_trunk + "_{:06d}".format(step) + "." + self.file_ext
-            if self.in_subdir:
-                fname = os.path.join(self.problem.get_output_directory(), self.fname_trunk, fname)
-            else:
-                fname = os.path.join(self.problem.get_output_directory(), fname)
-            return fname
+        return self._numbered_filename(step)
 
     def after_remeshing(self,eqtree:"EquationTree"):
         m=eqtree.get_mesh()
@@ -660,16 +688,21 @@ class _GridFileOutput(_BaseOutputter):
         self.mesh=m
 
 
-    def get_data_and_descs(self)->tuple[NPFloatArray,list[str]]:
+    def get_data_and_descs(self)->"tuple[NPFloatArray,list[str]] | None":
 
         if self.use_tri_interpolator:
-            meshdata = self.mesh.get_problem().get_cached_mesh_data(self.mesh, tesselate_tri=True, nondimensional=False,eigenmode=self.eigenmode,eigenvector=self.eigenvector)
-            
+            # global_mesh: see the same call in _OutputTxtAlongLine. A grid spans the whole domain, so
+            # interpolating it out of one partition gives a file of mostly-masked values that every
+            # rank then writes over the same name.
+            meshdata = self.get_cached_mesh_data(self.mesh, tesselate_tri=True, nondimensional=False,eigenmode=self.eigenmode,eigenvector=self.eigenvector,global_mesh=self.global_mesh)
+            if meshdata is None:
+                return None
+
             coordinates:NPFloatArray=meshdata.get_coordinates()
             import matplotlib.tri as tri
 
             triang = tri.Triangulation(coordinates[0,:], coordinates[1,:], meshdata.elem_indices)
-            
+
             fields=meshdata.get_default_output_fields(rem_lagrangian=self.hide_lagrangian,rem_underscore=self.hide_underscore)
             dataL:list[NPFloatArray]=[]
             for f in fields:
@@ -709,7 +742,10 @@ class _GridFileOutput(_BaseOutputter):
             if self.eigenvector >= len(self.mesh.get_problem()._last_eigenvectors): #type:ignore
                 return  # No output hrere
 
-        data,header=self.get_data_and_descs()
+        res=self.get_data_and_descs()
+        if res is None:
+            return  # a rank that only contributed to the merge; rank 0 writes the file
+        data,header=res
         fname=self.get_filename(step)
         params = {}
         for n in self.mesh.get_problem().get_global_parameter_names():
@@ -721,19 +757,6 @@ class _GridFileOutput(_BaseOutputter):
             save_by_extension(fname,data,header=header,timeinfo=mesh.get_problem().get_current_time(dimensional=True,as_float=True),params=params)
         self.clean_up()
 
-    def delete_files_from_previous_simulation(self):
-        try:
-            step = 0
-            while True:
-                fn = self.get_filename(step)
-                if isinstance(fn, list):
-                    for f in fn:
-                        os.remove(f)
-                else:
-                    os.remove(fn)
-                step += 1
-        except:
-            pass
 
 
 
@@ -745,10 +768,8 @@ class _BaseODEOutput(_BaseOutputter):
         super().__init__()
         self._odemesh:ODEStorageMesh
 
-    def init(self,eqtree:"EquationTree",continue_info:dict[str, Any] | None=None,rank:int=0):
-        self._eqtree=eqtree
-        self._mpi_rank=rank
-        pass
+    # No init override: it used to repeat the base body verbatim, which meant it silently missed
+    # whatever the base init grew - the resume information, for one.
 
     def get_ODE_values(self)->tuple[NPFloatArray,dict[str,int]]:
         elem=self._odemesh._element
@@ -800,13 +821,41 @@ class _ODEFileOutput(_BaseODEOutput):
             else:
                 self.init(eqtree,None,self._mpi_rank)
 
+    def _trim_to_resume_time(self)->None:
+        """Drop the rows this file holds beyond the state we are resuming from."""
+        from ..utils.num_text_out import trim_numerical_text_file
+        assert self.fname is not None
+        timecol=None
+        for fc in self.first_column:
+            if fc=="time":
+                timecol="time"
+                break
+        if timecol is None:
+            # Nothing in the file says when a row was written, so there is no way to tell which rows
+            # belong to the part of the run being replaced. Appending is what happened before this
+            # trimming existed, and it at least destroys nothing.
+            print("WARNING: cannot trim '"+self.fname+"' when continuing, because it has no time "
+                  "column (first_column="+repr(self.first_column)+"). The rows of the interrupted run "
+                  "past t="+str(self.get_resume_time())+" are kept and the resumed run appends after "
+                  "them, so the file holds two overlapping series.")
+            return
+        reason=trim_numerical_text_file(self.fname,self.get_resume_time(),time_column=timecol)
+        if reason is not None:
+            print("WARNING: cannot trim '"+self.fname+"' when continuing, because "+reason+". The rows "
+                  "of the interrupted run past t="+str(self.get_resume_time())+" are kept.")
+
     def init(self,eqtree:"EquationTree",continue_info:dict[str, Any] | None=None,rank:int=0):
         super().init(eqtree,continue_info,rank)
         assert self.fname is not None
         if get_mpi_rank()==0:
             if continue_info is None:
                 self.file = open(self.fname, "w")
-            else:            
+            else:
+                # Everything the aborted run wrote after the instant we are resuming from is about to
+                # be recomputed. Cut it off first, or the time column of this file runs forwards to
+                # where that run stopped and then jumps back to here.
+                if self.is_resuming():
+                    self._trim_to_resume_time()
                 self.file=open(self.fname,"a")
 
         values, fieldinds = self.get_ODE_values()
@@ -983,6 +1032,14 @@ class GenericOutput(BaseEquations):
         self._outputter[eqtree]=self._construct_outputter_for_eq_tree(eqtree,continue_info,rank)
         self._outputter[eqtree].problem = eqtree.get_mesh().get_problem()
         self._outputter[eqtree].init(eqtree,continue_info,rank)
+        outputter=self._outputter[eqtree]
+        if outputter.is_resuming() and rank==0:
+            # The interrupted run may have got further than the state we are resuming from. Its files
+            # for the steps in between are simply written again, but anything past the end of the
+            # resumed run would stay behind as a frame of a simulation that no longer exists - and
+            # ParaView would happily show it. Deleting from the resume step is enough: every step from
+            # there on is either rewritten or gone.
+            outputter.delete_files_from_previous_simulation(outputter.get_resume_step())
 
 
     def _do_output(self, eqtree:"EquationTree", step:int,stage:str,only_every_step:bool=False):
@@ -1094,7 +1151,7 @@ class TextFileOutput(GenericOutput):
 
 
 class TextFileOutputAlongLine(GenericOutput):
-    def __init__(self,filename:str | None=None,coords:NPFloatArray | list[Sequence[ExpressionOrNum]] | None=None,start:list[ExpressionOrNum] | None=None,end:list[ExpressionOrNum] | None=None,N:int | None=None,isovalue:tuple[str, ExpressionOrNum] | None=None,file_ext:FileExtensionType=None,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs",NaN_outside:bool=False):
+    def __init__(self,filename:str | None=None,coords:NPFloatArray | list[Sequence[ExpressionOrNum]] | None=None,start:list[ExpressionOrNum] | None=None,end:list[ExpressionOrNum] | None=None,N:int | None=None,isovalue:tuple[str, ExpressionOrNum] | None=None,file_ext:FileExtensionType=None,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs",NaN_outside:bool=False,global_mesh:bool=True):
         super(TextFileOutputAlongLine, self).__init__()
         self.filename=filename
         self.file_ext:FileExtensionType=file_ext
@@ -1106,12 +1163,13 @@ class TextFileOutputAlongLine(GenericOutput):
         self.eigenmode:"MeshDataEigenModes"=eigenmode
         self.isovalue=isovalue
         self.NaN_outside=NaN_outside
+        self.global_mesh=global_mesh
 
     def _construct_outputter_for_eq_tree(self,eqtree:"EquationTree",continue_info:dict[str, Any] | None,mpirank:int) -> _OutputTxtAlongLine:
         fn=self._expand_filename(eqtree,self.filename,"",add_problem_outdir=False)
         mesh=eqtree.get_mesh()
         assert not isinstance(mesh,ODEStorageMesh)        
-        return _OutputTxtAlongLine(mesh=mesh,ftrunk=fn,start=self.start,end=self.end,isovalue=self.isovalue,coords=self.coords,N=self.N,file_ext=self.file_ext,eigenvector=self.eigenvector,eigenmode=self.eigenmode,NaN_outside=self.NaN_outside)
+        return _OutputTxtAlongLine(mesh=mesh,ftrunk=fn,start=self.start,end=self.end,isovalue=self.isovalue,coords=self.coords,N=self.N,file_ext=self.file_ext,eigenvector=self.eigenvector,eigenmode=self.eigenmode,NaN_outside=self.NaN_outside,global_mesh=self.global_mesh)
 
     def _is_ode(self):
         return False
@@ -1119,7 +1177,7 @@ class TextFileOutputAlongLine(GenericOutput):
 
 
 class GridFileOutput(GenericOutput):
-    def __init__(self,lower:NPFloatArray | list[ExpressionOrNum],upper:list[ExpressionOrNum],N:int | list[int] | None=None,dx:ExpressionOrNum | list[ExpressionOrNum] | None=None,filename:str | None=None,file_ext:FileExtensionType=None,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs"):
+    def __init__(self,lower:NPFloatArray | list[ExpressionOrNum],upper:list[ExpressionOrNum],N:int | list[int] | None=None,dx:ExpressionOrNum | list[ExpressionOrNum] | None=None,filename:str | None=None,file_ext:FileExtensionType=None,eigenvector:int | None=None,eigenmode:"MeshDataEigenModes"="abs",global_mesh:bool=True):
         super(GridFileOutput, self).__init__()
         self.lower=lower
         self.upper=upper
@@ -1144,13 +1202,14 @@ class GridFileOutput(GenericOutput):
         self.file_ext:FileExtensionType=file_ext
         self.eigenvector=eigenvector
         self.eigenmode:"MeshDataEigenModes"=eigenmode
+        self.global_mesh=global_mesh
 
 
     def _construct_outputter_for_eq_tree(self,eqtree:"EquationTree",continue_info:dict[str, Any] | None,mpirank:int) -> _GridFileOutput:
         fn=self._expand_filename(eqtree,self.filename,"",add_problem_outdir=False)
         mesh=eqtree.get_mesh()
         assert not isinstance(mesh,ODEStorageMesh)
-        return _GridFileOutput(mesh=mesh,ftrunk=fn,lower=self.lower,upper=self.upper,N=self.N,dx=self.dx,file_ext=self.file_ext,eigenvector=self.eigenvector,eigenmode=self.eigenmode)
+        return _GridFileOutput(mesh=mesh,ftrunk=fn,lower=self.lower,upper=self.upper,N=self.N,dx=self.dx,file_ext=self.file_ext,eigenvector=self.eigenvector,eigenmode=self.eigenmode,global_mesh=self.global_mesh)
 
     def _is_ode(self):
         return False
@@ -1194,6 +1253,51 @@ class _IntegralObservableOutput(_BaseOutputter):
             res[n]=rs
         return res
 
+
+    def _time_column_name(self)->"str | None":
+        for fc in self.first_column:
+            if fc=="time":
+                return "time"
+        return None
+
+    def _trim_to_resume_time(self,filename:str)->None:
+        """Drop the rows of one observable file beyond the state being resumed from."""
+        from ..utils.num_text_out import trim_numerical_text_file
+        timecol=self._time_column_name()
+        t=self.get_resume_time()
+        if timecol is None:
+            print("WARNING: cannot trim '"+filename+"' when continuing, because it has no time column "
+                  "(first_column="+repr(self.first_column)+"). The rows of the interrupted run past t="
+                  +str(t)+" are kept and the resumed run appends after them.")
+            return
+        reason=trim_numerical_text_file(filename,t,time_column=timecol)
+        if reason is not None:
+            print("WARNING: cannot trim '"+filename+"' when continuing, because "+reason+". The rows of "
+                  "the interrupted run past t="+str(t)+" are kept.")
+
+    def _trim_mat_to_resume_time(self,mdict:dict[str,Any])->dict[str,Any]:
+        """The .mat counterpart: every array in it is a column, so they are all cut to the same length."""
+        timecol=self._time_column_name()
+        if timecol is None or timecol not in mdict:
+            print("WARNING: cannot trim the .mat output of '"+self._filetrunk+"' when continuing, "
+                  "because it has no '"+str(timecol)+"' array. Its rows past t="
+                  +str(self.get_resume_time())+" are kept.")
+            return mdict
+        times=numpy.array(mdict[timecol]).flatten() #type:ignore
+        t=self.get_resume_time()
+        tol=1e-9*max(abs(t),1.0)
+        keep=int(numpy.count_nonzero(times<=t+tol)) #type:ignore
+        if keep>=len(times):
+            return mdict
+        out:dict[str,Any]={}
+        for k,v in mdict.items(): #type:ignore
+            arr=numpy.array(v) #type:ignore
+            if k.startswith("__") or arr.size<len(times):
+                out[k]=v  # metadata that loadmat adds, not a data column
+                continue
+            flat=arr.flatten() #type:ignore
+            out[k]=flat[:keep] if len(flat)==len(times) else v
+        return out
 
     def change_output_directory(self,newdir:str,eqtree:"EquationTree"):
         print("TODO: Change output path in IntegralObservables")
@@ -1356,10 +1460,12 @@ class _IntegralObservableOutput(_BaseOutputter):
                     if self._continue_info is None:
                         self._files[ext]=open(_filename,"wt")
                     else:
+                        # Opened lazily here rather than in init(), so the trim has to happen here too:
+                        # what the interrupted run wrote after the instant being resumed from is about
+                        # to be recomputed, and leaving it makes the time column jump backwards.
+                        if self.is_resuming():
+                            self._trim_to_resume_time(_filename)
                         self._files[ext] = open(_filename, "at")
-                        #TODO: Trim here the output
-                        #print(self._continue_info)
-                        #raise RuntimeError("TODO")        
         firsttime=False
         if self._iexprs is None:
             firsttime=True
@@ -1423,8 +1529,17 @@ class _IntegralObservableOutput(_BaseOutputter):
             if ext in ["mat","MAT"]:
                 _filename=self._filetrunk+"."+ext
                 mdict={}
-                if os.path.exists(_filename) and not firsttime:
-                    mdict=loadmat(_filename) #type:ignore
+                # Deliberately not "and not firsttime": firsttime is true on the first output() of THIS
+                # process, so on a resume that test threw the whole existing .mat away and started from
+                # one row - a truncation to nothing rather than to the resume point. Read it back and
+                # cut it there instead.
+                if os.path.exists(_filename):
+                    if firsttime and not self.is_resuming():
+                        pass  # a fresh run owns the file and overwrites it
+                    else:
+                        mdict=loadmat(_filename) #type:ignore
+                        if firsttime and self.is_resuming():
+                            mdict=self._trim_mat_to_resume_time(mdict)
                 for i,d in enumerate(self._descs):
                     if "[" in d:
                         d = d[0:d.find("[")]

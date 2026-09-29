@@ -864,6 +864,23 @@ class InvertedElementRemeshRequest(RuntimeError):
     """
 
 
+# The launcher advertises the job through the environment - OMPI_COMM_WORLD_SIZE, the ORTE contact
+# URI, and the PMIx equivalents - and a child process inherits all of it. A plain python3 started from
+# rank 0 therefore joins the PARENT's MPI job in its own MPI_Init (pyoomph calls InitMPI on import),
+# believes it is rank 0 of an n-rank world, and blocks in the first collective it makes waiting for
+# three peers that are busy solving. That is what made the dedicated plot process hang under mpirun
+# while producing not one line of output. A child meant to run serially has to be told none of it.
+# PMI_/PMIX_ already cover an srun-launched job, so SLURM_* is deliberately left in place: a script
+# may legitimately read it, and removing it would not stop an enrolment that those two do not.
+_MPI_ENV_PREFIXES=("OMPI_","PMIX_","PMI_","HYDRA_","MPIR_","I_MPI_","MV2_")
+_MPI_ENV_NAMES=("MPI_LOCALRANKID","MPI_LOCALNRANKS")
+
+def _environment_without_mpi()->dict[str,str]:
+    """os.environ with everything that would enrol a child process in this MPI job removed."""
+    return {k:v for k,v in os.environ.items()
+            if not k.startswith(_MPI_ENV_PREFIXES) and k not in _MPI_ENV_NAMES}
+
+
 class Problem(_pyoomph.Problem):
     """A class representing a problem in the pyoomph library.
 
@@ -1188,6 +1205,12 @@ class Problem(_pyoomph.Problem):
         self.plotter:list[MatplotlibPlotter] | MatplotlibPlotter | None=None
         self.plot_in_dedicated_process:bool=False
         self._plotting_process:subprocess.Popen | None=None
+        # Whether a dedicated plot process is in charge of the plotting, as opposed to this process
+        # doing it itself. Separate from _plotting_process because only rank 0 owns the Popen, while
+        # every rank has to take the same branch: perform_plot is collective on a distributed mesh
+        # (rank 0 draws, the others serve it the merged mesh data), so a rank deciding on its own
+        # handle would have rank 0 skip the plot while the rest wait for it forever.
+        self._dedicated_plotter_active:bool=False
         self.latex_printer:"LaTeXPrinter | None"=None
 
         self.write_states:bool=True
@@ -1612,6 +1635,7 @@ class Problem(_pyoomph.Problem):
         if self._released:
             return
         self._released=True
+        self._shutdown_dedicated_plotter()
         for m in self._meshdict.values():
             if not isinstance(m,ODEStorageMesh):
                 _teardown_spatial_mesh(m)
@@ -2390,8 +2414,44 @@ class Problem(_pyoomph.Problem):
         )
         self.output(increase_time_for_PVD=True if dt is None else dt)
 
+    def _shutdown_dedicated_plotter(self,timeout:float=600.0):
+        """Let a dedicated plot process finish the states it was given, then wait for it.
+
+        Without this the plotter produced nothing at all: the child reads state file names from its
+        stdin and plots them one at a time, so simply exiting killed it in the middle of the queue -
+        usually before the first plot. It listens for the "__exit__" line (see _perform_replot), which
+        nothing ever sent.
+        """
+        proc=self._plotting_process
+        self._plotting_process=None
+        self._dedicated_plotter_active=False
+        if proc is None:
+            return
+        try:
+            if proc.poll() is None and proc.stdin is not None:
+                proc.stdin.write(b"__exit__\n")
+                proc.stdin.flush()
+        except (BrokenPipeError,OSError):
+            pass  # already gone; nothing left to ask of it
+        try:
+            if proc.stdin is not None:
+                proc.stdin.close()
+        except (BrokenPipeError,OSError):
+            pass
+        try:
+            retcode=proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            print("Dedicated plot process did not finish within "+str(timeout)+" s, terminating it. "
+                  "Its plots may be incomplete; see "+self.get_output_directory("_dedicated_plotter_log.txt"))
+            proc.kill()
+            proc.wait()
+            return
+        if retcode!=0 and not self.is_quiet():
+            print("Dedicated plot process exited with code "+str(retcode)+", see "
+                  +self.get_output_directory("_dedicated_plotter_log.txt"))
+
     def perform_plot(self):
-        if self._plotting_process is not None:
+        if self._dedicated_plotter_active:
             raise RuntimeError("Should not end up here")
         if isinstance(self.plotter, list):
             for p in self.plotter:
@@ -2560,25 +2620,29 @@ class Problem(_pyoomph.Problem):
             self.save_state(statefname)
             
         if self.plotter is not None:
-            if self._plotting_process is None:
+            # Asked on the replicated flag, not on this rank's handle: see _dedicated_plotter_active.
+            if not self._dedicated_plotter_active:
                 self.perform_plot()
 
-
-        if self._plotting_process is not None:
-            if self._plotting_process.poll() is not None:
-                raise RuntimeError("Plotting process failed. Have a look at " + self.get_output_directory("_dedicated_plotter_log.txt"))
+        if self._dedicated_plotter_active:
             if not self.write_states:
                 raise RuntimeError("Plotting process is active, but write_states is False. Please set write_states to True to use the plotting process")
-            print("State file written, invoking plotting process")
-            assert self._plotting_process.stdin is not None
-            assert statefname is not None
-            self._plotting_process.stdin.write((statefname + "\n").encode("utf-8"))
-            self._plotting_process.stdin.flush()
+            # Only rank 0 runs the child and only rank 0 wrote the state file it is to plot, so only
+            # rank 0 has anything to say to it. A failure of the child is shared, because the other
+            # ranks would otherwise carry on happily while the plots stopped appearing.
+            error:Exception | None=None
+            if self._plotting_process is not None:
+                if self._plotting_process.poll() is not None:
+                    error=RuntimeError("Plotting process failed. Have a look at " + self.get_output_directory("_dedicated_plotter_log.txt"))
+                else:
+                    print("State file written, invoking plotting process")
+                    assert self._plotting_process.stdin is not None
+                    assert statefname is not None
+                    self._plotting_process.stdin.write((statefname + "\n").encode("utf-8"))
+                    self._plotting_process.stdin.flush()
+            mpi_share_root_failure(error,context="feeding the dedicated plot process")
 
-
-            self._output_step += 1  # Write with the updated outstep here ??
-        else:
-            self._output_step += 1
+        self._output_step += 1
 
 
 
@@ -2611,7 +2675,14 @@ class Problem(_pyoomph.Problem):
         if redefined:
             cinfo={"redefined":True}
         if self._runmode=="continue":
-            cinfo={"outstep":self._output_step,"dimtime":self.get_current_time(),"nondimtime":self.get_current_time(dimensional=False,as_float=True),"floattime":self.get_current_time(dimensional=True,as_float=False)}
+            # outstep is the step the resumed run will write NEXT: _output_step was already incremented
+            # in the continue branch of initialise(). So everything the aborted run wrote with a step
+            # >= outstep, or at a time later than these, is about to be recomputed.
+            # floattime is the dimensional time as a plain float, which is what the text outputs carry
+            # in their time column (see _BaseOutputter.get_time). It used to be passed with
+            # as_float=False, making it an Expression and a mere duplicate of dimtime, and no consumer
+            # noticed because none of these four values was read at all.
+            cinfo={"outstep":self._output_step,"dimtime":self.get_current_time(),"nondimtime":self.get_current_time(dimensional=False,as_float=True),"floattime":self.get_current_time(dimensional=True,as_float=True)}
         self._equation_system._init_output(continue_info=cinfo,rank=get_mpi_rank()) 
 
 
@@ -4876,13 +4947,19 @@ class Problem(_pyoomph.Problem):
                 mycmd=sys.orig_argv.copy()
             except:
                 raise RuntimeError("Problem.plot_in_dedicated_process=True only works for Python>=3.10")
-            mycmd+=["--runmode","p","--where","__pipe__"]
-            plotlog=open(self.get_output_directory("_dedicated_plotter_log.txt"),"w")
-            #self._plotting_process=subprocess.Popen(mycmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            if not self.is_quiet():
-                print("Creating dedicated plot process: "+str(mycmd))
-            self._plotting_process=subprocess.Popen(mycmd,stdin=subprocess.PIPE,stdout=plotlog,stderr=plotlog)
-            #print(self._plotting_process.)
+            # Set on every rank, so that all of them agree to leave the plotting to the child.
+            self._dedicated_plotter_active=True
+            # Spawned by rank 0 alone. Every rank used to start its own replotter from sys.orig_argv:
+            # they all truncated the same _dedicated_plotter_log.txt and wrote the same plot files, and
+            # under --distribute the ranks that do not write the state file handed their child a path
+            # that need not exist yet.
+            if get_mpi_rank()==0:
+                mycmd+=["--runmode","p","--where","__pipe__"]
+                plotlog=open(self.get_output_directory("_dedicated_plotter_log.txt"),"w")
+                if not self.is_quiet():
+                    print("Creating dedicated plot process: "+str(mycmd))
+                self._plotting_process=subprocess.Popen(mycmd,stdin=subprocess.PIPE,stdout=plotlog,
+                                                       stderr=plotlog,env=_environment_without_mpi())
 
         for hook in self._hooks:
             hook.actions_after_initialise()

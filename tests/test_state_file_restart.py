@@ -333,13 +333,16 @@ def test_restart_reproduces_the_state_and_the_continuation(tmp_path, kind, solve
 # the end is compared, but that is enough - it is a nonlinear driven equation, so any deviation in the
 # step sequence shows up there.
 
-def _invoke_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False, where=None):
+def _invoke_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False, where=None,
+                   with_output=False, without_time_column=False):
     """Runs the worker and hands back (returncode, combined output). Used by the tests that expect it
     to refuse, where _run_worker's assertions would get in the way."""
     import subprocess
     here = os.path.dirname(os.path.abspath(__file__))
     env = dict(os.environ, PYOOMPH_VARIANT=variant)
     env["PYOOMPH_ABORT_AT"] = "-1" if abort_at is None else str(abort_at)
+    env["PYOOMPH_WITH_OUTPUT"] = "1" if with_output else ""
+    env["PYOOMPH_NO_TIME_COLUMN"] = "1" if without_time_column else ""
     cmd = [sys.executable, os.path.join(here, "continue_run_worker.py"), "--outdir", str(tmp_path / outdir)]
     if continue_mode:
         cmd += ["--runmode", "continue"]
@@ -349,9 +352,11 @@ def _invoke_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
 
-def _run_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False, where=None):
+def _run_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False, where=None,
+                with_output=False, without_time_column=False):
     returncode, out = _invoke_worker(tmp_path, variant, outdir, abort_at=abort_at,
-                                     continue_mode=continue_mode, where=where)
+                                     continue_mode=continue_mode, where=where,
+                                     with_output=with_output, without_time_column=without_time_column)
     if abort_at is not None:
         assert returncode == 7, "the worker was supposed to stop mid-run:\n" + out[-3000:]
         return None
@@ -597,6 +602,83 @@ def test_continue_ignores_recovery_snapshots(tmp_path):
         _assert_reproduces(reference, dict(part.split("=", 1) for part in final[0].split()[1:]),
                            "--where " + str(where))
 
+
+# --------------------------------------------------------------------------------------------------
+# What a resumed run leaves behind in its OUTPUT files, as opposed to in its state.
+#
+# A --runmode c resumes from the last state, but the interrupted run had usually written output past
+# that point already - and with --where it can be asked to resume from much further back. Those rows
+# describe a future that is about to be recomputed. They used to be left in place and the resumed run
+# appended after them, so the time column of the file ran forwards to where the first run stopped and
+# then jumped back. The claim here is the strong one: the file a resumed run leaves is the file the
+# uninterrupted run would have written, byte for byte.
+
+
+def _ode_output_file(tmp_path, outdir):
+    files = sorted((tmp_path / outdir).glob("*.txt"))
+    files = [f for f in files if not f.name.startswith("_")]
+    assert len(files) == 1, "expected exactly one ODE output file, got " + str([f.name for f in files])
+    return files[0]
+
+
+def _times_of(path):
+    rows = [ln for ln in path.read_text().splitlines() if ln and not ln.startswith("#")]
+    return [float(ln.split("\t")[0]) for ln in rows]
+
+
+@pytest.mark.parametrize("where", [None, "i=-1", "i=1"])
+def test_a_resumed_run_leaves_the_output_of_an_uninterrupted_one(tmp_path, where):
+    reference = _run_worker(tmp_path, "fixed", "ref_out", with_output=True)
+    expected = _ode_output_file(tmp_path, "ref_out").read_text()
+
+    _run_worker(tmp_path, "fixed", "brk_out", abort_at=0.75, with_output=True)
+    broken = _ode_output_file(tmp_path, "brk_out")
+    interrupted_rows = len(_times_of(broken))
+    resumed = _run_worker(tmp_path, "fixed", "brk_out", continue_mode=True, where=where,
+                          with_output=True)
+    assert float(resumed["t"]) == float(reference["t"])
+
+    got = _ode_output_file(tmp_path, "brk_out").read_text()
+    assert got == expected, (
+        "the resumed output file is not what an uninterrupted run writes.\nexpected times: "
+        + str(_times_of(_ode_output_file(tmp_path, "ref_out"))) + "\ngot: "
+        + str(_times_of(_ode_output_file(tmp_path, "brk_out"))))
+    # And the trim really had something to do: the interrupted run had got past the resume point.
+    assert interrupted_rows > 1
+
+
+def test_the_time_column_of_a_resumed_output_never_goes_backwards(tmp_path):
+    """The symptom this whole thing is about, stated directly."""
+    _run_worker(tmp_path, "fixed", "mono", abort_at=0.75, with_output=True)
+    _run_worker(tmp_path, "fixed", "mono", continue_mode=True, where="i=0", with_output=True)
+    times = _times_of(_ode_output_file(tmp_path, "mono"))
+    assert times == sorted(times), "the time column jumps backwards: " + str(times)
+
+
+def test_an_output_without_a_time_column_warns_and_is_not_touched(tmp_path):
+    """Nothing in such a file says when a row was written, so there is no way to tell which rows are
+    the stale ones. Appending is what happened before trimming existed and destroys nothing."""
+    _run_worker(tmp_path, "fixed", "notime", abort_at=0.75, with_output=True, without_time_column=True)
+    before = _ode_output_file(tmp_path, "notime").read_text()
+    returncode, out = _invoke_worker(tmp_path, "fixed", "notime", continue_mode=True, where="i=1",
+                                     with_output=True, without_time_column=True)
+    assert returncode == 0, out[-3000:]
+    assert "cannot trim" in out and "no time column" in out
+    after = _ode_output_file(tmp_path, "notime").read_text()
+    assert after.startswith(before), "the rows that were there must not have been rewritten"
+    assert len(after) > len(before), "the resumed run should still have appended its own rows"
+
+
+def test_redefining_the_problem_is_not_a_continue(tmp_path):
+    """continue_info is also handed over by redefine_problem and by change_output_directory, neither of
+    which carries an outstep. Keying the trim off 'is not None' would trim on those too."""
+    from pyoomph.output.generic import _BaseOutputter
+    o = _BaseOutputter()
+    for info in [None, {"redefined": True}, {"TODO": "Fill further information here"}]:
+        o._set_resume_info(info)
+        assert not o.is_resuming(), str(info) + " must not look like a resume"
+    o._set_resume_info({"outstep": 4, "dimtime": 0.4, "nondimtime": 0.4, "floattime": 0.4})
+    assert o.is_resuming() and o.get_resume_step() == 4 and o.get_resume_time() == 0.4
 
 # ----------------------------------------------------------------------------------------------
 # Restarting a run that remeshes

@@ -38,6 +38,7 @@ from pyoomph.equations.generic import ProjectExpression, ExtremumObservables
 from pyoomph.meshes.simplemeshes import RectangularQuadMesh
 from pyoomph.expressions.units import meter
 from pyoomph.generic.mpi import get_mpi_rank
+from pyoomph.output.generic import TextFileOutputAlongLine, GridFileOutput
 
 
 class Observed(Problem):
@@ -55,6 +56,12 @@ class Observed(Problem):
         # what the dimensional value has to survive: the unit cannot be read off a local element
         # there, so it comes from the registered expression instead.
         eqs += (Equations() + ExtremumObservables(edge=(x - 0.4) ** 2)) @ "top"
+        # Two outputs that interpolate onto points given in the coordinates of the WHOLE domain. Each
+        # rank used to build them out of its own partition and write them to a file name carrying no
+        # rank, so the ranks overwrote one another with their own slice - at four ranks the line came
+        # out with 11 of its 21 points. They merge to rank 0 now, like TextFileOutput does.
+        eqs += TextFileOutputAlongLine(filename="line", start=[0.05, 0.5], end=[0.95, 0.5], N=21)
+        eqs += GridFileOutput(filename="grid", lower=[0.05, 0.05], upper=[0.95, 0.95], N=[9, 9])
         self += eqs @ "domain"
 
 
@@ -82,6 +89,8 @@ def main():
             for i in range(3):
                 out.add_row(i, 10.0 * i)
             out.close()
+
+            p.output()
         print("PYOOMPH_MPI_RESULT rank=%d lo=%.12g hi=%.12g lox=%.12g loy=%.12g hix=%.12g hiy=%.12g "
               "metric=%.12g edge=%.12g" % (get_mpi_rank(), lo, hi, lo_x[0], lo_x[1], hi_x[0], hi_x[1],
                                            metric, edge))

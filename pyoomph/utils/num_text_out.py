@@ -32,6 +32,81 @@ import numpy
 from ..typings import *
 
 
+def split_numerical_text_header(header_line: str) -> "list[str] | None":
+    """The column names of a pyoomph text file header, or None if this is not one.
+
+    Split on TABS, which is what the writers join with, falling back to whitespace for a file that
+    has none - the same rule LoadedTextDataFile uses, and for the same reason: a column name written
+    before UNIT_SEPARATOR_IN_FILES existed can contain a space ("power[kg m^2/s^3]").
+    """
+    header = header_line.strip()
+    if len(header) == 0 or header[0] != "#":
+        return None
+    body = header.strip("#").strip()
+    names = body.split("\t") if "\t" in body else body.split()
+    return [s.strip() for s in names if s.strip()]
+
+
+def trim_numerical_text_file(filename: str, keep_until_time: float, time_column: str = "time",
+                             rel_tolerance: float = 1e-9) -> "str | None":
+    """Cut a pyoomph text file back to the last row at ``keep_until_time``.
+
+    This is what a ``--runmode c`` that resumes from an earlier state needs: the rows the aborted run
+    wrote after that instant describe a future that is about to be recomputed, and leaving them makes
+    the time column of the file jump backwards in the middle.
+
+    Returns None when the file was trimmed (or needed no trimming), or a human-readable reason why it
+    could not be - the caller decides whether that is fatal. Nothing is written in that case.
+
+    The surviving rows are copied **verbatim**, not reformatted: going through numpy would rewrite
+    every number, and a resumed file is supposed to be indistinguishable from an uninterrupted one.
+    The cut is after the LAST row at the resume time, so that a stationary or continuation run, which
+    writes several rows at the same time value, keeps all of them.
+    """
+    import os
+    if not os.path.isfile(filename):
+        return None
+    with open(filename, "r") as f:
+        lines = f.readlines()
+    if len(lines) == 0:
+        return None
+    names = split_numerical_text_header(lines[0])
+    if names is None:
+        return "it has no '#' header line"
+    col = None
+    for i, n in enumerate(names):
+        if n == time_column or n.startswith(time_column + "["):
+            col = i
+            break
+    if col is None:
+        return ("it has no '" + time_column + "' column (its columns are: " + ", ".join(names) + ")")
+
+    # The index of the last line that is still part of the run being resumed. Lines that do not parse
+    # as data - a blank line, a second comment - belong with the row above them and are kept with it.
+    keep_until = 0
+    tol = rel_tolerance * max(abs(keep_until_time), 1.0)
+    for i in range(1, len(lines)):
+        fields = lines[i].split("\t") if "\t" in lines[i] else lines[i].split()
+        if len(fields) <= col:
+            continue
+        try:
+            t = float(fields[col])
+        except ValueError:
+            continue
+        if t <= keep_until_time + tol:
+            keep_until = i
+    if keep_until == len(lines) - 1:
+        return None  # nothing past the resume point
+
+    # Via a temporary file in the same directory, so that an interruption cannot leave a half file
+    # where a complete one was.
+    tmpname = filename + ".trimming"
+    with open(tmpname, "w") as f:
+        f.writelines(lines[:keep_until + 1])
+    os.replace(tmpname, filename)
+    return None
+
+
 class NumericalTextOutputFile:
     """A tab-separated text file of scalar rows, e.g. an observable over time.
 
