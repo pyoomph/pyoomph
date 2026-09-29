@@ -548,7 +548,8 @@ doing anything:
 | Flag | Purpose |
 |---|---|
 | `--outdir DIR` | Output directory (default: script filename without `.py`). |
-| `--runmode d\|o\|c\|p` | Delete-and-run / overwrite / continue from the dumped state / re-plot only. |
+| `--runmode d\|o\|c\|p` | Delete-and-run / overwrite / continue from the last written state (or the one `--where` picks) / re-plot only. |
+| `--where SELECTOR` | Which state files `--runmode c`/`p` use: a `.dump` path, `i=N` (Nth state file, `i=-1` the last), `t=X` (last state at or before the dimensional time X, in seconds), or a bool expression over `step`/`time`. Continue resumes from the last match, replot plots all of them. A bare number is refused as ambiguous. |
 | `--quick-test` | Stop after the first successful Newton solve and write one output. Ideal for checking that a script runs at all. |
 | `--omp N`, `--distribute`, `--mpi-output` | Parallelization (above). |
 | `--pardiso`, `--superlu`, `--umfpack`, `--petsc`, `--petsc_mumps`, `--accelerate` | Linear solver. |

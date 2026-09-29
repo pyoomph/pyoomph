@@ -333,7 +333,9 @@ def test_restart_reproduces_the_state_and_the_continuation(tmp_path, kind, solve
 # the end is compared, but that is enough - it is a nonlinear driven equation, so any deviation in the
 # step sequence shows up there.
 
-def _run_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False):
+def _invoke_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False, where=None):
+    """Runs the worker and hands back (returncode, combined output). Used by the tests that expect it
+    to refuse, where _run_worker's assertions would get in the way."""
     import subprocess
     here = os.path.dirname(os.path.abspath(__file__))
     env = dict(os.environ, PYOOMPH_VARIANT=variant)
@@ -341,15 +343,30 @@ def _run_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False):
     cmd = [sys.executable, os.path.join(here, "continue_run_worker.py"), "--outdir", str(tmp_path / outdir)]
     if continue_mode:
         cmd += ["--runmode", "continue"]
+    if where is not None:
+        cmd += ["--where", where]
     proc = subprocess.run(cmd, cwd=here, env=env, capture_output=True, text=True, timeout=900)
-    out = (proc.stdout or "") + (proc.stderr or "")
+    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+
+
+def _run_worker(tmp_path, variant, outdir, abort_at=None, continue_mode=False, where=None):
+    returncode, out = _invoke_worker(tmp_path, variant, outdir, abort_at=abort_at,
+                                     continue_mode=continue_mode, where=where)
     if abort_at is not None:
-        assert proc.returncode == 7, "the worker was supposed to stop mid-run:\n" + out[-3000:]
+        assert returncode == 7, "the worker was supposed to stop mid-run:\n" + out[-3000:]
         return None
-    assert proc.returncode == 0, "worker failed:\n" + out[-3000:]
+    assert returncode == 0, "worker failed:\n" + out[-3000:]
     final = [line for line in out.splitlines() if line.startswith("FINAL ")]
     assert len(final) == 1, "no final line:\n" + out[-3000:]
     return dict(part.split("=", 1) for part in final[0].split()[1:])
+
+
+def _loaded_state(out):
+    """Which state file a resumed run actually loaded, from its own console output."""
+    loaded = [line.split("Loading state ", 1)[1].strip()
+              for line in out.splitlines() if line.startswith("Loading state ")]
+    assert len(loaded) == 1, "expected exactly one state load:\n" + out[-3000:]
+    return loaded[0]
 
 
 # numouts is the one variant that is not bit-for-bit: its output grid is rebuilt from the resume time
@@ -375,6 +392,210 @@ def test_runmode_continue_reproduces_the_uninterrupted_run(tmp_path, variant, ab
     assert deviation <= tol, "%s: u differs by %.3e (tolerance %.0e)" % (tag, deviation, tol)
     if tol == 0.0:
         assert resumed["dts"] == reference["dts"], "%s: dt history %s vs %s" % (tag, resumed["dts"], reference["dts"])
+
+
+# --------------------------------------------------------------------------------------------------
+# --where selects WHICH state a --runmode continue resumes from. It used to be read only by the
+# replot mode, although its own help text claimed both, so a continued run always took the last state
+# and there was no way to go back to an earlier one without editing the script.
+#
+# The worker prints the state file it loaded, so every test below asserts on the selection itself and
+# then on the result: the ODE is deterministic, so resuming from an EARLIER state and re-integrating
+# has to arrive at the same answer as the uninterrupted run. That is the point of being able to pick.
+
+def _broken_run(tmp_path, tag, abort_at=0.75):
+    """An uninterrupted reference plus an aborted run to resume, sharing the ODE of the tests above."""
+    reference = _run_worker(tmp_path, "fixed", "ref_" + tag)
+    _run_worker(tmp_path, "fixed", "brk_" + tag, abort_at=abort_at)
+    states = sorted((tmp_path / ("brk_" + tag) / "_states").glob("state_*.dump"))
+    assert len(states) >= 4, "the aborted run should leave several states behind"
+    return reference, states
+
+
+def _fresh_copy(tmp_path, tag, suffix):
+    """A private copy of the aborted run, because a resume that RUNS TO THE END writes further states
+    into the directory it resumed from -- so a second resume there no longer sees the same set."""
+    import shutil
+    dest = "brk_%s_%s" % (tag, suffix)
+    shutil.copytree(str(tmp_path / ("brk_" + tag)), str(tmp_path / dest))
+    return dest, sorted((tmp_path / dest / "_states").glob("state_*.dump"))
+
+
+def _assert_reproduces(reference, resumed, what):
+    assert float(resumed["t"]) == float(reference["t"]), "%s: ended at a different time" % what
+    assert resumed["u"] == reference["u"], (
+        "%s: resuming from an earlier state gave u=%s instead of %s" % (what, resumed["u"], reference["u"]))
+
+
+def test_where_default_is_the_last_state(tmp_path):
+    """Passing --where True explicitly must be the same as not passing --where at all."""
+    reference, _states = _broken_run(tmp_path, "def")
+    a, states_a = _fresh_copy(tmp_path, "def", "plain")
+    b, states_b = _fresh_copy(tmp_path, "def", "true")
+    _, out_a = _invoke_worker(tmp_path, "fixed", a, continue_mode=True)
+    returncode, out_b = _invoke_worker(tmp_path, "fixed", b, continue_mode=True, where="True")
+    assert returncode == 0, out_b[-3000:]
+    assert _loaded_state(out_a) == str(states_a[-1])
+    assert _loaded_state(out_b) == str(states_b[-1])
+    final = [line for line in out_b.splitlines() if line.startswith("FINAL ")]
+    _assert_reproduces(reference, dict(part.split("=", 1) for part in final[0].split()[1:]), "--where True")
+
+
+@pytest.mark.parametrize("where,index", [("i=-1", -1), ("i=0", 0), ("i=2", 2), ("i=-3", -3)])
+def test_where_selects_a_state_by_index(tmp_path, where, index):
+    reference, states = _broken_run(tmp_path, "idx")
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_idx", continue_mode=True, where=where)
+    assert returncode == 0, out[-3000:]
+    assert _loaded_state(out) == str(states[index]), "%s picked the wrong state" % where
+    final = [line for line in out.splitlines() if line.startswith("FINAL ")]
+    resumed = dict(part.split("=", 1) for part in final[0].split()[1:])
+    _assert_reproduces(reference, resumed, where)
+
+
+def test_where_index_out_of_range_is_refused(tmp_path):
+    _broken_run(tmp_path, "oor")
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_oor", continue_mode=True, where="i=99")
+    assert returncode != 0
+    assert "state index 99" in out
+
+
+def test_where_selects_by_time_without_overshooting(tmp_path):
+    """t=X is the last state at or BEFORE X -- resuming past the instant asked for would skip physics."""
+    from pyoomph.generic.problem import Problem
+    reference, states = _broken_run(tmp_path, "tim")
+    prober = Problem()
+    times = [prober._get_time_of_state_file(str(f))[0] for f in states]
+    # Ask for an instant strictly between the last two states: the earlier one has to win.
+    between = 0.5 * (times[-2] + times[-1])
+    assert times[-2] < between < times[-1]
+    outdir, _ = _fresh_copy(tmp_path, "tim", "between")
+    returncode, out = _invoke_worker(tmp_path, "fixed", outdir, continue_mode=True,
+                                     where="t=%.17g" % between)
+    assert returncode == 0, out[-3000:]
+    assert os.path.basename(_loaded_state(out)) == states[-2].name, "t= overshot the requested time"
+    final = [line for line in out.splitlines() if line.startswith("FINAL ")]
+    _assert_reproduces(reference, dict(part.split("=", 1) for part in final[0].split()[1:]), "t=")
+
+    # A time every state is later than is an error, not a silent fallback to the earliest one.
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_tim", continue_mode=True, where="t=-1")
+    assert returncode != 0
+    assert "earliest" in out
+
+
+def test_where_time_accepts_a_unit(tmp_path):
+    """The stored time is dimensional, in seconds -- so a unit expression must reduce to the same thing."""
+    _, states = _broken_run(tmp_path, "unit")
+    from pyoomph.generic.problem import Problem
+    prober = Problem()
+    t_last = prober._get_time_of_state_file(str(states[-1]))[0]
+    dir_a, _ = _fresh_copy(tmp_path, "unit", "sec")
+    dir_b, _ = _fresh_copy(tmp_path, "unit", "ms")
+    plain = _invoke_worker(tmp_path, "fixed", dir_a, continue_mode=True, where="t=%.17g" % t_last)
+    united = _invoke_worker(tmp_path, "fixed", dir_b, continue_mode=True,
+                            where="t=%.17g*milli*second" % (t_last * 1000.0))
+    assert plain[0] == 0 and united[0] == 0, (plain[1] + united[1])[-3000:]
+    assert os.path.basename(_loaded_state(plain[1])) == states[-1].name
+    assert os.path.basename(_loaded_state(united[1])) == states[-1].name
+
+
+def test_where_selects_by_expression(tmp_path):
+    reference, states = _broken_run(tmp_path, "expr")
+    from pyoomph.generic.problem import Problem
+    prober = Problem()
+    steps = [prober._get_time_of_state_file(str(f))[1] for f in states]
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_expr", continue_mode=True,
+                                     where="step<=%d" % steps[1])
+    assert returncode == 0, out[-3000:]
+    # The LAST match, so the second state and not the first
+    assert _loaded_state(out) == str(states[1])
+    final = [line for line in out.splitlines() if line.startswith("FINAL ")]
+    _assert_reproduces(reference, dict(part.split("=", 1) for part in final[0].split()[1:]), "step<=")
+
+
+def test_where_expression_may_contain_a_slash(tmp_path):
+    """A state file is recognised by its .dump suffix and not by containing a path separator, because
+    an expression such as "time/2>0.1" contains one too and is not a file name."""
+    reference, states = _broken_run(tmp_path, "slash")
+    from pyoomph.generic.problem import Problem
+    prober = Problem()
+    times = [prober._get_time_of_state_file(str(f))[0] for f in states]
+    outdir, _ = _fresh_copy(tmp_path, "slash", "expr")
+    returncode, out = _invoke_worker(tmp_path, "fixed", outdir, continue_mode=True,
+                                     where="time/2<=%.17g" % (0.5 * times[1]))
+    assert returncode == 0, out[-3000:]
+    assert os.path.basename(_loaded_state(out)) == states[1].name
+    final = [line for line in out.splitlines() if line.startswith("FINAL ")]
+    _assert_reproduces(reference, dict(part.split("=", 1) for part in final[0].split()[1:]), "time/2")
+
+
+def test_where_matching_nothing_does_not_silently_start_over(tmp_path):
+    """The whole point of asking for a state is that being given a fresh run instead is useless."""
+    _broken_run(tmp_path, "none")
+    states_before = sorted((tmp_path / "brk_none" / "_states").glob("state_*.dump"))
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_none", continue_mode=True, where="time>1e9")
+    assert returncode != 0
+    assert "does not select any state file" in out
+    assert "FINAL " not in out, "it started over instead of refusing"
+    assert sorted((tmp_path / "brk_none" / "_states").glob("state_*.dump")) == states_before
+
+
+def test_where_takes_an_explicit_state_file(tmp_path):
+    """Including one that lives outside the output directory being continued."""
+    import shutil
+    reference, states = _broken_run(tmp_path, "path")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    copied = elsewhere / "mystate.dump"
+    shutil.copy(str(states[-2]), str(copied))
+    outdir, _ = _fresh_copy(tmp_path, "path", "copy")
+    returncode, out = _invoke_worker(tmp_path, "fixed", outdir, continue_mode=True, where=str(copied))
+    assert returncode == 0, out[-3000:]
+    assert _loaded_state(out) == str(copied)
+    final = [line for line in out.splitlines() if line.startswith("FINAL ")]
+    _assert_reproduces(reference, dict(part.split("=", 1) for part in final[0].split()[1:]), "explicit path")
+
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_path", continue_mode=True,
+                                     where=str(elsewhere / "nosuch.dump"))
+    assert returncode != 0
+    assert "no such file" in out
+
+
+@pytest.mark.parametrize("where", ["3", "2.5", "-1"])
+def test_where_refuses_a_bare_number(tmp_path, where):
+    """eval("3") is truthy, so a bare number would match every state and look like a working selector
+    while quietly resuming from the last one."""
+    _broken_run(tmp_path, "bare" + where.replace(".", "").replace("-", "m"))
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_bare" + where.replace(".", "").replace("-", "m"),
+                                     continue_mode=True, where=where)
+    assert returncode != 0
+    assert "ambiguous" in out and "i=" in out and "t=" in out
+
+
+def test_where_pipe_is_replot_only(tmp_path):
+    _broken_run(tmp_path, "pipe")
+    returncode, out = _invoke_worker(tmp_path, "fixed", "brk_pipe", continue_mode=True, where="__pipe__")
+    assert returncode != 0
+    assert "--runmode p" in out
+
+
+def test_continue_ignores_recovery_snapshots(tmp_path):
+    """adaptive_recovery writes _snapshot_<pid>_<n>.dump into the same directory, and a run killed
+    mid-solve leaves them behind. They are rollback points of one Newton solve, not of the simulation,
+    so they must never be resumed from -- which used to hold only by the accident that "_" sorts before
+    "s" while the resume took the last file."""
+    import shutil
+    reference, _states = _broken_run(tmp_path, "snap")
+    for suffix, where, wanted in [("idx", "i=0", 0), ("last", None, -1)]:
+        outdir, states = _fresh_copy(tmp_path, "snap", suffix)
+        # A loadable decoy: a copy of the LAST state, so selecting it would go unnoticed in the result
+        # but shows up as the wrong file name.
+        shutil.copy(str(states[-1]), str(states[-1].parent / "_snapshot_12345_0.dump"))
+        returncode, out = _invoke_worker(tmp_path, "fixed", outdir, continue_mode=True, where=where)
+        assert returncode == 0, out[-3000:]
+        assert _loaded_state(out) == str(states[wanted]), "the snapshot was treated as a state file"
+        final = [line for line in out.splitlines() if line.startswith("FINAL ")]
+        _assert_reproduces(reference, dict(part.split("=", 1) for part in final[0].split()[1:]),
+                           "--where " + str(where))
 
 
 # ----------------------------------------------------------------------------------------------

@@ -36,6 +36,6 @@ If you only want to recreate e.g. the plot number :math:`10`, you can add the ``
 
    python evap_droplet_thermal_plot.py --runmode p --where step==10
 
-Alternatively, you can also create something like ``--where 'step in [10,11,20]'`` or alternative python ``bool`` expressions involving the output step ``step``.
+Alternatively, you can also create something like ``--where 'step in [10,11,20]'`` or alternative python ``bool`` expressions involving the output step ``step`` and the dimensional time ``time``. Besides such an expression, ``--where`` also accepts ``i=N`` for the Nth state file (``i=-1`` being the last), ``t=X`` for the last state at or before the time ``X`` in seconds, and the name of a single state file. All forms are listed in :numref:`secodecmdline`, and they work for ``--runmode c`` as well, where they select the state a simulation is resumed from.
 
 Note that this replotting only works, if :py:attr:`~pyoomph.generic.problem.Problem.write_states` is ``True`` (which is the default). Replotting, just like continuing a simulation (cf. :numref:`secpdecontinue`), relies on the state files which contain all information of the current state of the simulation.
