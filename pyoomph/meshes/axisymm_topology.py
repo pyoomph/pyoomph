@@ -913,14 +913,17 @@ def detect_and_plan(chains: List[InterfaceChain],
             if not np.any(nc.origin < 0):
                 continue
             _correct_volume(sh, nc, targets[ri], eps_ref, volume_tolerance)
+    # Deferrable: all three say that THIS state could not be turned into a usable plan, not that
+    # anything is wrong with the parameters, and the state one solve later is a different one. The
+    # same reasoning as for the refusals before the morphology; see InterfaceStateNotPlannable.
     for nc in new_chains:
         if np.any(nc.points[:, 0] < -1e-12 * extent):
-            raise RuntimeError("axisymmetric topology: the corrected interface crosses "
-                               "the symmetry axis")
+            raise InterfaceStateNotPlannable("axisymmetric topology: the corrected interface "
+                                             "crosses the symmetry axis")
         nc.points[nc.points[:, 0] < 0.0, 0] = 0.0
         if not sh.LineString(nc.points).is_simple:
-            raise RuntimeError("axisymmetric topology: the corrected interface is "
-                               "self-intersecting")
+            raise InterfaceStateNotPlannable("axisymmetric topology: the corrected interface is "
+                                             "self-intersecting")
         if np.any(np.diff(nc.zeta) <= 0.0):
             raise RuntimeError("axisymmetric topology: the new zeta chart is not "
                                "strictly monotone")
@@ -1527,7 +1530,7 @@ def _correct_volume(sh, nc: NewChain, target: float, eps: float, tol: float) -> 
                                    rtol=8.9e-16, maxiter=200))  # type:ignore[arg-type] # scipy stubs over-restrict rtol and pretend full_output
             res = abs(vol(A))
             if res > tol * target:
-                raise RuntimeError(
+                raise InterfaceStateNotPlannable(
                     "axisymmetric topology: the volume correction stalled at a relative "
                     "residual of {:g}, above volume_tolerance={:g}".format(
                         res / target, tol))
@@ -1535,7 +1538,12 @@ def _correct_volume(sh, nc: NewChain, target: float, eps: float, tol: float) -> 
             nc.points[np.abs(nc.points[:, 0]) < 1e-15, 0] = 0.0
             return
         span *= 2.0
-    raise RuntimeError(
+    # Deferrable, like the other refusals about the SHAPE handed in rather than about the
+    # parameters: an offset this large means the spliced fragment and its target are far apart,
+    # which is a property of the state, and the state one solve later is a different one. A
+    # geometry that genuinely cannot be corrected still ends the run, once max_unplannable_states
+    # consecutive solves have seen it.
+    raise InterfaceStateNotPlannable(
         "axisymmetric topology: cannot conserve the volume of a reconnected fragment; "
         "the required normal offset exceeds +-{:g}".format(span))
 
