@@ -666,7 +666,7 @@ ordinary meniscus shapes break on it, neither of them a topological change:
 * **dimpled near the axis** - the sliver is thinner than `2 eps` and erodes away, so the reservoir is
   reported as a vanished fragment (and with `allow_fragment_removal` would be deleted from the mesh),
   or the erosion hollows it into a ring, whose mirrored cross section does not touch the axis at all
-  and cannot be represented;
+  and cannot be represented. (Both are now also held off by the band around the closure, below.);
 * **crossing the contact height** - the closure cuts the interface and the section self-intersects.
 
 `AxisymmetricReconnection(reservoir_depth=...)` says how deep the liquid goes behind the contact line
@@ -685,9 +685,23 @@ not touch the axis, so the span has to run to where the *closure* meets it - the
 the depth. Taking the contact height itself leaves the whole nozzle above the meniscus outside every
 span, and `define_geometry` then cannot close the liquid's curve loop.
 
-Independently of it, the opening now leaves a band of `2 eps` around a *flat* closure alone. That
-costs no detection - an event within `4 eps` of a fixed end is refused anyway - and it is what keeps a
-merely dimpled meniscus from being eroded away where no reservoir depth was given.
+Independently of it, the opening leaves a band of `2 eps` around **every** closure alone - the flat
+one and the L of a reservoir end alike. That costs no detection - an event within `4 eps` of a fixed
+end is refused anyway - and it is what keeps a meniscus running close to its own closure from being
+eroded away.
+
+The band was built for flat closures only until 2026-10-03, on the reasoning that a reservoir depth
+already encloses the nozzle and so needs no protection. That holds for a bore of constant radius and
+fails for one that widens: the closure is drawn at the CONTACT radius for the whole depth, so past
+the end of a nozzle that opens into a wider feedthrough it is a wall that is not there. A meniscus
+retracted into the bore then has a film against an invented wall, and the opening took the middle of
+that film out as a free-standing annulus - the very ring this section lists as unrepresentable.
+Measured on the printhead at 1.5x drive: three components (body, ring, mirror twin) instead of one,
+and `detect_and_plan` raising "a fragment vanished when clipped to the half plane x>=0", which is the
+twin failing `_halfplane` rather than anything having vanished. With the band over the whole L it is
+one component again and there is no event to plan. `_closure_linestring` is now the single spelling
+of "where is this closure", shared by the band and by the fixed-end safety walk of stage 5, because
+those two drifting apart is what produced the bug.
 
 ---
 

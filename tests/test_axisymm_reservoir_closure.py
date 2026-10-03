@@ -51,8 +51,10 @@ import pytest
 
 pytest.importorskip("shapely")
 
-from pyoomph.meshes.axisymm_topology import (InterfaceChain, _closed_section, detect_and_plan,
-                                             revolved_volume)
+from pyoomph.meshes.axisymm_topology import (InterfaceChain, InterfaceStateNotPlannable,
+                                             _closed_section, _closure_linestring, _halfplane,
+                                             _interface_curve, _open, _polygons, _require_shapely,
+                                             _ring_coords, detect_and_plan, revolved_volume)
 
 #: Nozzle radius, wall contact at (1, 0), liquid at y > 0 behind it.
 _RES = 3.0
@@ -98,7 +100,7 @@ def _ligament_with_neck(neck=0.03):
 def test_a_humped_meniscus_needs_the_reservoir():
     # A meniscus that reaches below its own contact height is cut by the plain closure. (The other
     # mode - a dimple thin enough to be eroded away - no longer gets this far: the opening leaves a
-    # band around a flat closure alone, see detect_and_plan.)
+    # band around every closure alone, see detect_and_plan.)
     plain = _chain(_meniscus(-0.05), ("fixed", "axis"))
     try:
         plan = detect_and_plan([plain], 0.025, 0.02)
@@ -173,3 +175,78 @@ def test_the_freed_drop_keeps_its_volume(pinch):
     free = [nc for nc in pinch.new_chains if "fixed" not in nc.end_types][0]
     # The sphere of radius 0.8 it was cut from, to within what the cap resampling can hold.
     assert revolved_volume(free.points) == pytest.approx(4.0 / 3.0 * numpy.pi * 0.8 ** 3, rel=0.05)
+
+
+# ------------------------------------------------------------------------------------------------
+# 3. the band the opening leaves around a closure covers the L of a reservoir end too
+# ------------------------------------------------------------------------------------------------
+
+def _gas_finger(n=137, rwall=1.0, tip=3.0):
+    """A meniscus pinned at the rim (1,0) and retracted to an axial tip, with a film on the wall.
+
+    This is the printhead state measured on 2026-10-03: gas drawn into the bore leaves liquid
+    between the interface and the wall, and that film is thinner than ``2*rmin`` at both of its
+    ends - at the rim, where it goes to zero by construction, and again further in. Without a band
+    around the closure the opening takes the middle of it out as a free-standing annulus, whose
+    mirrored cross section does not touch the axis and cannot be represented.
+    """
+    z = numpy.linspace(0.0, tip, n)
+    r = rwall - 0.17 * numpy.sin(numpy.pi * numpy.clip(z / (0.78 * tip), 0, 1)) ** 0.6
+    cap = z > 0.87 * tip
+    r[cap] = r[cap] * numpy.sqrt(numpy.clip(1.0 - ((z[cap] - 0.87 * tip) / (0.13 * tip)) ** 2, 0, 1))
+    r[0] = rwall
+    r[-1] = 0.0
+    return numpy.stack([r, z], axis=1)
+
+
+def test_a_wall_film_is_not_cut_into_a_ring():
+    ch = _chain(_gas_finger(), ("fixed", "axis"), reservoir=(14.375, None))
+    assert detect_and_plan([ch], 0.05, 0.02) is None
+
+
+def test_the_film_would_be_cut_into_a_ring_without_the_band():
+    # The premise of the test above: without the protect band the very same state opens into three
+    # components - the body, the ring, and the ring's mirror twin - so the band is what is doing
+    # the work and not some other property of the state.
+    sh = _require_shapely()
+    ch = _chain(_gas_finger(), ("fixed", "axis"), reservoir=(14.375, None))
+    unprotected = _polygons(_open(sh.unary_union([sh.Polygon(_ring_coords(ch))]), 0.05, 8))
+    assert len(unprotected) == 3
+    off_axis = [q for q in unprotected if q.bounds[0] > 1e-9 or q.bounds[2] < -1e-9]
+    assert len(off_axis) == 2, "the ring and its mirror twin, neither of them crossing the axis"
+
+
+def test_the_band_follows_the_closure_the_volume_is_measured_against():
+    # The whole bug was two spellings of "where is this closure" drifting apart, so pin that the
+    # one the band is built from is the one _ring_coords draws and _closed_section measures.
+    sh = _require_shapely()
+    for reservoir in (None, _RES):
+        pts = _meniscus(0.0, hump=0.0)
+        ends = ("fixed", "axis")
+        ch = _chain(pts, ends, reservoir=(reservoir, None))
+        closure = _closure_linestring(sh, ch.points[0], ch.reservoir[0])
+        ring = sh.Polygon(_ring_coords(ch))
+        assert closure.within(ring.buffer(1e-9)), "the closure must lie on the section it closes"
+        assert float(closure.bounds[3]) == pytest.approx(
+            float(pts[0, 1]) + (reservoir or 0.0), abs=1e-12)
+
+
+def test_an_off_axis_fragment_is_refused_as_toroidal_and_is_deferrable():
+    # If a ring ever does reach the half-plane extraction by some other route, it must say what is
+    # actually wrong with it - it does not touch the axis - rather than "a fragment vanished", and
+    # it must be the deferrable type, because a transient can pass through such a state.
+    sh = _require_shapely()
+    ring = sh.box(0.4, 0.0, 0.9, 1.0)        # an off-axis fragment of the half plane
+    with pytest.raises(InterfaceStateNotPlannable, match="does not touch the symmetry axis"):
+        _interface_curve(ring, 1e-9, 0.05)
+
+
+def test_the_mirror_twin_of_an_off_axis_fragment_clips_to_nothing():
+    # ... and that is how the half-plane extraction recognises it: the twin lies wholly at x < 0,
+    # so its upper x bound is at or below the snap tolerance. This is the predicate the
+    # "vanished"/"toroidal" branch turns on.
+    sh = _require_shapely()
+    clip = sh.box(0.0, -10.0, 10.0, 10.0)
+    twin = sh.box(-0.9, 0.0, -0.4, 1.0)
+    assert _halfplane(twin, clip, 1e-9) is None
+    assert float(twin.bounds[2]) <= 1e-9

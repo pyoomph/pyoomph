@@ -81,8 +81,12 @@ class WaistNotYetSeparable(RuntimeError):
 class InterfaceStateNotPlannable(RuntimeError):
     """The interface handed in cannot be turned into a cross section this module can reason about.
 
-    Two shapes reach it: a chain whose ring self-intersects, and a union that already encloses a
-    hole. Both used to end the run, and both are states a *transient* can pass through, because
+    Several shapes reach it, before the morphology and after it: a chain whose ring
+    self-intersects; a union that already encloses a hole, or a reconnection that would create one;
+    a fragment that does not touch the symmetry axis (a ring - see ``reservoir_depth``), and its
+    mirror twin, which clips to nothing at ``x >= 0``; and a fragment left with no interface at all.
+    All of them used to end the run, and all of them are states a *transient* can pass through,
+    because
     :py:class:`~pyoomph.equations.topological_changes.AxisymmetricReconnection` detects after every
     Newton solve - including the solves of steps that are about to be rejected on temporal error or
     on a Newton failure, whose interface is an intermediate that no one ever asked to keep. Measured
@@ -241,6 +245,25 @@ def _poly_volume(poly: Any) -> float:
     return revolved_volume(np.asarray(poly.exterior.coords)[:-1])
 
 
+def _closure_linestring(sh, pt: Any, hres: Optional[float]) -> Any:
+    """The synthetic closure of a ``"fixed"`` chain end, in the FULL (mirrored) plane.
+
+    It has to be the closure :func:`_ring_coords` actually builds and :func:`_closed_section`
+    measures the volume against: straight across at the contact height without a reservoir depth,
+    and the L up the wall and across the far end of it - on both sides of the axis - with one.
+
+    Two places need it and used to spell it out separately, which is how they came apart: the
+    protect band of the opening, and the fixed-end safety walk of stage 5. The band was built for
+    flat closures alone, so a reservoir end - the only kind a nozzle meniscus has - was left
+    unprotected and its film was eroded into a ring.
+    """
+    if hres:
+        y0, y1 = float(pt[1]), float(pt[1]) + float(hres)
+        return sh.LineString([(float(pt[0]), y0), (float(pt[0]), y1),
+                              (-float(pt[0]), y1), (-float(pt[0]), y0)])
+    return sh.LineString([(-float(pt[0]), float(pt[1])), (float(pt[0]), float(pt[1]))])
+
+
 # --------------------------------------------------------------------------------------
 # Morphology
 # --------------------------------------------------------------------------------------
@@ -376,11 +399,13 @@ def _interface_curve(hpoly: Any, snap: float, eps: float,
     n = len(ring)
     on = ring[:, 0] <= snap
     if on.all():
-        raise RuntimeError("axisymmetric topology: degenerate fragment with no interface")
+        raise InterfaceStateNotPlannable("axisymmetric topology: degenerate fragment with no "
+                                         "interface")
     if not on.any():
-        raise RuntimeError(
+        raise InterfaceStateNotPlannable(
             "axisymmetric topology: a fragment does not touch the symmetry axis "
-            "(toroidal / detached topology is not supported)")
+            "(toroidal / detached topology is not supported). A film between an interface and a "
+            "wall is the usual source; see reservoir_depth.")
     # cyclic maximal runs of x > snap
     start = int(np.argmax(on))  # first on-axis index -> runs do not wrap from here
     runs: List[List[int]] = []
@@ -396,7 +421,8 @@ def _interface_curve(hpoly: Any, snap: float, eps: float,
     if cur:
         runs.append(cur)
     if not runs:
-        raise RuntimeError("axisymmetric topology: degenerate fragment with no interface")
+        raise InterfaceStateNotPlannable("axisymmetric topology: degenerate fragment with no "
+                                         "interface")
     runs.sort(key=lambda r: float(np.max(ring[r, 0])), reverse=True)
     main = runs[0]
     for r in runs[1:]:
@@ -542,19 +568,24 @@ def detect_and_plan(chains: List[InterfaceChain],
     # ---- 3. morphology -----------------------------------------------------------------
     P_union = sh.unary_union(P)
     # The synthetic closure of a "fixed" chain end (see _ring_coords) is not a physical boundary, so
-    # the sliver it cuts off is not a physical neck. A nozzle meniscus that is merely dimpled near
-    # the axis is thin only because the closure runs straight across the nozzle at the contact
-    # height, and eroding that away either deletes the whole reservoir as a vanished fragment or -
-    # worse - splits it into a ring, whose mirrored cross section does not touch the axis at all and
-    # is not representable here. So the opening leaves a band around every closure alone. Nothing
-    # detectable is lost: an event within 4*eps of a fixed end is refused further down anyway, and
-    # any thinness between an interface and its own closure is by construction next to that closure.
-    flat_closures = [sh.LineString([(-float(pt[0]), float(pt[1])), (float(pt[0]), float(pt[1]))])
-                     for _g, pt, h, _k in fixed_ends if not h]
+    # the sliver it cuts off is not a physical neck. A meniscus that runs close to its own closure is
+    # thin only because of where that closure was drawn, and eroding the thin part away either
+    # deletes the whole reservoir as a vanished fragment or - worse - splits it into a ring, whose
+    # mirrored cross section does not touch the axis at all and is not representable here. So the
+    # opening leaves a band around every closure alone. Nothing detectable is lost: an event within
+    # 4*eps of a fixed end is refused further down anyway, and any thinness between an interface and
+    # its own closure is by construction next to that closure.
+    #
+    # EVERY closure, flat or L. Building the band for flat ones alone is what let the ring through:
+    # the closure of a nozzle meniscus is the L of its reservoir depth, drawn at the CONTACT radius,
+    # which for a bore that widens (a nozzle opening into a feedthrough) is a wall that is not there
+    # past the nozzle. A meniscus retracted into the bore then has a film against an invented wall,
+    # and the opening cut the middle of that film out as a free-standing annulus.
+    closures = [_closure_linestring(sh, pt, h) for _g, pt, h, _k in fixed_ends]
     protect = None
-    if flat_closures and eps_p > 0.0:
+    if closures and eps_p > 0.0:
         protect = P_union.intersection(
-            sh.unary_union(flat_closures).buffer(2.0 * eps_p, quad_segs=qs))
+            sh.unary_union(closures).buffer(2.0 * eps_p, quad_segs=qs))
     if eps_p > 0.0:
         er = P_union.buffer(-eps_p, quad_segs=qs, join_style="round")
         if protect is not None:
@@ -665,8 +696,12 @@ def detect_and_plan(chains: List[InterfaceChain],
 
     for r in R:
         if len(r.interiors) > 0:
-            raise RuntimeError("axisymmetric topology: the reconnection would enclose a "
-                               "hole (entrapped opposite phase); unsupported topology")
+            # Deferrable, like its pre-opening twin at the top of this function: this hook runs
+            # after every Newton solve, including the solves of steps that are about to be
+            # rejected, whose interface nobody keeps.
+            raise InterfaceStateNotPlannable("axisymmetric topology: the reconnection would "
+                                             "enclose a hole (entrapped opposite phase); "
+                                             "unsupported topology")
 
     n_pinch = sum(1 for cs in children_of if len(cs) > 1)
     n_merge = sum(1 for qq in merged_of if len(qq) > 1)
@@ -678,8 +713,18 @@ def detect_and_plan(chains: List[InterfaceChain],
     for r in R:
         h = _halfplane(r, clip, snap)
         if h is None:
-            raise RuntimeError("axisymmetric topology: a fragment vanished when clipped "
-                               "to the half plane x>=0")
+            # A fragment with nothing at x>=0 is not a vanished fragment: the section is mirrored,
+            # so it is the twin of an OFF-AXIS fragment that this loop has already accepted at
+            # x>0. Saying "vanished" sent the reader looking for a lost fragment; the condition
+            # that actually holds is the one _interface_curve raises for the twin a few lines
+            # further down, so say that here instead.
+            if float(r.bounds[2]) <= snap:
+                raise InterfaceStateNotPlannable(
+                    "axisymmetric topology: a fragment does not touch the symmetry axis "
+                    "(toroidal / detached topology is not supported). A film between an "
+                    "interface and a wall is the usual source; see reservoir_depth.")
+            raise InterfaceStateNotPlannable("axisymmetric topology: a fragment vanished when "
+                                             "clipped to the half plane x>=0")
         R_half.append(h)
     stubs = [(pt, float(h)) for _g, pt, h, _k in fixed_ends if h]
     curves = [_interface_curve(h, max(snap, 1e-12 * extent), max(eps_ref, snap), stubs)
@@ -699,12 +744,7 @@ def detect_and_plan(chains: List[InterfaceChain],
         # event, not just the contact point: a waist a few eps above a wall still lands on
         # the closure even though it is far from the contact line itself. With a reservoir the
         # closure is the L along the wall and across the far end of it, so that is what is walked.
-        if hres:
-            y0, y1 = float(pt[1]), float(pt[1]) + hres
-            p = sh.LineString([(float(pt[0]), y0), (float(pt[0]), y1), (-float(pt[0]), y1),
-                               (-float(pt[0]), y0)])
-        else:
-            p = sh.LineString([(-float(pt[0]), float(pt[1])), (float(pt[0]), float(pt[1]))])
+        p = _closure_linestring(sh, pt, hres)
         for blob, be in blobs:
             if blob.distance(p) < 4.0 * be:
                 raise RuntimeError(

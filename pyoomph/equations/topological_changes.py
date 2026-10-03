@@ -644,6 +644,13 @@ class AxisymmetricReconnection(InterfaceEquations):
         #: split into a ring, and one that crosses the contact height is left self-intersecting. Set
         #: it to the depth of the reservoir along the wall - deeper than any excursion of the
         #: interface past the contact line - with the sign pointing INTO the liquid.
+        #:
+        #: The closure is a straight wall at the CONTACT radius, for the whole depth. On a bore that
+        #: widens - a nozzle opening into a feedthrough - that is a wall which is not there past the
+        #: nozzle, so an interface retracted that far runs alongside something synthetic. The
+        #: opening leaves a band of ``2*rmin`` around the closure alone for exactly that reason, so
+        #: it costs no detection; but the volume the plan conserves is measured against this same
+        #: closure, so a depth far beyond the real geometry is not free.
         self.reservoir_depth = reservoir_depth
         self.allow_fragment_removal = allow_fragment_removal
         self.segment_jump_offset = segment_jump_offset
