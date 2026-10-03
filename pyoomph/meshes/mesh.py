@@ -1719,8 +1719,18 @@ _install_mixin(MeshFromTemplate3d, MeshFromTemplateBase)
 
 def MeshFromTemplate(problem: "Problem", templatemesh: MeshTemplate, domainname: str, eqtree: "EquationTree", previous_mesh: BulkTemplateMesh | None = None) -> MeshFromTemplate1d | MeshFromTemplate2d | MeshFromTemplate3d:
     if not templatemesh.has_domain(domainname):
-        raise RuntimeError("There is no domain '" +
-                           domainname + "' defined in this mesh")
+        # On a REMESH this almost never means the template forgot to define the domain - it defined
+        # it a moment ago, for the mesh being replaced. It means the mesher was handed a geometry it
+        # could not fill and returned (next to) nothing, so no element of that domain came back.
+        # Measured on a printhead whose interface had folded through its own wall: gmsh declared the
+        # "liquid" surface and then meshed six elements in total, and the run died here pointing at
+        # the domain name rather than at the geometry.
+        raise RuntimeError(
+            "There is no domain '" + domainname + "' defined in this mesh. On a remesh this "
+            "usually means the mesher produced no element for it, i.e. it was handed a geometry it "
+            "could not fill - a self-intersecting interface, or one that has crossed a wall. The "
+            ".geo_unrolled and .msh of the attempt are in the _gmsh subdirectory of the output "
+            "directory.")
     coll = templatemesh._get_domain(domainname)
 
     edim = coll.get_element_dimension()
