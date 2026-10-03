@@ -826,3 +826,21 @@ the total, is comparable across backends; the split says how the work divides be
 which is a property of the backend rather than of the linear algebra.
 Nothing in pyoomph parses these strings (checked); they are diagnostics printed under Doc_time.
 Upstream equivalent: none; upstream SuperLUSolver always is SuperLU, so upstream's labels are right.
+
+##########################################################################
+binary_tree.cc (Changed on 3rd October 2026, BinaryTreeForest's constructor returns early on an
+empty forest):
+Mesh::distribute() calls setup_tree_forest() on EVERY rank - deliberately, "even if a (distributed)
+mesh has no elements on this processor. We still need to participate in communication" - and for a
+1-D mesh that reaches TemplatedMeshBase1d::setup_binary_tree_forest(), which builds one tree root
+per element and hands the vector to BinaryTreeForest. On a rank whose partition holds none of that
+mesh's elements the vector is empty, and the constructor's find_neighbours() throws "Trying to setup
+the neighbour scheme for an empty forest".
+QuadTreeForest has had exactly this early return since quadtree.cc:878-882 ("Don't setup neighbours
+etc. if forest is empty") and OcTreeForest likewise; only the binary tree lacked it, so the gap was
+1-D only. Measured on a printhead problem whose restrictor is a LineMesh of ~20 elements that shares
+no node with the 2-D mesh (it couples through the chamber ODE's external data), so METIS puts all of
+it on one rank: under "mpirun -n 2 --distribute" rank 1 raised that error and then segfaulted.
+find_neighbours() keeps its own throw, so calling it directly on an empty forest is still reported.
+Upstream equivalent: none known; upstream has the guard in the quad and oct forests but not in the
+binary one.

@@ -6489,7 +6489,11 @@ namespace pyoomph
         if (!ode->internal_data_pt(j)->is_pinned(0))
         {
           double nodal_err = ode->internal_data_pt(j)->time_stepper_pt()->temporal_error_in_value(ode->internal_data_pt(j), 0);
-          res += nodal_err * nodal_err * ft->temporal_error_scales[i];
+          // [j], the FIELD - as the guard four lines up already has it - and not [i], the element.
+          // With [i], every variable of a one-element ODE mesh (which is the usual case) was
+          // weighted with variable 0's scale, so an ODE that weights more than one variable got the
+          // wrong error norm and hence the wrong dt.
+          res += nodal_err * nodal_err * ft->temporal_error_scales[j];
           denom += 1.0;
         }
       }

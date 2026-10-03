@@ -442,6 +442,19 @@ namespace oomph
     LeakCheckNames::BinaryTreeForest_build += 1;
 #endif
 
+    // FOR PYOOMPH: don't set up the neighbour scheme for an empty forest. Mesh::distribute() calls
+    // setup_tree_forest() on EVERY rank, including one whose partition holds no element of this
+    // mesh at all, and find_neighbours() throws on an empty forest - so a 1-D submesh that METIS
+    // put entirely on one rank killed every other rank. QuadTreeForest has had exactly this early
+    // return since quadtree.cc:878-882, and OcTreeForest likewise; only the binary tree lacked it.
+    // Measured: a printhead problem whose restrictor is a LineMesh of ~20 elements, under
+    // "mpirun -n 2 --distribute", aborted on rank 1 with "Trying to setup the neighbour scheme for
+    // an empty forest" and then segfaulted.
+    if (trees_pt.size() == 0)
+    {
+      return;
+    }
+
     using namespace BinaryTreeNames;
 
     // Set up the neighbours
