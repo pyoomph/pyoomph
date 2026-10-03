@@ -38,6 +38,16 @@ from ..materials.generic import AnyFluidProperties, AnyFluidFluidInterface, Liqu
 from ..meshes.mesh import AnySpatialMesh,AnyMesh,MeshFromTemplate2d,Element,Node
 from ..typings import *
 
+if TYPE_CHECKING:
+    # AnyFluidProperties is a string-valued TypeAlias (see materials/generic.py) whose members
+    # (PureLiquidProperties, PureGasProperties, ...) are only resolvable via a wildcard import -
+    # needed so tools that resolve forward references in type annotations (e.g. sphinx_autodoc_typehints)
+    # can look them up in this module's namespace too, same as materials/generic.py itself does.
+    # cahn_hilliard.py carries the same import for the same reason. It became necessary here when
+    # CompositionNSCHEquations was given a docstring: an undocumented function is not autodoc'd, so
+    # nothing tried to resolve its annotations before.
+    from ..materials.generic import *
+
 
 # Piecewise potential to prevent overshooting
 # Returns f and f'
