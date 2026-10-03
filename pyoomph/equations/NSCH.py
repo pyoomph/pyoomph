@@ -28,11 +28,12 @@ from __future__ import annotations
  
  
 from ..typings import NPFloatArray
-from ..equations.generic import SpatialErrorEstimator
+from ..equations.generic import SpatialErrorEstimator, TemporalErrorEstimator
 from ..expressions import CustomMultiReturnExpression, square_root, symbolic_diff, var_and_test,var,grad,dot,maximum,minimum,subexpression
 from ..expressions.generic import ExpressionNumOrNone, ExpressionOrNum, FiniteElementSpaceEnum, dyadic, identity_matrix, partial_t, scale_factor, weak
 from ..generic import *
 from .navier_stokes import NavierStokesEquations #type:ignore
+from .cahn_hilliard import smooth_clamp  # the C1 clamp SimpleNSCH already uses for rho and mu
 from ..materials.generic import AnyFluidProperties, AnyFluidFluidInterface, LiquidGasInterfaceProperties, LiquidLiquidInterfaceProperties
 from ..meshes.mesh import AnySpatialMesh,AnyMesh,MeshFromTemplate2d,Element,Node
 from ..typings import *
@@ -211,8 +212,32 @@ class CompositionNSCHPhaseField(Equations):
         self.add_residual(weak(xi,grad(u_test)))
 
 
-def CompositionNSCHEquations(positive_props:AnyFluidProperties,negative_props:AnyFluidProperties,epsilon:ExpressionOrNum,mobility:ExpressionOrNum,interface_props:AnyFluidFluidInterface | None=None,phase_field_name:str="phi",partial_integrate_advection:bool=False,swap_test_functions:bool=True,velocity_error_factor:float=100,skew_symmetric_advection:bool=False,piecewise_potential:bool=False,mobility_for_scale:ExpressionNumOrNone=None,potential_func:ExpressionNumOrNone=None):
-    phi_clamp=subexpression(minimum(1,maximum(-1,var(phase_field_name))))
+def CompositionNSCHEquations(positive_props:AnyFluidProperties,negative_props:AnyFluidProperties,epsilon:ExpressionOrNum,mobility:ExpressionOrNum,interface_props:AnyFluidFluidInterface | None=None,phase_field_name:str="phi",partial_integrate_advection:bool=False,swap_test_functions:bool=True,velocity_error_factor:float=100,skew_symmetric_advection:bool=False,piecewise_potential:bool=False,mobility_for_scale:ExpressionNumOrNone=None,potential_func:ExpressionNumOrNone=None,temporal_error_factors:Dict[str,float] | None=None):
+    """Navier-Stokes coupled to a Cahn-Hilliard phase field, as one set of equations.
+
+    ``temporal_error_factors`` names the fields whose temporal error drives
+    :py:meth:`~pyoomph.generic.problem.Problem.run` with ``temporal_error=...``, e.g.
+    ``{"velocity_x":1, "velocity_y":1, "phi":1}``. ``None`` (the default) adds no estimator, which
+    is what this factory has always done - but be aware of what that means: with no estimator
+    anywhere the global norm is clamped to 1e-12 by oomph-lib, so the step is never rejected and dt
+    is multiplied by ``DTSF_max_increase`` every step until something else stops it. Only the output
+    step and ``maxstep`` then bound it, and a run that looks adaptive is not.
+    """
+    # SMOOTH, not minimum/maximum. Those differentiate branch-wise, as
+    # dx*heaviside(x-y)+dy*heaviside(y-x) (see pyoomph.expressions.maximum), so a hard clamp makes
+    # the viscosity and the density C0-but-not-C1 in phi - and they enter the momentum equations
+    # only. A Cahn-Hilliard phase field routinely overshoots |phi|>1 next to a sharp interface;
+    # once it does, the Newton direction is computed on one branch of the kink while the residual
+    # at the new iterate falls on the other, so the iteration two-cycles at a residual that does
+    # not shrink with dt. Measured on the printhead with use_NSCH=True: the residual alternated
+    # between 1.78e-3 and 2.13e-3 for all ten iterations, entirely on velocity_x/velocity_y with
+    # phi and mu three to four orders smaller, while dt was cut by six orders with no effect, until
+    # the run died on oomph-lib's minimum dt.
+    # smooth_clamp is the quintic smoothstep SimpleNSCH already uses for exactly these two
+    # coefficients (cahn_hilliard.get_density_for_ns / get_viscosity_for_ns). Its derivative
+    # vanishes at both ends, so the composite is C1 across the kink, and positivity - which is what
+    # the clamp is for - is preserved.
+    phi_clamp=subexpression(smooth_clamp(var(phase_field_name),-1,1))
     mu=subexpression(positive_props.dynamic_viscosity*(1+phi_clamp)/2+negative_props.dynamic_viscosity*(1-phi_clamp)/2)
     #rho=subexpression(positive_props.mass_density*(1+var(phase_field_name))/2+negative_props.mass_density*(1-var(phase_field_name)))
     rho=subexpression(positive_props.mass_density*(1+phi_clamp)/2+negative_props.mass_density*(1-phi_clamp)/2)
@@ -232,6 +257,8 @@ def CompositionNSCHEquations(positive_props:AnyFluidProperties,negative_props:An
     res+=NavierStokesEquations(dynamic_viscosity=mu,mass_density=rho,boussinesq=True)
     #res+=SpatialErrorEstimator(evaluate_in_past(var(phase_field_name)),**{phase_field_name:1.0,"velocity":100})
     res+=SpatialErrorEstimator(**{phase_field_name:1.0,"velocity":velocity_error_factor}) #type:ignore
+    if temporal_error_factors:
+        res+=TemporalErrorEstimator(**temporal_error_factors)
     #res+=SpatialErrorEstimator(**{phase_field_name:1.0})
 
     #u,u_test=var_and_test("velocity")
