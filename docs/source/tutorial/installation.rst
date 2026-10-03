@@ -13,5 +13,6 @@ Depending on your operating system (Windows, Mac and Linux are supported), you h
    installation/cmdlineoptions.rst
    installation/additional.rst
    installation/petscslepc.rst
+   installation/mumps.rst
    installation/wsl.rst
    installation/problems.rst

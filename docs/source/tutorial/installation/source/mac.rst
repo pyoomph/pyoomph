@@ -13,7 +13,7 @@ On Mac
    2. If a newer version is already installed, remove it by ``sudo rm -rf /Library/Developer/CommandLineTools``.
    3. Select the installed tools by ``sudo xcode-select -s /Library/Developer/CommandLineTools``.
 
-   Alternatively, you should install PETSc with MUMPS, as described in :numref:`petscslepc`.
+   Alternatively, stay native and use MUMPS as solver: either the standalone ``pyoomph_mumps`` package (:numref:`installmumps`), which requires no PETSc, or PETSc with MUMPS, as described in :numref:`petscslepc`.
       
 
 To clone the git repository, you require git, but this comes along with the Xcode developer tools, which is required anyhow. The latter can be installed via

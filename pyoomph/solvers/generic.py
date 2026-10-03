@@ -105,7 +105,7 @@ def _next_mumps_icntl14(current:int)->int:
 
 _PETSCSLEPC_INSTALL_URL="https://pyoomph.readthedocs.io/en/latest/tutorial/installation/petscslepc.html"
 _PYPA_INSTALL_URL="https://pyoomph.readthedocs.io/en/latest/tutorial/installation/pypa.html"
-_PYOOMPH_MUMPS_INSTALL_URL="https://github.com/pyoomph/pyoomph"
+_PYOOMPH_MUMPS_INSTALL_URL="https://github.com/pyoomph/pyoomph_mumps"
 _SOLVER_INSTALL_HINTS:dict[str,tuple[str,str]]={
 	"petsc":("PETSc",_PETSCSLEPC_INSTALL_URL),
 	"petsc_mumps":("PETSc with MUMPS support",_PETSCSLEPC_INSTALL_URL),
