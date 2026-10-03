@@ -948,6 +948,13 @@ class Problem(_pyoomph.Problem):
         #: How many times one solve() call may remesh and retry after an inverted element before
         #: giving up. A domain that stays folded should fail loudly rather than loop.
         self.inversion_remesh_max_retries:int=3
+        #: Element sizes to ask the remesher for on successive retries, as multiples of each
+        #: template's own ``default_resolution``. Retrying without varying anything cannot work -
+        #: same geometry, same dt, same settings, so the same mesh - which is why a budget of 10
+        #: was measured to fail at exactly the same time as one of 3. The first retry keeps the
+        #: template's own sizes, so a fold a plain remesh does cure is cured as before; only the
+        #: later ones differ. Entries beyond the last are the last.
+        self.inversion_remesh_size_factors:list[float]=[1.0,0.7,1.4]
         #: A step that reported an inversion counts as folded when it achieved less than this fraction
         #: of the last clean step. 1/16 is four halvings: an ordinary transient inversion costs one or
         #: two and stays well above it, while a fold goes to the dt floor and falls far below.
@@ -4170,6 +4177,35 @@ class Problem(_pyoomph.Problem):
                 return False,res
             return (dt_done<ref*self.inversion_remesh_dt_collapse),res
 
+        def remesh_at(factor:float)->None:
+            """Remesh the folded domains, asking for element sizes scaled by ``factor``.
+
+            Retrying without varying anything is the one thing that cannot work: the remesher is
+            handed the same geometry, at the same dt, with the same settings, so it produces
+            essentially the same mesh and it folds again. Measured on the printhead,
+            inversion_remesh_max_retries=10 failed at exactly the same microsecond as 3. The
+            give-up message below already named this ("or the remesher is reproducing the same bad
+            mesh") without anything acting on it.
+
+            default_resolution is the knob rather than mesh_size_factor, which sounds like the
+            right one and is not: it is applied in point() and add_ball() only, so it misses the
+            gmsh size FIELDS - and a template that drives its sizes from fields is exactly the one
+            that needs varying. Every define_geometry derives its sizes from default_resolution,
+            fields included, so scaling it reaches all of them.
+            """
+            saved={t:getattr(t,"default_resolution",None) for t in self._domains_remesh_on_inversion}
+            try:
+                for t,base in saved.items():
+                    if base is not None:
+                        t.default_resolution=base*factor
+                self.force_remesh(self._domains_remesh_on_inversion)
+            finally:
+                for t,base in saved.items():
+                    if base is not None:
+                        t.default_resolution=base
+
+        factors=list(self.inversion_remesh_size_factors) or [1.0]
+        tried:list[float]=[]
         snapshot=self._snapshot_state()
         for i in range(self.inversion_remesh_max_retries+1):
             fold,res=attempt(arm_threshold=(i>0))
@@ -4177,15 +4213,19 @@ class Problem(_pyoomph.Problem):
                 return res
             if i>=self.inversion_remesh_max_retries:
                 raise InvertedElementRemeshRequest(
-                    "The mesh kept folding after "+str(i)+" remeshes. Either the domain itself is "
-                    "degenerating, in which case no remesh can help, or the remesher is reproducing the "
-                    "same bad mesh. Problem.inversion_remesh_max_retries raises the budget.")
+                    "The mesh kept folding after "+str(i)+" remeshes, at element sizes scaled by "
+                    +", ".join(repr(f) for f in tried)+" times the template's own. Either the domain "
+                    "itself is degenerating, in which case no remesh can help, or every one of those "
+                    "meshes is bad in the same way. Problem.inversion_remesh_max_retries raises the "
+                    "budget and Problem.inversion_remesh_size_factors chooses the sizes.")
+            factor=factors[min(i,len(factors)-1)]
+            tried.append(factor)
             if not self.is_quiet():
                 print("INVERTED ELEMENT: the step collapsed without getting past the fold; restoring "
-                      "the last good state and remeshing (attempt "+str(i+1)+" of "+
-                      str(self.inversion_remesh_max_retries)+")")
+                      "the last good state and remeshing at "+repr(factor)+" times the element size "
+                      "(attempt "+str(i+1)+" of "+str(self.inversion_remesh_max_retries)+")")
             self._restore_state(snapshot)
-            self.force_remesh(self._domains_remesh_on_inversion)
+            remesh_at(factor)
             snapshot=self._snapshot_state()   # the old one describes the old mesh
 
     def _perform_pending_remesh(self) -> bool:

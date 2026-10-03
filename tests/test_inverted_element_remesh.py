@@ -200,3 +200,95 @@ def test_mpi_matches_serial(tmp_path, distribute):
     # Between the two ranks of ONE run there is nothing left to differ: the same collective produced
     # both, so this stays tight in either mode.
     assert abs(par[0]["csqr"] - par[1]["csqr"]) < 1e-12 * max(1.0, abs(par[0]["csqr"]))
+
+
+# ------------------------------------------------------------------------------------------------
+# The retry loop itself: it has to ask for a DIFFERENT mesh each time.
+#
+# The notch case above gets past its fold on the first remesh, so it never reaches the second
+# attempt and cannot pin what the later ones do. These drive the loop directly, with a stub in
+# place of a Problem, because the property under test is the sequence of requests it makes - not
+# anything the mesher does with them.
+# ------------------------------------------------------------------------------------------------
+
+class _FoldingStub:
+    """Just enough of a Problem for _solve_with_inversion_remesh, with a template that records."""
+
+    def __init__(self, folds, base=0.5):
+        self.inversion_remesh_max_retries = 3
+        self.inversion_remesh_size_factors = [1.0, 0.7, 1.4]
+        self.inversion_remesh_dt_collapse = 1.0 / 16.0
+        self._inversion_reference_dt = 1.0
+        self._inversion_remesh_threshold = 0
+        self._reports = 0
+        self._folds_left = folds
+        self._t = 0.0
+        self.template = type("T", (), {})()
+        self.template.default_resolution = base
+        self._domains_remesh_on_inversion = {self.template}
+        self.asked = []            # default_resolution seen by each force_remesh call
+        self.restored_to = []      # and what it was put back to afterwards
+
+    # -- the Problem surface the loop uses --------------------------------------------------------
+    def _get_inversion_reports(self):
+        return self._reports
+
+    def get_current_time(self, as_float=True, dimensional=False):
+        return self._t
+
+    def _snapshot_state(self):
+        return object()
+
+    def _restore_state(self, snap):
+        pass
+
+    def force_remesh(self, domains):
+        self.asked.append(self.template.default_resolution)
+
+    def is_quiet(self):
+        return True
+
+
+def _drive(stub, folds):
+    """Run the loop with a solve that folds ``folds`` times and then succeeds."""
+    from pyoomph.generic.problem import Problem
+
+    def do_solve():
+        if stub._folds_left > 0:
+            stub._folds_left -= 1
+            stub._reports += 1
+            # Inversions reported AND the step collapsed: it achieved 1e-6 against a clean step of
+            # 1.0, far below inversion_remesh_dt_collapse, which is what the loop reads as a fold.
+            stub._t += 1e-6
+            return "folded"
+        stub._t += 1.0                  # a clean step
+        return "ok"
+    return Problem._solve_with_inversion_remesh(stub, do_solve)
+
+
+def test_each_retry_asks_for_a_different_element_size():
+    stub = _FoldingStub(folds=3, base=0.5)
+    _drive(stub, 3)
+    # the factors, in order, applied to the template's own resolution
+    assert stub.asked == pytest.approx([0.5 * 1.0, 0.5 * 0.7, 0.5 * 1.4])
+
+
+def test_the_template_keeps_its_own_resolution_afterwards():
+    # The scaled size belongs to the mesh that retry built, not to every later remesh.
+    stub = _FoldingStub(folds=2, base=0.5)
+    _drive(stub, 2)
+    assert stub.template.default_resolution == pytest.approx(0.5)
+
+
+def test_the_first_retry_still_uses_the_templates_own_size():
+    # So a fold that a plain remesh does cure is cured exactly as it was before.
+    stub = _FoldingStub(folds=1, base=0.5)
+    _drive(stub, 1)
+    assert stub.asked == pytest.approx([0.5])
+
+
+def test_giving_up_says_which_sizes_were_tried():
+    from pyoomph.generic.problem import InvertedElementRemeshRequest
+    stub = _FoldingStub(folds=99, base=0.5)
+    with pytest.raises(InvertedElementRemeshRequest, match=r"1\.0, 0\.7, 1\.4"):
+        _drive(stub, 99)
