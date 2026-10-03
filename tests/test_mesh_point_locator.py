@@ -152,6 +152,36 @@ def test_eulerian_zeta_rejects_a_fold_back():
             p.solve()
 
 
+def test_an_element_whose_two_ends_share_a_zeta_is_rejected():
+    # The other validity guard, and the one that had no test: an element whose two END nodes carry
+    # the SAME zeta. locate_zeta cannot invert that at all - there is no parameter to solve for -
+    # so the element matches queries it has no business matching and the interpolation reads the
+    # wrong part of the boundary.
+    #
+    # Checked directly rather than through an assigner, because every shipped assigner has an
+    # earlier guard of its own: a *globally* constant zeta is caught by
+    # AssignZetaCoordinatesByEulerianCoordinate ("not meaningful. Probably align along another
+    # axis"), and arclength cannot produce one. What reaches this branch is a chart that varies
+    # overall and is flat on one element - which is how the one observed occurrence arose, a
+    # coalescence bridge where the chart steps by segment_jump_offset inside a single plan segment
+    # and a mesh element finer than that segment collapsed onto one of its endpoint values.
+    from pyoomph.meshes.zeta import _check_zeta_is_invertible
+    with _RectProb(AssignZetaCoordinatesByArclength(sort_along_axis="x+")) as p:
+        p.quiet()
+        p.solve()
+        mesh = p.get_mesh("domain/top")
+        bulk = mesh.get_bulk_mesh()
+        bind = bulk.get_boundary_index(mesh.get_name())
+        _check_zeta_is_invertible(mesh, bind, "the test's own assignment")   # the premise
+        # Flatten one element onto its own first value, and nothing else.
+        el = mesh.element_pt(0)
+        z0 = el.node_pt(0).get_coordinates_on_boundary(bind)[0]
+        for ni in range(el.nnode()):
+            el.node_pt(ni).set_coordinates_on_boundary(bind, [z0])
+        with pytest.raises(RuntimeError, match="degenerate on an element"):
+            _check_zeta_is_invertible(mesh, bind, "the test's own assignment")
+
+
 def test_open_boundaries_still_accept_both_assigners():
     for eqs in (AssignZetaCoordinatesByArclength(sort_along_axis="x+"),
                 AssignZetaCoordinatesByEulerianCoordinate("x")):
