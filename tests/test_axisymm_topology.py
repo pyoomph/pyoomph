@@ -465,26 +465,54 @@ def test_missing_shapely_message(monkeypatch):
 # Axis spans of a remesh without a plan (pyoomph.equations.topological_changes)
 # --------------------------------------------------------------------------------------
 
-def test_merge_spans_fuses_the_pieces_of_one_fragment():
-    from pyoomph.equations.topological_changes import _merge_spans
-    # one fragment on z = 0..2, handed over in three pieces (mesh partitioning), and a second
-    # one well clear of it: the pieces fuse, the two fragments stay apart
-    spans = [(0.0, 0.7), (0.7, 1.4), (1.4, 2.0), (3.0, 5.0)]
-    assert _merge_spans(spans, [0.0, 2.0, 3.0, 5.0], 1e-9) == [(0.0, 2.0), (3.0, 5.0)]
-
-
-def test_merge_spans_keeps_two_crossed_fragments_apart():
-    from pyoomph.equations.topological_changes import _merge_spans
-    # the state an inversion remesh is asked to rebuild: the rear tip of the upper fragment has
-    # crossed the tip of the lower one, so their axis spans overlap. Fusing them would leave two
-    # interface loops with a single axis line, which cannot be closed.
-    spans = [(0.0, 2.0), (1.98, 5.0)]
-    out = _merge_spans(spans, [0.0, 2.0, 1.98, 5.0], 1e-9)
-    assert len(out) == 2
-    assert out[0][0] == 0.0 and out[-1][1] == 5.0
-    assert out[0][1] == out[1][0] == pytest.approx(1.99)   # the overlap halved, no gap, no overlap
-
-
-def test_merge_spans_without_separators_is_the_plain_union():
+def test_merge_spans_is_the_plain_union():
     from pyoomph.equations.topological_changes import _merge_spans
     assert _merge_spans([(0.0, 2.0), (1.98, 5.0)]) == [(0.0, 5.0)]
+    # one fragment handed over in three pieces, as --distribute does it
+    assert _merge_spans([(0.0, 0.7), (0.7, 1.4), (1.4, 2.0), (3.0, 5.0)]) == [(0.0, 2.0), (3.0, 5.0)]
+
+
+def test_the_pieces_of_one_fragment_fuse_into_its_own_span():
+    from pyoomph.equations.topological_changes import _axis_spans_per_fragment
+    pieces = [(0.0, 0.7), (0.7, 1.4), (1.4, 2.0), (3.0, 5.0)]
+    tips = [(0.0, 2.0), (3.0, 5.0)]
+    assert _axis_spans_per_fragment(pieces, tips, 1e-9) == [(0.0, 2.0), (3.0, 5.0)]
+
+
+def test_every_axis_span_endpoint_is_a_chain_tip():
+    from pyoomph.equations.topological_changes import _axis_spans_per_fragment
+    # The real state of the printhead at 1.2x drive, t = 28.4 us: two fragments whose tips have
+    # passed through each other, so their spans overlap by 0.122. Cutting the overlap at its
+    # midpoint - which is what used to happen - puts an axis Line end at -31.25118595, and no
+    # interface chain ends there. define_geometry joins a Line to a Spline only when they share a
+    # gmsh Point, i.e. only when the coordinates hash identically, so the loop could not close.
+    a, b = (-32.0309361, -31.190136), (-31.3122359, -29.9974208)
+    out = _axis_spans_per_fragment([(-32.0309361, -29.9974208)], [a, b], 1e-9)
+    assert out == [a, b]
+    ends = {z for s in out for z in s}
+    assert all(z in {a[0], a[1], b[0], b[1]} for z in ends)
+    assert not any(abs(z - (-31.25118595)) < 1e-6 for z in ends), "the invented midpoint is gone"
+
+
+def test_a_contained_fragment_keeps_its_own_axis_span():
+    from pyoomph.equations.topological_changes import _axis_spans_per_fragment
+    # A span wholly inside another used to be absorbed, so that fragment lost its axis entirely.
+    out = _axis_spans_per_fragment([(0.0, 5.0)], [(0.0, 5.0), (1.0, 2.0)], 1e-9)
+    assert (1.0, 2.0) in out and (0.0, 5.0) in out
+
+
+def test_a_wall_anchored_fragment_reaches_the_end_of_its_coverage():
+    from pyoomph.equations.topological_changes import _axis_spans_per_fragment
+    # One axis tip and one wall contact: the liquid is BEHIND the interface, so the span runs from
+    # the tip to the far end of what the mesh says the axis is covered by - the no-plan analogue of
+    # the plan branch adding the reservoir depth at a "fixed" end. A span that stopped at the tip
+    # would leave the whole nozzle above the meniscus outside every span.
+    assert _axis_spans_per_fragment([(0.21194, 14.375)], [(None, 0.21194)], 1e-9) == [(0.21194, 14.375)]
+
+
+def test_a_wall_anchored_fragment_does_not_claim_every_piece_of_coverage():
+    from pyoomph.equations.topological_changes import _axis_spans_per_fragment
+    # Its far end is a contact line, not an axis tip, so it must be matched on the tip it HAS.
+    # Closing its interval with the coverage's own ends instead made it match every piece below it.
+    out = _axis_spans_per_fragment([(-5.0, -4.0), (0.0, 3.0)], [(None, 0.0)], 1e-9)
+    assert out == [(-5.0, -4.0), (0.0, 3.0)]   # the lower piece is kept, but not as a second span

@@ -329,15 +329,18 @@ class _TopologicalChangesMixin(_TopoMixinBase):
                     end_types=_end_types_of(pts, _interface_extent(old_interface), _AXIS_TOL_FALLBACK),
                     nondimensional=nondimensional))
             # The axis segments are straight, so their two extreme points carry all the information.
-            # The axis tips of the interface chains separate one fragment's axis span from the
-            # next, so a fold that makes two fragments overlap on the axis cannot silently fuse
-            # them into a single axis line.
+            # One span per interface chain, anchored on that chain's OWN axial tips - the same rule
+            # the plan branch uses (SurgeryPlan.axis_spans_inside is built from the new chains'
+            # ends), and for the same reason: define_geometry joins an axis Line to an interface
+            # Spline only when they share a gmsh Point, which happens only when their coordinates
+            # hash identically. Any span end that is not a chain tip is a loop that cannot close.
             extent = _interface_extent(old_interface)
             axis_tol = max(_AXIS_TOL_FALLBACK * extent, 1e-300)
-            tips = [float(p[1]) for seg in old_interface for p in (seg[0], seg[-1])
-                    if abs(float(p[0])) < axis_tol]
-            inside = _merge_spans([(float(seg[0][1]), float(seg[-1][1])) for seg in old_axis],
-                                  tips, axis_tol)
+            tip_pairs = [(float(seg[0][1]) if abs(float(seg[0][0])) < axis_tol else None,
+                          float(seg[-1][1]) if abs(float(seg[-1][0])) < axis_tol else None)
+                         for seg in old_interface]
+            inside = _axis_spans_per_fragment(
+                [(float(seg[0][1]), float(seg[-1][1])) for seg in old_axis], tip_pairs, axis_tol)
             res.fragment_volumes = [float(revolved_volume(_closed_half_section(
                 numpy.array([[float(x), float(y)] for x, y in seg], dtype=float)))) * SS ** 3
                 for seg in old_interface]
@@ -678,6 +681,13 @@ class AxisymmetricReconnection(InterfaceEquations):
         # Whether the last after_newton_solve saw a gap close enough for the overlap guard to be
         # worth its (cheap, but per-Newton-step) cost.
         self._armed: bool = False
+        # The tip gaps of the state the last solve converged to, one per consecutive pair, in the
+        # order _gaps() returns them. The overlap guard needs them because it is a statement about
+        # the STEP, not about the state - see _overlap_verdict.
+        self._gap_baseline: list[float] = []
+        # Whether the "the tips have already crossed" notice has been printed for this episode, so
+        # that a crossed state says so once instead of on every Newton step.
+        self._said_already_crossed: bool = False
         self._warned_about_distmin: bool = False
         self._last_plan: SurgeryPlan | None = None
         # Consecutive solves whose detection was postponed by WaistNotYetSeparable.
@@ -952,11 +962,14 @@ class AxisymmetricReconnection(InterfaceEquations):
         Nothing here touches a node or a mesh, which is what makes that possible.
         """
         none_found: dict[str, Any] = {"armed": False, "plan": None, "table": None,
-                                      "distmin_nd": self._distmin_nd}
+                                      "distmin_nd": self._distmin_nd, "gaps": []}
         chains, tips = self._chains_and_tips_from_data(data)
         if not chains:
             return none_found
         gaps = self._gaps(tips)
+        # The gaps of the state this solve CONVERGED to are the baseline the overlap guard of the
+        # next solve measures its Newton steps against; see _overlap_verdict.
+        gap_list = [float(g) for g, _z, _s in gaps]
 
         distmin_for_call = self._distmin_nd
         armed = False
@@ -969,7 +982,7 @@ class AxisymmetricReconnection(InterfaceEquations):
                     # coalescence criterion outright rather than let the closing operation bridge it.
                     distmin_for_call = None
         nothing: dict[str, Any] = {"armed": armed, "plan": None, "table": None,
-                                   "distmin_nd": distmin_for_call}
+                                   "distmin_nd": distmin_for_call, "gaps": gap_list}
         if self._rmin_nd is None and distmin_for_call is None:
             return nothing
 
@@ -1044,7 +1057,8 @@ class AxisymmetricReconnection(InterfaceEquations):
         table = numpy.column_stack([
             numpy.vstack([c.points for c in chains]),
             numpy.concatenate([numpy.asarray(c.zeta, dtype=float) for c in chains])])
-        return {"armed": armed, "plan": plan, "table": table, "distmin_nd": distmin_for_call}
+        return {"armed": armed, "plan": plan, "table": table, "distmin_nd": distmin_for_call,
+                "gaps": gap_list}
 
     def after_newton_solve(self) -> None:
         mesh, template = self._validate_and_get_template()
@@ -1094,6 +1108,9 @@ class AxisymmetricReconnection(InterfaceEquations):
             result = payload
 
         self._armed = bool(result["armed"])
+        # Broadcast in the very same payload as _armed, so every rank measures the next solve's
+        # Newton steps against the identical baseline and cannot disagree about a rejection.
+        self._gap_baseline = [float(g) for g in result.get("gaps", [])]
         plan = result["plan"]
         if plan is None:
             return
@@ -1138,13 +1155,37 @@ class AxisymmetricReconnection(InterfaceEquations):
 
     # -- the overlap guard -----------------------------------------------------------------------
 
-    def _overlap_verdict(self, data: "MeshDataCacheEntry") -> tuple[float, float] | None:
-        """The offending ``(gap, z_center)``, or ``None`` if the step is acceptable."""
+    def _overlap_verdict(self, data: "MeshDataCacheEntry") -> tuple[float, float, float] | None:
+        """The offending ``(gap, z_center, baseline)``, or ``None`` if the step is acceptable.
+
+        The guard exists so that an adaptive stepper cuts ``dt`` instead of letting two tips pass
+        through each other, which makes it a statement about the **step**, not about the state. Two
+        kinds of state must therefore not be rejected, and both of them were:
+
+        * one whose tips have **already crossed** when the solve begins. No ``dt`` can un-cross
+          them, so rejecting rejects every Newton step of every retry with the identical number -
+          measured on the printhead at 1.2x drive, ~60 times while ``dt`` fell from 1e-7 to 7.3e-13
+          and the run died on oomph-lib's minimum ``dt``. Worse, oomph-lib calls
+          ``actions_before_newton_convergence_check()`` again on the *restored* state, i.e. outside
+          any solve, so the rejection also set the abort flag that the retry's first
+          ``get_residuals`` then consumed: the retry could not even assemble.
+        * one that is below the limit but no worse than it was. As ``dt`` -> 0 the gap tends to the
+          baseline, so a guard that rejects there does not terminate either.
+
+        A pair is therefore rejected only if it began the step on the right side of the limit and
+        this step would both breach it and close the gap further. A pair that is already past it is
+        the reconnection's problem, or the remesh's - not the time stepper's.
+        """
         _chains, tips = self._chains_and_tips_from_data(data, with_velocities=False)
         limit = self.overlap_reject_factor * self._distmin_nd  # type:ignore[operator]
-        for gap, zc, _sep in self._gaps(tips):
-            if gap < limit:
-                return float(gap), float(zc)
+        base = self._gap_baseline
+        for k, (gap, zc, _sep) in enumerate(self._gaps(tips)):
+            # The mesh cannot change within a Newton solve, so the pairing is by index. A length
+            # mismatch can only mean the baseline describes another mesh; the safest reading is then
+            # the closest any pair was, which rejects least.
+            b = float(base[k]) if k < len(base) else (min(base) if base else float("inf"))
+            if gap < limit and b >= limit and gap < b:
+                return float(gap), float(zc), b
         return None
 
     def before_newton_convergence_check(self, eqtree: "EquationTree") -> bool:
@@ -1162,6 +1203,20 @@ class AxisymmetricReconnection(InterfaceEquations):
         """
         if self._distmin_nd is None or self.overlap_reject_factor is None or not self._armed:
             return super().before_newton_convergence_check(eqtree)
+        limit = self.overlap_reject_factor * self._distmin_nd
+        if self._gap_baseline and min(self._gap_baseline) < limit:
+            # Already past the limit when this solve began. Nothing the time stepper can do about
+            # it, so say so once and stand down for the rest of the episode rather than rejecting
+            # every Newton step of every retry at an ever smaller dt.
+            if not self._said_already_crossed:
+                self._said_already_crossed = True
+                if get_mpi_rank() == 0:
+                    print("Two interface tips are already " + repr(min(self._gap_baseline)) +
+                          " apart, below the overlap limit of " + repr(limit) + ", in the state this "
+                          "solve starts from. No reduction of dt can undo that, so the overlap guard "
+                          "stands down; the reconnection or the remesh has to deal with it.")
+            return super().before_newton_convergence_check(eqtree)
+        self._said_already_crossed = False
         mesh = eqtree.get_mesh()
         assert isinstance(mesh, InterfaceMesh)
         self._datacache.clear()  # the positions changed with the Newton step
@@ -1173,7 +1228,7 @@ class AxisymmetricReconnection(InterfaceEquations):
             comm = get_mpi_world_comm()
             assert comm is not None
             data = self._merged_interface_data(mesh)
-            payload: tuple[bool, tuple[float, float] | None] | None = None
+            payload: tuple[bool, tuple[float, float, float] | None] | None = None
             error: BaseException | None = None
             if get_mpi_rank() == 0:
                 try:
@@ -1192,7 +1247,8 @@ class AxisymmetricReconnection(InterfaceEquations):
             if get_mpi_rank() == 0:
                 print("Rejecting this step: two interface tips would come within " + repr(offender[0]) +
                       " of each other near z=" + repr(offender[1]) + ", below " +
-                      repr(self.overlap_reject_factor * self._distmin_nd) + ".")
+                      repr(self.overlap_reject_factor * self._distmin_nd) + " (they were " +
+                      repr(offender[2]) + " apart before this step).")
             return False
         return super().before_newton_convergence_check(eqtree)
 
@@ -1423,37 +1479,74 @@ def _closed_half_section(pts: NPFloatArray) -> NPFloatArray:
     return numpy.vstack([pts, numpy.array(extra, dtype=float)])
 
 
-def _merge_spans(spans: Sequence[tuple[float, float]],
-                 separators: Sequence[float] = (), tol: float = 0.0) -> list[tuple[float, float]]:
-    """Merge overlapping or touching axial spans, but never across a separator.
+def _merge_spans(spans: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
+    """The union of a set of axial spans.
 
-    Without separators this is the plain union, which is what the axis coverage of a phase is:
-    the same fragment's span is routinely handed over in several pieces (mesh partitioning cuts
-    it), and those must fuse.  Two *different* fragments must not, and physically they never
-    overlap -- but the state that a remesh after an inverted element is asked to rebuild is
-    exactly the one where nodes have crossed, and there the rear tip of a drop can reach past the
-    tip of the ligament behind it.  Fusing those two spans gives a geometry with two interface
-    loops and a single axis line, which cannot be closed ("Cannot close line loop for surface
-    liquid"), so a merge whose interior contains an interface chain's axial tip is refused.
+    This is what the axis *coverage* of a phase is: the same fragment's span is routinely handed
+    over in several pieces (mesh partitioning cuts it), and those must fuse.  Two different
+    fragments are kept apart by :func:`_axis_spans_per_fragment`, which gives each one a span
+    between its own chain's tips rather than trying to cut a merged one up again.
     """
     out: list[tuple[float, float]] = []
-    seps = [float(z) for z in separators]
     for a, b in sorted((min(a, b), max(a, b)) for a, b in spans):
         if out and a <= out[-1][1]:
-            lo, hi = out[-1][0], max(out[-1][1], b)
-            if b > out[-1][1] and any(lo + tol < z < hi - tol for z in seps):
-                # Two fragments that have crossed. They are kept apart, and the overlap is
-                # halved between them rather than left as two axis lines lying on top of each
-                # other: the state is degenerate either way, and this is the one the mesher can
-                # still build, which is what gives the inversion remesh a chance to recover.
-                mid = 0.5 * (a + out[-1][1])
-                out[-1] = (lo, mid)
-                out.append((mid, b))
-            else:
-                out[-1] = (lo, hi)
+            out[-1] = (out[-1][0], max(out[-1][1], b))
         else:
             out.append((a, b))
     return out
+
+
+def _axis_spans_per_fragment(pieces: Sequence[tuple[float, float]],
+                             tip_pairs: Sequence[tuple[float | None, float | None]],
+                             tol: float = 0.0) -> list[tuple[float, float]]:
+    """One axis span per interface chain, anchored on that chain's own two axial tips.
+
+    ``pieces`` are the axis segments as read off the mesh; the same fragment's span arrives in
+    several of them under ``--distribute``, so they are unioned first and only the outer ends of
+    the coverage are taken from them.  ``tip_pairs`` is ``(z_lo, z_hi)`` per chain, with ``None``
+    where that end is not on the axis - a wall contact, which contributes no axis endpoint of its
+    own and so inherits the end of the coverage it sits in.
+
+    **Every endpoint returned is either a chain tip or an end of the measured coverage**, i.e. a
+    coordinate that already exists in the geometry.  That is the whole point.  ``define_geometry``
+    builds the axis as ``Line``s and the interface as ``Spline``s, and ``_sort_line_loop`` joins
+    two curves only when they share a gmsh ``Point`` - which ``GmshTemplate.point`` hands out only
+    for coordinates that hash identically (within a 1e-9 snap).  The previous rule cut an overlap
+    at its midpoint, which belongs to neither chain: measured on the printhead at 1.2x drive, two
+    chains ending at z = -31.1901 and z = -31.3122 produced axis spans ending at -31.25118595, six
+    orders of magnitude further than the snap tolerance, and ``Cannot close line loop for surface
+    liquid``.
+
+    Two fragments that have crossed - the state an inversion remesh is asked to rebuild, where
+    nodes have passed through each other - therefore come back as two *overlapping* spans rather
+    than as two spans meeting at an invented point.  Each one still closes its own loop, which is
+    what the mesher needs; the overlap is a degeneracy of the state itself and is reported by the
+    caller rather than papered over here.
+    """
+    out: list[tuple[float, float]] = []
+    for lo, hi in _merge_spans(pieces):
+        # A chain sits on this piece of coverage when the tips it actually has are on it. Testing
+        # the tips it has - rather than an interval closed with the coverage's own ends - is what
+        # keeps a wall-anchored chain, whose far end is a contact line and not an axis tip, from
+        # matching every piece of coverage below it.
+        here = [(a, b) for a, b in tip_pairs
+                if (a is not None or b is not None)
+                and all(lo - tol <= z <= hi + tol for z in (a, b) if z is not None)]
+        if not here:
+            # Coverage with no chain on it: keep it, rather than silently dropping a piece of axis
+            # the mesh says is there.
+            out.append((lo, hi))
+            continue
+        for a, b in here:
+            if a is None or b is None:
+                # One axis tip and one wall contact: the fragment is the liquid *behind* the
+                # interface, so its span runs from that tip to the far end of the coverage - which
+                # is the coverage itself, the tip being one of its ends. This is the no-plan
+                # analogue of the plan branch adding the reservoir depth at a "fixed" end.
+                out.append((lo, hi))
+            else:
+                out.append((max(lo, min(a, b)), min(hi, max(a, b))))
+    return sorted(s for s in out if s[1] - s[0] > tol)
 
 
 def _subtract_spans(spans: Sequence[tuple[float, float]], holes: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
