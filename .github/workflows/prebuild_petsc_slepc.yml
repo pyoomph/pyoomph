@@ -74,9 +74,7 @@ jobs:
           - label: linux-x86_64
             runner: ubuntu-latest
             platform: linux
-          - label: macos-intel-x86_64
-            runner: macos-15-intel
-            platform: macos
+          # macOS x86_64 is deliberately NOT built here; see the note at the end of this file.
           - label: macos-arm64
             runner: macos-14
             platform: macos
@@ -205,7 +203,16 @@ jobs:
 # script. tests/test_slepc_present.py (PYOOMPH_EXPECT_COMPLEX_SLEPC=1) is what makes a PETSc that
 # never reached the test interpreter fail the job instead of silently reverting it to spectra.
 #
-# Linux and macOS x86_64 are built here all the same: the artifacts are what a nightly or a one-off
-# comparison run needs, and building only one platform would not make the workflow noticeably
-# faster (the matrix runs in parallel).
+# Linux is built here all the same: the artifact is what a nightly or a one-off comparison run needs,
+# and building it costs nothing extra because the matrix runs in parallel (32m19s, measured).
+#
+# macOS x86_64 used to be built for the same reason and is not any more. Nothing ever read its
+# artifact, and on the 0.2.2 release attempt the leg ran 3h00m24s on macos-15-intel and was killed by
+# timeout-minutes while still installing MPICH's HTML documentation - before PETSc proper, let alone
+# the second (complex) build and SLEPc. That cancelled the whole run, and since wheels.yml's release
+# gate requires a SUCCESSFUL run of this workflow, it left the release with no prebuild at all while
+# arm64 (51m46s) and linux (32m19s) had both finished cleanly. A convenience artifact that nothing
+# consumes should not be able to do that, and Apple's Intel runners are being retired anyway. If it
+# is ever wanted again, it needs its own budget (GitHub's ceiling for a hosted job is 360 minutes)
+# and should not be allowed to fail the run.
 # ------------------------------------------------------------------------------------------------
