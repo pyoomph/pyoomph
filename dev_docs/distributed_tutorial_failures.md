@@ -34,7 +34,11 @@ Of 141 tutorial scripts under `--mpirun 4 --distribute`:
 | `Moving_Mesh/droplet_spread_marangoni_and_gravity.py` | `mpi4py.MPI.Exception: MPI_ERR_TRUNCATE` at `t=3.0 s` |
 | `SpatioTemporal_PDEs/moffatt_eddies.py` | `ValueError: max() iterable argument is empty` on rank 0, while plotting |
 
-The first two are the same defect (§2, §3). The third is separate and unrelated (§5).
+The first two are the same defect (§2, §3). The third is separate and unrelated (§5). A fourth,
+`Plotting_Interface/rising_bubble.py`, is recorded in §5.1 but not classified.
+
+Note that the pass found these while contending for the machine with other work, so the wall-clock
+times below are not clean measurements of anything.
 
 The hang is the dangerous one, because it is silent and unbounded: all four ranks sit at 100 % CPU,
 nothing is written, and there is no timeout. In the run that found it, `state_000008.dump` had been
@@ -203,6 +207,31 @@ from `perform_plot` → `plotting.py:156` → `run_with_global_mesh_data` (`mesh
 only. Here the rescue worked exactly as designed: `mpi_share_root_failure` reported which rank failed
 and why, and the job ended instead of hanging — which is the contrast that makes §3 concrete. Not
 investigated further.
+
+### 5.1 `rising_bubble.py`: unclassified, and deliberately so
+
+`Plotting_Interface/rising_bubble.py` (the complex-PETSc one) sat for 40+ minutes with all four ranks
+at 100 % CPU, inside **oomph-lib's own** distributed equation-number synchronisation:
+
+```
+PMPI_Alltoall
+oomph::Problem::copy_haloed_eqn_numbers_helper
+oomph::Problem::synchronise_eqn_numbers      (src/thirdparty/oomph-lib/include/problem.cc:17220)
+oomph::Problem::assign_eqn_numbers           (problem.cc:2374)
+pyoomph::Problem::assign_eqn_numbers         (src/problem.cpp:1415)
+  <- reapply_boundary_conditions (problem.py:5568)
+  <- actions_before_stationary_solve -> solve -> refine_eigenfunction (problem.py:6754)
+```
+
+Two ranks sampled independently were in the *same* `Alltoall`, and its state files wrote correctly
+(513 KB, so §2/§3 are not involved here).
+
+**This is not necessarily a hang.** `refine_eigenfunction` drives `solve` in a loop, each iteration
+re-numbering the equations, so an identical stack in two samples seconds apart is equally consistent
+with a hot loop of many fast collectives as with one that never completes. Distinguishing them needs
+either a counter around `assign_eqn_numbers` or simply letting the harness's 2 h timeout decide; that
+was not done. Recorded here only so the next person does not re-derive the stack, and flagged as
+*unclassified* rather than written up as a third bug.
 
 ## 6. Why this is documented rather than fixed
 
