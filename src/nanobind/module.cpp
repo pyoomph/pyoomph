@@ -89,7 +89,10 @@ NB_MODULE(PYOOMPH_MODULE_NAME, m)
     // has_tqmesh below, but it answers a question that is otherwise unanswerable from Python: a
     // build without OpenMP accepts --omp N, prints one note and assembles serially, so a wheel that
     // lost OpenMP at configure time is indistinguishable from a working one until someone measures.
-    // tests/test_openmp_assembly.py skips on it, and the wheel CI asserts it is true.
+    // tests/test_openmp_assembly.py skips on it. The wheel CI must NOT assert this one: it is false
+    // on every macOS wheel by design, because macOS uses the GCD backend below instead. Gate on
+    // has_threaded_assembly there (test_wheels_multiversion.yml); asserting has_openmp is what made
+    // that workflow fail all 8 macOS jobs after every release from 0.2.0 to 0.2.2.
 #ifdef PYOOMPH_HAS_OPENMP
     m.attr("has_openmp") = true;
 #else

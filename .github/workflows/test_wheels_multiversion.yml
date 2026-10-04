@@ -127,15 +127,25 @@ jobs:
           echo "Installing ${WHEEL} under Python ${{ matrix.python_version }}"
           python -m pip install "${WHEEL}"
 
-      - name: Verify the installed wheel has OpenMP
+      - name: Verify the installed wheel has a threaded element loop
         # The cibuildwheel test in wheels.yml already runs tests/test_openmp_present.py, but only on
         # the interpreter that built each wheel. The abi3 wheel is installed here under 3.13/3.14 as
-        # well, and OpenMP reaches Python through nanobind (module.cpp's has_openmp) - so check it on
-        # each interpreter that actually installs the file. These workflows never check the repository
+        # well, and the backend reaches Python through nanobind (module.cpp) - so check it on each
+        # interpreter that actually installs the file. These workflows never check the repository
         # out, so there is no source pyoomph/ in the cwd to shadow the installed package.
+        #
+        # has_threaded_assembly, NOT has_openmp. There are two backends for --omp N and macOS
+        # deliberately uses the other one: GCD/libdispatch, chosen there precisely because it links no
+        # OpenMP runtime and so cannot collide with MKL's libiomp5 (OMP: Error #15). has_openmp is
+        # therefore false on every mac wheel BY DESIGN, and asserting it failed all 8 macOS jobs of
+        # this workflow after every release from 0.2.0 to 0.2.2 while the wheels were in fact fine -
+        # their build logs say "Threaded element assembly (--omp N): GCD/libdispatch backend".
+        # has_threaded_assembly is OpenMP OR GCD, so it still catches the thing this check exists for:
+        # a wheel that lost its threaded loop at configure time and would accept --omp N, print one
+        # note and assemble serially.
         shell: bash
         run: |
-          python -c "from pyoomph import _pyoomph_core as c; assert c.has_openmp, 'this wheel has no OpenMP - --omp N would silently do nothing'; print('OpenMP present')"
+          python -c "from pyoomph import _pyoomph_core as c; assert c.has_threaded_assembly, 'this wheel has no threaded element loop (neither OpenMP nor GCD) - --omp N would silently do nothing'; print('threaded assembly present: openmp=%r gcd=%r' % (c.has_openmp, c.has_gcd))"
 
       - name: Verify the installed wheel has its type stub
         # Same reasoning as the OpenMP check above, and the same blind spot it closes: the stub is
