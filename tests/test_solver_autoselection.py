@@ -96,20 +96,42 @@ _PARDISO = "pyoomph.solvers.pardiso"
 _PETSC = "petsc4py"
 _MUMPS = "pyoomph_mumps"
 
+# What "the cascade fell all the way through" looks like. NOT just superlu: on macOS
+# _select_default_linear_solver tries Apple's Accelerate first, so a mac with it ends there instead.
+# Every "nothing better was installed" guard below has to accept both, or it reads a perfectly normal
+# macOS cascade as a solver that should not have won - which is how two of these tests failed the
+# 0.2.2 release gate on both macOS legs while linux passed.
+_LAST_RESORT = ("superlu", "accelerate")
+
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="macOS has its own cascade, with accelerate in it")
 def test_the_standalone_mumps_is_preferred_over_superlu():
     """The rung this test file exists for: mumps before the last-resort superlu."""
     solver, _ = _autoselect([_PARDISO, _PETSC])
-    if solver == "superlu":
+    if solver in _LAST_RESORT:
         pytest.skip("pyoomph_mumps is not installed here, so there is nothing to prefer")
     assert solver == "mumps"
 
 
-def test_the_cascade_ends_in_superlu_and_says_why():
+def test_the_cascade_ends_in_a_last_resort_solver_and_says_why():
+    """With pardiso, PETSc and the standalone MUMPS all gone, the cascade must still land somewhere
+    and must explain itself.
+
+    WHICH solver it lands on is platform-dependent - the same reason the test above carries a darwin
+    skipif, which this one was missing:
+    _select_default_linear_solver tries accelerate before superlu, so a macOS runner with Apple's
+    Accelerate framework ends in "accelerate" and everything else ends in "superlu". Asserting
+    "superlu" unconditionally is what made the 0.2.2 release gate's macOS legs fail with
+    `assert 'accelerate' == 'superlu'` while linux passed. Both are legitimate last resorts and both
+    warn through the same _warn_suboptimal_solver, so the interesting half of this test - that the
+    warning names why each better candidate was skipped - is asserted on every platform rather than
+    skipped on macOS.
+    """
     solver, warn = _autoselect([_PARDISO, _PETSC, _MUMPS])
-    assert solver == "superlu"
-    assert warn is not None, "falling back to superlu must warn"
+    assert solver in _LAST_RESORT, solver
+    if sys.platform != "darwin":
+        assert solver == "superlu", solver
+    assert warn is not None, "falling back to " + solver + " must warn"
     # Both skipped candidates have to name their reason: "not installed" and "installed but built
     # against the other MPI setting" read identically otherwise, and only one of them is a rebuild.
     assert "PETSc/MUMPS was not used because" in warn, warn
@@ -126,7 +148,7 @@ def test_pardiso_still_wins_where_it_is_available():
 
 def test_petsc_mumps_stays_ahead_of_the_standalone_mumps():
     solver, _ = _autoselect([_PARDISO])
-    if solver == "superlu":
+    if solver in _LAST_RESORT:
         pytest.skip("neither PETSc/MUMPS nor pyoomph_mumps is installed here")
     assert solver in ("petsc_mumps", "mumps")
     if solver == "mumps":
