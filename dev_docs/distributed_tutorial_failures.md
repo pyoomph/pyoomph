@@ -33,9 +33,10 @@ Of 141 tutorial scripts under `--mpirun 4 --distribute`:
 | `Moving_Mesh/droplet_spread_hyperelastic_tangential_shift.py` | hangs forever at `t=8.0 s` |
 | `Moving_Mesh/droplet_spread_marangoni_and_gravity.py` | `mpi4py.MPI.Exception: MPI_ERR_TRUNCATE` at `t=3.0 s` |
 | `SpatioTemporal_PDEs/moffatt_eddies.py` | `ValueError: max() iterable argument is empty` on rank 0, while plotting |
+| `Plotting_Interface/rising_bubble.py` | hangs; killed by the harness's 2 h timeout (§5.1) |
 
-The first two are the same defect (§2, §3). The third is separate and unrelated (§5). A fourth,
-`Plotting_Interface/rising_bubble.py`, is recorded in §5.1 but not classified.
+The first two are the same defect (§2, §3). The third and fourth are separate and unrelated to each
+other and to the first two (§5, §5.1).
 
 Note that the pass found these while contending for the machine with other work, so the wall-clock
 times below are not clean measurements of anything.
@@ -208,7 +209,7 @@ only. Here the rescue worked exactly as designed: `mpi_share_root_failure` repor
 and why, and the job ended instead of hanging — which is the contrast that makes §3 concrete. Not
 investigated further.
 
-### 5.1 `rising_bubble.py`: unclassified, and deliberately so
+### 5.1 `rising_bubble.py`: a second hang, in oomph-lib's equation numbering
 
 `Plotting_Interface/rising_bubble.py` (the complex-PETSc one) sat for 40+ minutes with all four ranks
 at 100 % CPU, inside **oomph-lib's own** distributed equation-number synchronisation:
@@ -226,12 +227,18 @@ pyoomph::Problem::assign_eqn_numbers         (src/problem.cpp:1415)
 Two ranks sampled independently were in the *same* `Alltoall`, and its state files wrote correctly
 (513 KB, so §2/§3 are not involved here).
 
-**This is not necessarily a hang.** `refine_eigenfunction` drives `solve` in a loop, each iteration
-re-numbering the equations, so an identical stack in two samples seconds apart is equally consistent
-with a hot loop of many fast collectives as with one that never completes. Distinguishing them needs
-either a counter around `assign_eqn_numbers` or simply letting the harness's 2 h timeout decide; that
-was not done. Recorded here only so the next person does not re-derive the stack, and flagged as
-*unclassified* rather than written up as a third bug.
+This was first recorded as possibly benign: `refine_eigenfunction` drives `solve` in a loop, each
+iteration re-numbering the equations, so an identical stack in two samples seconds apart is as
+consistent with a hot loop of fast collectives as with one that never finishes. The harness settled
+it — **the script was killed by the 2 h timeout** (`TIMED OUT after 7200 s`), having produced no
+output for the last 100 minutes of that. So it is a real hang, and a second one, independent of
+§2/§3: the state files here wrote correctly and the stack never leaves `assign_eqn_numbers`.
+
+It is also the only one of the four that is inside **vendored oomph-lib** rather than pyoomph's own
+code, which makes it the least likely to be fixable here and the most likely to need either an
+upstream fix or a pyoomph-side avoidance of `refine_eigenfunction` under `--distribute`. Note that
+`src/thirdparty/oomph-lib` is ~1500 commits behind upstream (see `INFO_oomph-lib`), so checking
+whether upstream has already fixed this is the cheapest first step.
 
 ## 6. Why this is documented rather than fixed
 
@@ -242,8 +249,9 @@ Three reasons, recorded so the next person does not have to re-derive the decisi
 2. §2 and §3 are both in the partition-stability machinery, where the failure mode of a wrong fix is a
    state file that loads fine and is wrong (§3.1). That is not work to do against a release deadline.
 3. The failure list may not be complete. The pass that found these was still running when this was
-   written; §1 reflects the first 73 of 141 scripts. Re-run the full pass before treating §1 as the
-   whole picture.
+   written; §1 reflects the first 89 of 141 scripts. Re-run the full pass before treating §1 as the
+   whole picture. Note that a hang costs the pass two hours of its own timeout, so a complete run is
+   slow: budget for it rather than assuming the pass stalled.
 
 ## 7. Coverage, which is the actual root cause of the surprise
 
