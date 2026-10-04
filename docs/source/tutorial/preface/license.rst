@@ -150,6 +150,8 @@ A `copy of the license <https://github.com/pyoomph/pyoomph/blob/main/COPYING>`__
    -  `vtk <https://vtk.org/>`__, `[BSD 3-clause license] <https://vtk.org/about/>`__
 
    -  `paraview <https://www.paraview.org/>`__, `[BSD 3-clause license] <https://www.paraview.org/license/>`__
+
+   -  `preCICE <https://precice.org/>`__ and its `python bindings <https://github.com/precice/python-bindings>`__, `[LGPL v3 license] <https://github.com/precice/precice/blob/develop/LICENSE>`__, a coupling library for partitioned multi-physics simulations. It is only required by :py:mod:`pyoomph.solvers.precice_adapter` to couple pyoomph with other solvers (cf. :numref:`secprecice`) and is optional; it is neither bundled nor installed as a pip requirement, see the `installation instructions <https://precice.org/installation-overview.html>`__
    
    -  `setuptools <https://github.com/pypa/setuptools>`__, `[MIT license] <https://github.com/pypa/setuptools?tab=MIT-1-ov-file#readme>`__
       

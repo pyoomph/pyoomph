@@ -154,7 +154,7 @@ exclude_patterns=["latex_tutorial.rst"]
 
 latex_engine = 'xelatex'
 
-latex_documents = [ ('latex_tutorial', 'pyoomph_tutorial.tex', 'Pyoomph Tutorial', 'Christian Diddens and Duarte Rocha', 'manual', True)]
+latex_documents = [ ('latex_tutorial', 'pyoomph_tutorial.tex', 'Pyoomph Tutorial', 'Christian Diddens, Duarte Rocha and Maxim de Wildt', 'manual', True)]
 latex_domain_indices = False
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.

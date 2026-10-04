@@ -34,7 +34,10 @@ Feature switches
       Build with the built-in `Spectra <https://spectralib.org>`__/`Eigen <https://eigen.tuxfamily.org>`__ serial eigensolver (the ``--spectra`` backend, see :numref:`installcmdlineoptions`). It is the only eigensolver that can target a given eigenvalue without PETSc/SLEPc, which is what makes it the fallback on Windows. With ``OFF``, neither library is downloaded, ``has_spectra == False``, ``pyoomph.solvers.spectra`` refuses to import, and the eigensolver autodetection falls back to the ARPACK-based backends, which cannot target an eigenvalue at all.
 
 ``PYOOMPH_GENERATE_STUBS`` (default ``ON``)
-      Generate ``.pyi`` type stubs for the compiled ``_core`` extension via nanobind's ``stubgen`` (best effort, failures are non-fatal).
+      Generate ``.pyi`` type stubs for the compiled ``_core`` extension via nanobind's ``stubgen``. With ``OFF``, no stub is generated at all and ``PYOOMPH_REQUIRE_STUBS`` has no effect.
+
+``PYOOMPH_REQUIRE_STUBS`` (default ``ON``)
+      Fail the build when the ``.pyi`` stub cannot be generated, rather than warning and continuing. The stub is part of the package rather than a nicety: the wheel ships ``py.typed`` next to it, so a wheel without the stub tells type checkers that the API is described and then hands them an unintrospectable binary. Generation used to be best-effort and swallowed its own failures, which is how the Windows wheel shipped without a ``.pyi`` for a long time. ``OFF`` restores that warn-and-continue behaviour for a build that cannot produce a stub and does not care (``tests/test_stubs_present.py`` together with ``PYOOMPH_EXPECT_STUBS`` checks the result independently, see :numref:`installenvvars`).
 
 ``PYOOMPH_COPY_STUBS_TO_SOURCE_TREE`` (default ``ON``)
       Also mirror the generated ``.pyi`` stub into the source-tree ``pyoomph/`` directory, so Pylance/Pyright/mypy can resolve ``pyoomph._core`` while editing without a full ``pip install``.

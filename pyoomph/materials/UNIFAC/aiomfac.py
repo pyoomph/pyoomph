@@ -36,7 +36,7 @@
 
 ##########################################################################################
 # These parameters stem from the AIOMFAC activity model
-#		http://www.aiomfac.caltech.edu/
+#		https://aiomfac.lab.mcgill.ca/
 #
 # For the source code and parameter tables (GPL v3), see
 #		https://github.com/andizuend/AIOMFAC
@@ -54,7 +54,7 @@ from ..activity import UNIFACLikeActivityModel,ActivityModel
 @ActivityModel.register_activity_model()
 class AIOMFAC(UNIFACLikeActivityModel):
     """
-    AIOMFAC activity model (http://www.aiomfac.caltech.edu/), parameters taken from the AIOMFAC
+    AIOMFAC activity model (https://aiomfac.lab.mcgill.ca/), parameters taken from the AIOMFAC
     source code (https://github.com/andizuend/AIOMFAC).
 
     Cite the publications when using this activity model (https://aiomfac.lab.mcgill.ca/citation.html).

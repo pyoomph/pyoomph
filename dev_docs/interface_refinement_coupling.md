@@ -724,6 +724,21 @@ says nothing about the others.** Facet conformity was necessary, and it was neve
 under MPI (§13.3, a halo property) and not at a vertex (here, a grading property). Both times the
 symptom was a check that reported success.
 
+### 13.9b The negative-test hatch: `PYOOMPH_DISABLE_INTERFACE_CONFORMITY`
+
+The conformity machinery is only worth testing if the tests would notice its absence, and a test that
+passes both with and without a mechanism tests nothing. `PYOOMPH_DISABLE_INTERFACE_CONFORMITY=1`
+(anything other than unset, `""`, `0` or `off`) switches the whole enforcement off at its two entry points:
+`Problem.enforce_interface_conformity` (`pyoomph/generic/problem.py`) and the C++ counterpart in
+`src/refinement_coupling.cpp`. It is **not** a user-facing setting and is deliberately absent from
+`docs/source/tutorial/installation/envvars.rst`; it exists so the suite can assert that the mechanism
+is load-bearing.
+
+`tests/test_adaptive_interface_coupling.py` is what uses it: with the hatch set, 80 of the 112
+`(kind, eq, levels)` cases fail, which is the measurement that makes the other 112 passes meaningful.
+`tests/two_domain_cases.py` names it in the same role. Keep both in step with the hatch — if a change
+makes the negative run pass, the mechanism has stopped doing anything, and that is the finding.
+
 ### 13.10 Still open
 
 * **`_override_bulk_errors_where_necessary` is still Python**, per §13.5. It is the propagation rather

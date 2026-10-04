@@ -189,7 +189,7 @@ def emit_short_range(p: AIOMFACParameters, keep_names: dict[int, str]) -> str:
 
 ##########################################################################################
 # These parameters stem from the AIOMFAC activity model
-#\t\thttp://www.aiomfac.caltech.edu/
+#\t\thttps://aiomfac.lab.mcgill.ca/
 #
 # For the source code and parameter tables (GPL v3), see
 #\t\thttps://github.com/andizuend/AIOMFAC
@@ -207,7 +207,7 @@ from ..activity import UNIFACLikeActivityModel,ActivityModel
 @ActivityModel.register_activity_model()
 class AIOMFAC(UNIFACLikeActivityModel):
     """
-    AIOMFAC activity model (http://www.aiomfac.caltech.edu/), parameters taken from the AIOMFAC
+    AIOMFAC activity model (https://aiomfac.lab.mcgill.ca/), parameters taken from the AIOMFAC
     source code (https://github.com/andizuend/AIOMFAC).
 
     Cite the publications when using this activity model (https://aiomfac.lab.mcgill.ca/citation.html).

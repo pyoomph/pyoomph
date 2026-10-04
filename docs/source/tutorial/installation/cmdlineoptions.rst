@@ -49,6 +49,9 @@ The linear solver flags are mutually exclusive (passing e.g. both ``--pardiso`` 
 ``--accelerate``
       Use Apple's Accelerate sparse solver framework (macOS only).
 
+``--mumps``
+      Use MUMPS directly as linear solver. Unlike ``--petsc_mumps`` this does not go through PETSc, so it needs no PETSc installation at all, but it does require the separate ``pyoomph_mumps`` package, see :numref:`installmumps`. It is serial, or natively distributed under MPI with each rank supplying its own row block.
+
 Likewise, the eigensolver flags are mutually exclusive:
 
 ``--slepc``
@@ -59,6 +62,9 @@ Likewise, the eigensolver flags are mutually exclusive:
 
 ``--spectra``
       Use the built-in `Spectra <https://spectralib.org>`__ eigensolver. It needs no PETSc/SLEPc at all -- it is compiled into pyoomph -- and can target a given, also complex, eigenvalue, but it is serial: under ``--distribute`` the matrices are gathered onto one process first. This is the default whenever PETSc/SLEPc with MUMPS is not available, so the flag is mainly useful to override a different choice, e.g. to compare against SLEPc.
+
+``--mumps_eigen``
+      Use the built-in Spectra eigensolver with MUMPS supplying the shift-and-invert factorization, in real *and* complex arithmetic, so azimuthal and Floquet stability analysis are covered without PETSc/SLEPc. Needs the separate ``pyoomph_mumps`` package, see :numref:`installmumps`. The flag is spelled differently from the linear ``--mumps`` above because argparse has a single flat namespace for both groups.
 
 ``--arpack``
       Use scipy's ARPACK-based eigensolver. Note that this is scipy's own backend, not the ARPACK-with-Pardiso combination which pyoomph falls back to when neither SLEPc/MUMPS nor Spectra is available but MKL Pardiso is present. Neither ARPACK variant can target an eigenvalue.

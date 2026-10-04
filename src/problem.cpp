@@ -2926,8 +2926,9 @@ namespace pyoomph
 	const char *Problem::augmented_sparsity_mask_for_element(const unsigned &matrix_index, oomph::GeneralisedElement *const &elem_pt, const unsigned &nvar, unsigned raw_nvar)
 	{
 		// Off by default; set problem._use_frozen_sparsity_for_bifurcation_tracking = True to enable.
-		const bool dbg = getenv("PYOOMPH_DBG_AUG") != 0;
-		auto decline = [&](const char *why) -> const char * { if (dbg) std::cout << "AUGDECLINE " << why << std::endl; return NULL; };
+		// Declining is normal and silent: the caller falls back to the unfrozen path. The reason
+		// strings below are kept because they document the conditions, not because they are printed.
+		auto decline = [](const char *) -> const char * { return NULL; };
 		if (!use_frozen_sparsity_for_bifurcation_tracking) return decline("switch off");
 		if (matrix_index > 0) return decline("matrix_index>0");
 		auto *provider = dynamic_cast<AugmentedSparsityProvider *>(this->assembly_handler_pt());
@@ -2941,7 +2942,7 @@ namespace pyoomph
 		// Where each group starts in the augmented numbering, and check the total matches the block.
 		std::vector<unsigned> gstart(ng + 1, 0);
 		for (unsigned g = 0; g < ng; g++) gstart[g + 1] = gstart[g] + (spec.group_is_scalar[g] ? 1u : raw_nvar);
-		if (gstart[ng] != nvar) { if (dbg) std::cout << "AUGDECLINE layout " << gstart[ng] << " vs nvar " << nvar << " raw " << raw_nvar << std::endl; return NULL; }
+		if (gstart[ng] != nvar) return decline("layout does not add up to nvar");
 
 		BulkElementBase *be = dynamic_cast<BulkElementBase *>(elem_pt);
 		if (!be) return decline("not a BulkElementBase");
@@ -2995,7 +2996,7 @@ namespace pyoomph
 		{
 			if (!this->field_coupling_mask_for_element(keys[k].first, keys[k].second, elem_pt, raw_nvar,
 													   augmented_raw_masks[k].data))
-			{ if (dbg) std::cout << "AUGDECLINE raw mask (matrix " << (int)keys[k].first << ", residual " << keys[k].second << ")" << std::endl; return NULL; }
+				return decline("no raw mask for one of the (matrix, residual) pairs");
 			augmented_raw_masks[k].matrix = keys[k].first;
 			augmented_raw_masks[k].residual = keys[k].second;
 		}

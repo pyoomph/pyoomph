@@ -9,6 +9,13 @@ One assumption of the original design turned out to be wrong and is corrected in
 does not contain a node's whole element star, so the node keys have to be reconciled between the
 processes.
 
+**Known broken, as of 0.2.2:** writing a state file from an adapted distributed mesh with several
+nested interface meshes deadlocks or raises `MPI_ERR_TRUNCATE` instead of reporting. The refinement
+signatures are keyed by `global_base_index` rather than the partition-stable `global_root_index`, so
+unstamped roots collapse onto `-1`, and the resulting consistency failure is raised on rank 0 alone
+inside a section that contains collectives. Diagnosis, measurements and reproduction in
+[`distributed_tutorial_failures.md`](distributed_tutorial_failures.md).
+
 Before this, `Problem.save_state` refused outright:
 
 ```python

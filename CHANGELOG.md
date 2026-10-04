@@ -1,5 +1,91 @@
 # Changelog
 
+## [0.2.2] - 2026-10-04
+
+79 commits since 0.2.1. Three themes: symbolic code generation that no longer treats an expression
+DAG as a tree, an analytic Hessian that reaches through multi-return callbacks, and MUMPS reachable
+without PETSc. Plus a long tail of remesh, continuation and `--distribute` fixes.
+
+### Added
+
+- **MUMPS without PETSc**, via the separate `pyoomph_mumps` package: the linear solver `--mumps`
+  (serial or natively distributed) and the eigensolver `--mumps_eigen` (Spectra with MUMPS
+  factorising the shifted matrix, real and complex), so azimuthal and Floquet stability no longer
+  need a full PETSc+SLEPc stack.
+- **Analytic Hessians through `CustomMultiReturnExpression`**, which brings the UNIFAC and AIOMFAC
+  activity coefficients, the log-conformation decompositions, `InvertMatrix` and the Cahn-Hilliard
+  potentials within reach of the eigenvalue, bifurcation, Floquet and orbit workflows.
+- **The exact UNIFAC Jacobian is emitted into the generated C** instead of being finite-differenced
+  (`analytic_c_jacobian=False` restores the old body).
+- **Liquid-mixture diffusivity estimation from the activity coefficients**,
+  `MixtureLiquidProperties.set_estimate_diffusivities()`.
+- **Symbolic comparisons and branching**: `var("time") < 2*second` yields a held relational
+  expression, `conditional(cond, iftrue, iffalse)` compiles it to a C ternary, and comparisons
+  combine with `~`, `&`, `|` and `^`.
+- **`is_zero(..., tensors=True)`** recognises a zero vector or matrix, which the plain test never did.
+- **NSCH: a C1 clamp for density and viscosity**, plus an optional temporal error estimator; the old
+  branch-wise clamp made Newton two-cycle once the phase field overshot `|phi|>1`.
+- **`--where` now also picks the state a `--runmode c` resumes from**, taking a `.dump` file, `i=N`,
+  `t=X` or a bool expression over `step` and `time`.
+- **Tracer collections living on an interface are written to state files** (state format 0.1.6);
+  they were previously lost on `--runmode c`.
+
+### Changed / Improved
+
+- **Code generation treats the residual as the DAG it is**, memoising or converting to DAG walks the
+  residual mappers, `MakeResidualSteady`, the subexpression-to-struct mapper, the parameter
+  substitution of the `dResidual/dParameter` loop, the two collectors and the last preorder scans of
+  the emission path -- a UNIFAC mass-transfer residual under `azimuthal_stability=True` previously
+  never finished at all.
+- **The unit split skips `collect_common_factors` above a term count**, which is where an
+  evaporating droplet's never-returning split spent all of its samples.
+- **`write_code` reports where it spends its time**, per residual set, with mapper and memo counters.
+- **GiNaC patches** for `real_part`/`imag_part` of an integer power, `pow(0,0)`, a real and
+  commutative `subexpression()` marker, number lookups in `ex`-keyed caches, and a unit under a
+  symbolic exponent; the patch step re-runs when the patch set changes.
+- **A spline macro element is parametrised by arclength** rather than the raw spline parameter, so
+  refinement puts new nodes at the geometric midpoint of an edge after a remesh.
+- **Units written into a data file no longer contain a space**, which made them unreadable to
+  anything but pyoomph's own reader.
+- **"There is no domain X defined in this mesh" after a remesh now says what it means**: the mesher
+  was handed a geometry it could not fill.
+- The documentation builds against the current Sphinx generation.
+
+### Fixed
+
+- **The arclength continuation tangent is carried correctly across a remesh or an adapt** -- five
+  defects that each left the arclength invariant satisfied while the tangent pointed elsewhere, so
+  nothing reported them.
+- **Two defects in the viscoelastic equations on a moving mesh**, both invisible on the static,
+  dimensionless meshes the tests used.
+- **Axisymmetric pinch-off and coalescence beside a wall survive their own surgery**, and the
+  degenerate branch of the zeta invertibility check is now pinned by tests.
+- **Remeshing on an inverted element asks for a different mesh on each retry**, scaling
+  `default_resolution` so that the gmsh size fields move too.
+- **Under `--distribute`**: a 1-D submesh survives a rank that gets none of it, an unowned interface
+  dof is skipped during interface generation, the nearest-node fallback searches the old mesh
+  globally, and fragment counting agrees across ranks.
+- **State files**: tracer collections are restored when the file brings its own mesh, and a template
+  rebuilt from a stored `.msh` keeps its boundary corner sizes.
+- **A resumed run leaves the output files an uninterrupted one would write**, rather than a time
+  column that runs forwards and then jumps back.
+- **Two reference leaks**: a delayed expansion pinned both itself and its callable, and a mixture
+  stayed uncollectible once it had a multi-return activity model.
+- `get_real_part()`/`get_imag_part()` split an argument that no longer contains a field.
+- `numouts` produces at least one output.
+- Docstring markup that rendered as artifacts on Read the Docs, NSCH's forward references under
+  Sphinx, the clone URL on the two source-install pages, and the macOS stubs.
+
+### Packaging & CI
+
+- **The source distribution ships the sources, not the whole checkout**: 0.2.1 was 9.6 MB, most of it
+  a `docs/` tree that `.gitignore` had already punched holes in.
+- arm64 Macs are pointed at `pyoomph_mumps`, and the deprecated `x86_64` arch is dropped for the
+  current Command Line Tools.
+- `Programming Language :: Python :: 3.14` is declared, which the cp312 Stable-ABI wheel already
+  covers and is smoke-tested on.
+- Test helper scripts in `tests/` are importable, so `pytest *.py` does not collect them as tests.
+
 ## [0.2.1]
 
 Released as urgent patch of 0.2.0. 

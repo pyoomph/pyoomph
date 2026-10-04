@@ -405,7 +405,7 @@ def _warn_suboptimal_solver(name:str) -> None:
 	warnings.warn(
 		"pyoomph is falling back to the '"+name+"' solver, since no better solver was found. For better performance, consider "
 		"installing "+suggestion+" or the pyoomph_mumps package -- see "
-		"https://pyoomph.readthedocs.io/en/latest/tutorial/installation/ for "
+		"https://pyoomph.readthedocs.io/en/latest/tutorial/installation.html for "
 		"instructions."+why,
 		RuntimeWarning,
 		stacklevel=2,

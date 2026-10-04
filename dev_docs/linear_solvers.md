@@ -603,6 +603,17 @@ best-effort — whether a given Accelerate method reports a status is Accelerate
 things pyoomph controls (that `AccelerateSolverError` is a `SolverError`, and that a malformed call does
 **not** become a retryable one) are hard assertions.
 
+Separately from that probe, `AccelerateLinearSolver` can verify **each** solve against the matrix it
+was handed, by computing the backward error once per symmetric factorisation
+(`_check_solves`/`_solve_and_maybe_check`). It is off by default, because it costs a sparse
+matrix-vector product and a copy of the matrix per factorisation, and is switched on with
+`PYOOMPH_ACCELERATE_CHECK_SOLVE=1` (anything other than unset, `0`, `false` or `False`). It exists
+because this backend has twice returned an answer that does not solve the system while reporting
+`SparseStatusOK`: Newton went from a residual of 0.118 to inf on a linear Poisson problem, and from
+1.016 to 9.0e15 on a constrained-adaptivity one. The backward error is the one measurement that
+separates "the solver is wrong" from "the matrix it was handed is wrong", and neither Apple's status
+nor the Newton residual says which. `citools/check_accelerate_reuse.py` is the companion script.
+
 The `cktso` wrapper was removed rather than given the same treatment: it was reachable only by name
 through `factory_solver`, nothing else referred to it, and none of its error codes could be classified
 without a copy of the library to test against.

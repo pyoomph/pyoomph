@@ -32,7 +32,8 @@ classifiers=[
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
-        'Programming Language :: Python :: 3.13',                        
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Scientific/Engineering :: Physics'
@@ -145,8 +146,10 @@ test-requires = "pytest"
 # Deselect the mixed-adaptive-mesh validation campaign (the test_adaptive_*_campaign and
 # test_mpi_adaptivity* modules, marked "campaign" -- see tests/conftest.py). cibuildwheel repeats this
 # command once per Python version per platform, so a suite that takes minutes locally costs a multiple of
-# that here. What remains is the test set that predates the campaign -- 177 tests, ~4 minutes -- which is
-# what a wheel actually needs to certify: that the built extension imports, compiles elements and solves.
+# that here. What remains (2670 of the 3253 collected tests as of 0.2.2; the 583 deselected campaign
+# ones are the slow half) is what a wheel actually needs to certify: that the built extension imports,
+# compiles elements and solves. Re-measure both counts when this comment is next read -- the figure
+# here was 177 for several releases after the suite had already grown past it.
 # Proving the refinement engine correct across every discretisation is a branch-merge job (run the full
 # suite with --full), not a per-wheel one.
 #

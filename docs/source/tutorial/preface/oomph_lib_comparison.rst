@@ -211,7 +211,7 @@ Solvers, eigensolvers and time integration
      - Newton (with exact symbolic Jacobian)
    * - Eigensolvers
      - LAPACK QZ, ARPACK, Trilinos Anasazi
-     - SLEPc (+MUMPS), scipy/ARPACK, Pardiso-ARPACK, Accelerate-ARPACK
+     - Built-in Spectra (also MUMPS-backed), SLEPc (+MUMPS), scipy/ARPACK, Pardiso-ARPACK, Accelerate-ARPACK
    * - Time steppers
      - BDF1/2, Newmark, TR/Crank–Nicolson, IMR, explicit (Euler, Runge–Kutta), adaptive time-stepping
      - BDF1/2, Newmark2, TPZ, midpoint, Simpson/Boole/Milne, adaptive time-stepping
@@ -262,7 +262,7 @@ Multi-physics, multi-domain and free surfaces
 
 Both frameworks are designed for monolithically coupled multi-physics on multiple domains. oomph-lib provides a very mature fluid–structure-interaction (FSI) infrastructure with an extensive demo suite (driven-cavity FSI, collapsible channel, Turek flag, VMTK physiological flows, acoustic FSI, …). pyoomph provides FSI through ``FSIConnection`` and focuses its multi-physics strength on **multi-component, multi-phase flow with mass transfer**:
 
-* Sharp-interface monolithic ALE free surfaces with mass transfer, the geometric conservation lawsurface tension and Marangoni stresses.
+* Sharp-interface monolithic ALE free surfaces with mass transfer, the geometric conservation law, surface tension and Marangoni stresses.
 * Soluble/insoluble surfactant transport with several isotherms (Henry, Langmuir, Volmer, Frumkin, van der Waals).
 * Contact-angle models (Young–Dupré, Kwok–Neumann, Wenzel, Cassie–Baxter, stick-slip, dynamic).
 * A materials database with thermodynamic activity models (original UNIFAC, modified UNIFAC Dortmund, AIOMFAC) and evaporation/mass-transfer models (Hertz–Knudsen–Schrage, LLE).

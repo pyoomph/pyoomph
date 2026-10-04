@@ -11,7 +11,7 @@ Reminding the user that something is worth committing or testing is welcome; doi
 not, because these runs take far too long to spend without being asked.
 
 That applies to the full `tests/` suite, the MPI suites, and the tutorial harness
-(`citools/test_all_tutorial_scripts.py`, 127 scripts). A full tutorial pass takes over an hour; two
+(`citools/test_all_tutorial_scripts.py`, 141 scripts). A full tutorial pass takes over an hour; two
 passes for an A/B comparison take most of an afternoon. Batch changes up and run once, rather than
 after each fix. Targeted single scripts and small benchmarks are fine without asking.
 

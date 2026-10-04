@@ -4193,16 +4193,19 @@ class Problem(_pyoomph.Problem):
             that needs varying. Every define_geometry derives its sizes from default_resolution,
             fields included, so scaling it reaches all of them.
             """
+            # default_resolution is a convention every define_geometry follows, not a member of
+            # MeshTemplate itself, so it is read and written through getattr/setattr -- a plain
+            # attribute assignment is what the type checkers flag here, not the duck typing.
             saved={t:getattr(t,"default_resolution",None) for t in self._domains_remesh_on_inversion}
             try:
                 for t,base in saved.items():
                     if base is not None:
-                        t.default_resolution=base*factor
+                        setattr(t,"default_resolution",base*factor)
                 self.force_remesh(self._domains_remesh_on_inversion)
             finally:
                 for t,base in saved.items():
                     if base is not None:
-                        t.default_resolution=base
+                        setattr(t,"default_resolution",base)
 
         factors=list(self.inversion_remesh_size_factors) or [1.0]
         tried:list[float]=[]

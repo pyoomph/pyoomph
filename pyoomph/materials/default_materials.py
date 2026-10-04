@@ -99,7 +99,8 @@ class PureLiquidWater(PureLiquidProperties):
             / (meter * kelvin)
         )
 
-        # https://www.engineeringtoolbox.com/water-thermal-properties-d_162.html
+        # https://www.engineeringtoolbox.com/water-properties-d_1573.html
+        # (was .../water-thermal-properties-d_162.html, which the publisher has removed)
         self.specific_heat_capacity = 4.187 * kilo * joule / (kilogram * kelvin)
 
         # https://www.engineeringtoolbox.com/water-properties-d_1573.html
