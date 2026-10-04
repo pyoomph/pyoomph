@@ -79,12 +79,29 @@ added_lines_all_present() {
     ' "$1"
 }
 
+# sha256sum is GNU coreutils and is NOT on a stock macOS: the arm64 prebuild runner died here with
+# "sha256sum: command not found" (exit 127) while the Intel one happened to have coreutils pulled in
+# by some other brew formula, so this broke on exactly one of the four prebuild platforms. BSD/macOS
+# ships `shasum -a 256` instead, and openssl is the last resort for an image with neither. Only the
+# hex digest is wanted, hence the cut in every branch - the three tools pad and order their output
+# differently ("<hash>  <file>" for the first two, "SHA256(<file>)= <hash>" for openssl).
+if command -v sha256sum >/dev/null 2>&1; then
+    checksum_of() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+    checksum_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+elif command -v openssl >/dev/null 2>&1; then
+    checksum_of() { openssl dgst -sha256 "$1" | awk '{print $NF}'; }
+else
+    echo "none of sha256sum, shasum or openssl is available; cannot checksum the patches" >&2
+    exit 1
+fi
+
 mkdir -p "$stamp_dir"
 
 for patch_name in "${patches[@]}"; do
     patch_file="$script_dir/$patch_name"
     stamp_file="$stamp_dir/$patch_name.applied"
-    checksum="$(sha256sum "$patch_file" | cut -d' ' -f1)"
+    checksum="$(checksum_of "$patch_file")"
 
     if [ -f "$stamp_file" ] && [ "$(cat "$stamp_file")" = "$checksum" ]; then
         echo "$patch_name already applied (stamp), skipping."
